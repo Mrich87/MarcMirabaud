@@ -113,7 +113,7 @@
 const LS_KEY = "mceu_uat_state_v1";
 /* App version — bump APP_BUILD on every released change. Shown in the header and
    embedded in tester packets so a stale app can be detected. */
-const APP_BUILD = 10;
+const APP_BUILD = 11;
 const APP_VERSION = "2026-06-03 · build " + APP_BUILD;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
@@ -151,6 +151,11 @@ function defaultState(){
         {name:"BRM",          keywords:"BRM",                      color:"#f59e0b"},
         {name:"Compliance",   keywords:"Compliance, AML, KYC",     color:"#22c55e"},
       ],
+      // Simplified test plan rule — "standard" (implicit, can be dropped/absorbed)
+      // vs "differentiating" (a business case / risk / stream / control worth keeping).
+      // Differentiating always wins when both match. One keyword per line.
+      standardKeywords:["fill KYC","fill mandatory information","mandatory information","create case","create a case","upload document","upload documents","complete mailing instruction","mailing instruction","attach document"],
+      differentiatingKeywords:["trust","legal entity","natural person","individual","low risk","medium risk","high risk","PEP","true hit","false hit","world-check","world check","approval route","scoring","SICAM","SIX","Transact","TAP","FCM","US person","wet signature"],
       columnMapping:{
         testCaseId:"TestCaseId", title:"TitleLevel6", domain:"TitleLevel2",
         process:"TitleLevel3", subProcess:"TitleLevel4", variant:"TitleLevel5",
@@ -207,6 +212,27 @@ function streamMeta(name){ return (S.config.businessStreams||[]).find(s=>s.name=
 function effectiveStreams(c){
   if(Array.isArray(c.streamOverride)) return c.streamOverride.map(n=>streamMeta(n));
   return detectStreams(c);
+}
+
+/* ---------- standard vs differentiating classification ----------
+   "Standard" = implicit step (fill KYC, create case, upload documents…) that can be
+   dropped/absorbed. "Differentiating" = a business case, risk, stream or control worth
+   keeping (trust vs natural person, low/high/PEP, true/false hit, scoring, Transact…).
+   Differentiating wins when both match. A manual c.simplify override beats the keywords. */
+function classText(c){ return [c.title,c.process,c.subProcess,c.variant,c.subVariant].filter(Boolean).join(" · ").toLowerCase(); }
+function autoClass(c){
+  const t=classText(c);
+  const norm=l=>(l||[]).map(k=>String(k).trim().toLowerCase()).filter(Boolean);
+  if(norm(S.config.differentiatingKeywords).some(k=>t.includes(k))) return "differentiating";
+  if(norm(S.config.standardKeywords).some(k=>t.includes(k))) return "standard";
+  return "";
+}
+function classOf(c){ return (c.simplify==="standard"||c.simplify==="differentiating")?c.simplify:autoClass(c); }
+function classBadge(c){
+  const k=classOf(c); if(!k) return "";
+  const man=(c.simplify==="standard"||c.simplify==="differentiating");
+  return k==="differentiating" ? badge((man?"★ ":"")+"differentiating","#22c55e")
+                               : badge((man?"★ ":"")+"standard","#64748b");
 }
 
 /* Natural sort key so PRC-001-01-02 comes before PRC-001-01-10 */
@@ -403,7 +429,7 @@ function renderDashboard(){
 /* =========================================================================
    TESTS — merged Catalog + Execution
    ========================================================================= */
-let testsFilter={q:"",domain:"",process:"",app:"",stream:"",scope:"all",hideDupTitles:true};
+let testsFilter={q:"",domain:"",process:"",app:"",stream:"",simplify:"",scope:"all",hideDupTitles:true};
 /* A catalog test case is "in scope" when it is assigned at least once in the active iteration. */
 function isAssignedInIter(catId,iterId){ iterId=iterId||S.activeIterationId;
   return S.executions.some(e=>e.iterationId===iterId && String(e.testCaseId)===String(catId)); }
@@ -413,6 +439,7 @@ function libContentMatch(c){
     (!testsFilter.process||c.process===testsFilter.process) &&
     (!testsFilter.app||c.application===testsFilter.app) &&
     (!testsFilter.stream || (testsFilter.stream==="__none__" ? effectiveStreams(c).length===0 : effectiveStreams(c).some(s=>s.name===testsFilter.stream))) &&
+    (!testsFilter.simplify || (testsFilter.simplify==="unclassified" ? classOf(c)==="" : classOf(c)===testsFilter.simplify)) &&
     (!testsFilter.q || (c.title+" "+c.id+" "+c.process).toLowerCase().includes(testsFilter.q.toLowerCase()));
 }
 /* Title key with the "PRC-<serial>" reference stripped, so titles that differ
@@ -471,6 +498,7 @@ function renderTests(){
       <select onchange="testsFilter.process=this.value;renderTests()"><option value="">All processes</option>${procs.map(p=>`<option ${testsFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
       <select onchange="testsFilter.app=this.value;renderTests()"><option value="">All apps</option>${apps.map(p=>`<option ${testsFilter.app===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
       <select onchange="testsFilter.stream=this.value;renderTests()" title="business stream"><option value="">All streams</option>${(S.config.businessStreams||[]).map(s=>`<option value="${esc(s.name)}" ${testsFilter.stream===s.name?'selected':''}>${esc(s.name)}</option>`).join("")}<option value="__none__" ${testsFilter.stream==='__none__'?'selected':''}>— no stream detected —</option></select>
+      <select onchange="testsFilter.simplify=this.value;renderTests()" title="standard vs differentiating"><option value="">Standard + differentiating</option><option value="differentiating" ${testsFilter.simplify==='differentiating'?'selected':''}>Differentiating only</option><option value="standard" ${testsFilter.simplify==='standard'?'selected':''}>Standard only</option><option value="unclassified" ${testsFilter.simplify==='unclassified'?'selected':''}>Unclassified</option></select>
       <select onchange="testsFilter.scope=this.value;renderTests()" title="assignment state in the active iteration">
         <option value="all" ${testsFilter.scope==='all'?'selected':''}>All (catalog)</option>
         <option value="assigned" ${testsFilter.scope==='assigned'?'selected':''}>Assigned</option>
@@ -506,7 +534,7 @@ function testCaseBlock(c, dups){
     <td><b>${esc(c.title)}</b>${dups>1?` <span class="tag" title="${dups} test cases share this title once the PRC- serial number is ignored">×${dups}</span>`:''}<div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
       ${(()=>{const st=effectiveStreams(c);const man=Array.isArray(c.streamOverride);
         const chips = st.length ? st.map(s=>badge(s.name,s.color)).join("") : badge('no stream','#64748b');
-        return `<div class="chiprow" style="margin-top:3px">${chips}<button class="sm" style="padding:0 6px;line-height:1.5;${man?'border-color:#f59e0b;color:#f59e0b':''}" title="${man?'stream set manually — click to change':'set stream manually'}" onclick="openStreamModal('${c.id}')">✎</button></div>`;})()}
+        return `<div class="chiprow" style="margin-top:3px">${chips}${classBadge(c)}<button class="sm" style="padding:0 6px;line-height:1.5;${man?'border-color:#f59e0b;color:#f59e0b':''}" title="${man?'stream set manually — click to change':'set stream manually'}" onclick="openStreamModal('${c.id}')">✎</button></div>`;})()}
       <details><summary>metadata</summary><div class="muted" style="font-size:12px">
         ${c.subProcess?`<div>L4: ${esc(c.subProcess)}</div>`:''}
         ${c.variant?`<div>L5: ${esc(c.variant)}</div>`:''}
@@ -631,7 +659,14 @@ function openTCModal(c){
       <div class="field"><label>Default tester</label><input type="hidden" id="tc_tester" value="${esc(c.defaultTesterId||'')}"/><button type="button" id="tc_tester_btn" onclick="pickTesterInto('tc_tester','tc_tester_btn',true,'Default tester')">${c.defaultTesterId?esc(testerName(c.defaultTesterId)):'—'}</button></div>
       <div class="field"><label>Order</label><input type="number" id="tc_order" value="${c.order||0}"/></div>
     </div>
-    <div class="field" style="margin-top:8px"><label>DevOps link</label><input id="tc_link" value="${esc(c.devopsLink)}"/></div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1"><label>DevOps link</label><input id="tc_link" value="${esc(c.devopsLink)}"/></div>
+      <div class="field"><label>Classification</label><select id="tc_class">
+        <option value="" ${!c.simplify?'selected':''}>Auto (keywords): ${esc(autoClass(c)||'unclassified')}</option>
+        <option value="differentiating" ${c.simplify==='differentiating'?'selected':''}>Differentiating (keep)</option>
+        <option value="standard" ${c.simplify==='standard'?'selected':''}>Standard (drop / absorb)</option>
+      </select></div>
+    </div>
     <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delTestCase('${c.id}')">Delete test case</button><div class="spacer"></div>
       <button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveTC('${c.id}')">Save</button></div>`);
 }
@@ -642,6 +677,7 @@ function saveTC(id){ const c=catById(id); if(!c)return;
   c.application=$("#tc_app").value; c.subProcess=$("#tc_sub").value; c.variant=$("#tc_var").value;
   c.subVariant=$("#tc_subv").value; c.bankArea=$("#tc_bank").value; c.defaultTesterId=$("#tc_tester").value;
   c.order=parseInt($("#tc_order").value)||0; c.devopsLink=$("#tc_link").value;
+  { const cl=$("#tc_class").value; if(cl) c.simplify=cl; else delete c.simplify; }
   closeModal(); persist();
 }
 function delTestCase(id){ if(!confirm("Delete this test case and its executions (all iterations)?"))return;
@@ -909,6 +945,17 @@ function renderAdmin(){
       <p class="hint">Tip: open the <b>Library</b> tab — each step now shows a coloured stream chip, and you can filter by stream. Check the chips are right before we build the scenario grouping on top.</p>
     </div>
 
+    <div class="card"><b>Simplified test plan — standard vs differentiating</b>
+      <p class="hint" style="margin-top:6px">Rule: for each test, ask <i>"if I remove this line, do I lose a business case, a risk, a stream or a control?"</i> — if <b>no</b> it's <b>standard</b> (implicit, can be dropped/absorbed); if <b>yes</b> it's <b>differentiating</b> (keep). Keywords are matched in the test title + process/levels; <b>differentiating wins</b> when both match. One keyword per line. (A per-test manual choice in the ✎ editor overrides these.)</p>
+      ${(()=>{const d=S.catalog.filter(c=>classOf(c)==='differentiating').length,s=S.catalog.filter(c=>classOf(c)==='standard').length,u=S.catalog.length-d-s;
+        return `<div class="cards" style="margin:6px 0 10px"><div class="kpi"><div class="n" style="color:#22c55e">${d}</div><div class="l">Differentiating</div></div><div class="kpi"><div class="n" style="color:#94a3b8">${s}</div><div class="l">Standard</div></div><div class="kpi"><div class="n">${u}</div><div class="l">Unclassified</div></div></div>`;})()}
+      <div class="split">
+        <div class="field"><label>Differentiating keywords <span class="muted">(keep)</span></label><textarea onchange="S.config.differentiatingKeywords=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc((S.config.differentiatingKeywords||[]).join("\n"))}</textarea></div>
+        <div class="field"><label>Standard keywords <span class="muted">(drop / absorb)</span></label><textarea onchange="S.config.standardKeywords=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc((S.config.standardKeywords||[]).join("\n"))}</textarea></div>
+      </div>
+      <p class="hint">In the <b>Library</b>, filter to <b>Differentiating only</b> and bulk-assign — that becomes your simplified plan. Each row shows a coloured <b>standard</b>/<b>differentiating</b> chip (★ = set manually).</p>
+    </div>
+
     <div class="card"><b>DevOps import column mapping</b>
       <p class="hint">Map each model field to the column header of your .xlsx export.</p>
       <div class="grid" style="grid-template-columns:repeat(3,1fr)">
@@ -1063,7 +1110,7 @@ function mergeResults(input){ const f=input.files[0]; if(!f)return; const r=new 
 /* ---------- xlsx report ---------- */
 function exportReport(){
   const data=S.executions.map(e=>{ const c=catById(e.testCaseId)||{}; const it=S.iterations.find(i=>i.id===e.iterationId)||{};
-    return {Iteration:it.name||"",TestCaseId:e.testCaseId,Title:execTitle(e),BaseTitle:c.title||"",Domain:c.domain||"",Process:c.process||"",
+    return {Iteration:it.name||"",TestCaseId:e.testCaseId,Title:execTitle(e),BaseTitle:c.title||"",Type:classOf(c)||"",Domain:c.domain||"",Process:c.process||"",
       SubProcess:c.subProcess||"",Application:c.application||"",Entity:e.entity,Tester:testerName(e.testerId),
       Status:e.status,Recurrence:e.recurrence||"",TestDate:e.testDate||"",BusinessComment:e.businessComment||"",
       DefectLink:e.defectLink||"",DevOpsLink:c.devopsLink||""}; });
