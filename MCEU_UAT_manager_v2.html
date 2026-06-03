@@ -94,6 +94,7 @@
   <div id="view-dashboard" class="view"></div>
   <div id="view-tests" class="view"></div>
   <div id="view-assigned" class="view"></div>
+  <div id="view-assign" class="view"></div>
   <div id="view-tracking" class="view"></div>
   <div id="view-iterations" class="view"></div>
   <div id="view-admin" class="view"></div>
@@ -235,6 +236,7 @@ const TABS = [
   ["dashboard","Dashboard"],
   ["tests","Library"],
   ["assigned","Assigned"],
+  ["assign","Assignment"],
   ["tracking","Tracking"],
   ["iterations","Iterations"],
   ["admin","Admin"],
@@ -252,7 +254,7 @@ function go(tab){ currentTab=tab; document.querySelectorAll(".view").forEach(v=>
 function renderAll(){ buildIterSelect(); buildNav(); renderTab(currentTab); renderPacketBanner(); }
 function renderTab(tab){
   buildIterSelect(); renderPacketBanner();
-  ({dashboard:renderDashboard,tests:renderTests,assigned:renderAssigned,
+  ({dashboard:renderDashboard,tests:renderTests,assigned:renderAssigned,assign:renderAssign,
     tracking:renderTracking,iterations:renderIterations,admin:renderAdmin,data:renderData}[tab]||(()=>{}))();
 }
 function renderPacketBanner(){
@@ -362,25 +364,13 @@ function renderDashboard(){
         <td>${sa.failed?badge(sa.failed+" failed",'#ef4444'):'<span class="muted">0</span>'}</td></tr>`;}).join("")
         || '<tr><td colspan="4" class="muted">Import the catalog and assign tests to see numbers.</td></tr>'}
       </tbody></table>
-    </div>
-    ${coverageMatrixCard()}`;
+    </div>`;
 }
 
 /* =========================================================================
    TESTS — merged Catalog + Execution
    ========================================================================= */
-let testsFilter={q:"",domain:"",process:"",app:"",stream:"",scope:"all",hideDupTitles:true};
-/* A catalog test case is "in scope" when it is assigned at least once in the active iteration. */
-function isAssignedInIter(catId,iterId){ iterId=iterId||S.activeIterationId;
-  return S.executions.some(e=>e.iterationId===iterId && String(e.testCaseId)===String(catId)); }
-/* Catalog rows matching the Library content filters (domain/process/app/stream/search) — ignores assigned-state and dedup. */
-function libContentMatch(c){
-  return (!testsFilter.domain||c.domain===testsFilter.domain) &&
-    (!testsFilter.process||c.process===testsFilter.process) &&
-    (!testsFilter.app||c.application===testsFilter.app) &&
-    (!testsFilter.stream || (testsFilter.stream==="__none__" ? effectiveStreams(c).length===0 : effectiveStreams(c).some(s=>s.name===testsFilter.stream))) &&
-    (!testsFilter.q || (c.title+" "+c.id+" "+c.process).toLowerCase().includes(testsFilter.q.toLowerCase()));
-}
+let testsFilter={q:"",domain:"",process:"",app:"",stream:"",scope:"in",hideDupTitles:true};
 /* Title key with the "PRC-<serial>" reference stripped, so titles that differ
    only by their PRC serial number count as the same. */
 function normTitle(t){
@@ -401,8 +391,13 @@ function renderTests(){
   const domains=[...new Set(S.catalog.map(c=>c.domain))].sort();
   const procs=[...new Set(S.catalog.filter(c=>!testsFilter.domain||c.domain===testsFilter.domain).map(c=>c.process))].sort();
   const apps=[...new Set(S.catalog.map(c=>c.application).filter(Boolean))].sort();
-  let rows=S.catalog.filter(c=> libContentMatch(c) &&
-    (testsFilter.scope==="all" || (testsFilter.scope==="assigned"? isAssignedInIter(c.id) : !isAssignedInIter(c.id)))
+  let rows=S.catalog.filter(c=>
+    (!testsFilter.domain||c.domain===testsFilter.domain) &&
+    (!testsFilter.process||c.process===testsFilter.process) &&
+    (!testsFilter.app||c.application===testsFilter.app) &&
+    (!testsFilter.stream || (testsFilter.stream==="__none__" ? effectiveStreams(c).length===0 : effectiveStreams(c).some(s=>s.name===testsFilter.stream))) &&
+    (testsFilter.scope==="all" || (testsFilter.scope==="in"?c.inScope:!c.inScope)) &&
+    (!testsFilter.q || (c.title+" "+c.id+" "+c.process).toLowerCase().includes(testsFilter.q.toLowerCase()))
   );
   rows=sortedCatalog(rows);
   // collapse rows whose title is identical once the PRC- serial number is ignored
@@ -414,43 +409,36 @@ function renderTests(){
     rows=rows.filter(c=>{const k=normTitle(c.title); if(seen.has(k)){dupHidden++;return false;} seen.add(k); return true;});
   }
   displayedTC=rows.map(c=>String(c.id));
-  const assignedCount=S.catalog.filter(c=>isAssignedInIter(c.id)).length;
-  const targetCount=S.catalog.filter(libContentMatch).length;   // bulk-assign target = filtered catalog
+  const inScope=S.catalog.filter(c=>c.inScope).length;
+  const allInScope = rows.length>0 && rows.every(c=>c.inScope);
   const iter=activeIter();
 
   $("#view-tests").innerHTML = `
     <h2>Library — ${esc(iter?iter.name:"—")}</h2>
-    <p class="sub">${S.catalog.length} test cases (deduplicated from DevOps) · <b style="color:var(--accent)">${assignedCount}</b> assigned in ${esc(iter?iter.name:"this iteration")}. Browse the catalog, edit/reorder test cases, then <b>assign</b> them — assigning is what puts a test in scope. L4→L6 are kept as folded metadata.</p>
+    <p class="sub">${S.catalog.length} test cases (deduplicated from DevOps) · <b style="color:var(--accent)">${inScope}</b> in scope. Manage scope, edit test cases, reorder them, and capture execution results — all in one place. L4→L6 are kept as folded metadata.</p>
     ${S.catalog.length===0 ? `<div class="card empty">No catalog yet. Go to <b>Import / Export</b> to load the DevOps export (.xlsx), or add a test case manually below.<div style="margin-top:12px"><button class="primary" onclick="newTestCase()">+ New test case</button></div></div>` : `
-    <details class="card" style="margin-bottom:12px"><summary style="color:var(--accent);font-size:14px;font-weight:600">⚡ Bulk-assign the filtered tests…</summary>
-      <p class="hint" style="margin-top:8px">Assigns the <b>${targetCount}</b> test case(s) currently matching the filters below to each selected entity × tester, in <b>${esc(iter?iter.name:"")}</b>. Leave testers empty to use each test's default tester. Existing duplicates (test × entity × tester) are skipped.</p>
-      <div class="row" style="margin-top:6px">
-        <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="libEnt" value="${esc(en.code)}"/> ${esc(en.code)}</label>`).join("")}</div></div>
-        <div class="field"><label>Testers <span class="muted">(optional, multi)</span></label><div class="chiprow" style="max-width:420px">${S.config.testers.length?S.config.testers.map(t=>`<label class="pill"><input type="checkbox" class="libTester" value="${t.id}"/> ${esc(t.name)}${t.entity?` (${esc(t.entity)})`:''}</label>`).join(""):'<span class="muted" style="font-size:12px">No tester — default tester is used.</span>'}</div></div>
-        <div class="field"><label>Recurrence</label><select id="libRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
-        <button class="primary" onclick="libBulkAssign()">Assign ${targetCount} filtered test(s)</button>
-      </div>
-    </details>
     <div class="toolbar">
       <input id="tQ" placeholder="🔍 search…" value="${esc(testsFilter.q)}" oninput="testsFilter.q=this.value;renderTests()" style="min-width:200px"/>
       <select onchange="testsFilter.domain=this.value;testsFilter.process='';renderTests()"><option value="">All domains</option>${domains.map(d=>`<option ${testsFilter.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
       <select onchange="testsFilter.process=this.value;renderTests()"><option value="">All processes</option>${procs.map(p=>`<option ${testsFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
       <select onchange="testsFilter.app=this.value;renderTests()"><option value="">All apps</option>${apps.map(p=>`<option ${testsFilter.app===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
       <select onchange="testsFilter.stream=this.value;renderTests()" title="business stream"><option value="">All streams</option>${(S.config.businessStreams||[]).map(s=>`<option value="${esc(s.name)}" ${testsFilter.stream===s.name?'selected':''}>${esc(s.name)}</option>`).join("")}<option value="__none__" ${testsFilter.stream==='__none__'?'selected':''}>— no stream detected —</option></select>
-      <select onchange="testsFilter.scope=this.value;renderTests()" title="assignment state in the active iteration">
-        <option value="all" ${testsFilter.scope==='all'?'selected':''}>All (catalog)</option>
-        <option value="assigned" ${testsFilter.scope==='assigned'?'selected':''}>Assigned</option>
-        <option value="unassigned" ${testsFilter.scope==='unassigned'?'selected':''}>Not assigned</option>
+      <select onchange="testsFilter.scope=this.value;renderTests()">
+        <option value="in" ${testsFilter.scope==='in'?'selected':''}>In scope</option>
+        <option value="out" ${testsFilter.scope==='out'?'selected':''}>Out of scope</option>
+        <option value="all" ${testsFilter.scope==='all'?'selected':''}>All</option>
       </select>
       <label class="pill" title="Collapse rows whose title is identical once the PRC- serial number is ignored"><input type="checkbox" ${testsFilter.hideDupTitles?'checked':''} onchange="testsFilter.hideDupTitles=this.checked;renderTests()"/> Hide duplicate titles</label>
       <div class="spacer"></div>
       <span class="muted">${rows.length} shown${dupHidden?` · ${dupHidden} hidden`:''}</span>
+      <button class="sm" onclick="bulkScope(true)">☑ Select all</button>
+      <button class="sm" onclick="bulkScope(false)">☐ Deselect all</button>
       <button class="sm" onclick="resetOrder()">↕ Reset order (chronological)</button>
       <button class="sm" onclick="newTestCase()">+ New</button>
     </div>
     <div class="scrollbox">
     <table>
-      <thead><tr><th style="width:60px">Order</th><th style="width:64px" title="assignments in the active iteration">Assigned</th><th>Test Case</th><th>Domain</th><th>Process</th><th>App</th><th style="width:60px"></th></tr></thead>
+      <thead><tr><th style="width:60px">Order</th><th style="width:48px" title="Select / deselect all shown">Scope<br><input type="checkbox" ${allInScope?'checked':''} onchange="bulkScope(this.checked)"/></th><th>Test Case</th><th>Domain</th><th>Process</th><th>App</th><th style="width:60px"></th></tr></thead>
       <tbody>
       ${rows.slice(0,300).map((c,i)=>testCaseBlock(c, dupCount[normTitle(c.title)]||1)).join("")}
       </tbody>
@@ -468,7 +456,7 @@ function testCaseBlock(c, dups){
       <input type="number" value="${c.order||0}" onchange="setOrder('${c.id}',this.value)"/>
       <button onclick="moveOrder('${c.id}',1)" title="down">▼</button>
     </div></td>
-    <td style="text-align:center">${exs.length?badge(exs.length,'#22c55e'):'<span class="muted">—</span>'}</td>
+    <td><input type="checkbox" ${c.inScope?'checked':''} onchange="toggleScope('${c.id}',this.checked)"/></td>
     <td><b>${esc(c.title)}</b>${dups>1?` <span class="tag" title="${dups} test cases share this title once the PRC- serial number is ignored">×${dups}</span>`:''}<div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
       ${(()=>{const st=effectiveStreams(c);const man=Array.isArray(c.streamOverride);
         const chips = st.length ? st.map(s=>badge(s.name,s.color)).join("") : badge('no stream','#64748b');
@@ -521,26 +509,17 @@ function renderTestsPacket(){
     </tbody></table></div>`}`;
 }
 
-/* bulk assignment from the Library — targets the catalog rows matching the current filters */
-function libBulkAssign(){
-  const ents=[...document.querySelectorAll(".libEnt:checked")].map(x=>x.value);
-  if(!ents.length){ alert("Select at least one target entity."); return; }
-  const formTesters=[...document.querySelectorAll(".libTester:checked")].map(x=>x.value);
-  const rec=$("#libRec")?$("#libRec").value:"";
-  const cats=S.catalog.filter(libContentMatch);
-  if(!cats.length){ alert("No test case matches the current filters."); return; }
-  const iterId=S.activeIterationId; let created=0, skipped=0;
-  cats.forEach(c=>ents.forEach(ent=>{
-    const testerIds = formTesters.length ? formTesters : [c.defaultTesterId||""];
-    testerIds.forEach(testerId=>{
-      if(S.executions.some(e=>e.iterationId===iterId&&String(e.testCaseId)===String(c.id)&&e.entity===ent&&e.testerId===testerId)){ skipped++; return; }
-      const t=S.config.testers.find(x=>x.id===testerId);
-      S.executions.push({id:uid(),iterationId:iterId,testCaseId:c.id,entity:ent,testerId,
-        dept:t?t.dept||"":"",status:"Not started",businessComment:"",recurrence:rec||"",testDate:"",defectLink:"",updatedAt:new Date().toISOString()});
-      created++;
-    });
-  }));
-  persist(); alert(created+" assignment(s) created"+(skipped?", "+skipped+" duplicate(s) skipped":"")+".");
+/* scope */
+function toggleScope(id,v){ const c=catById(id); if(c){c.inScope=v; save();} }
+function bulkScope(v){
+  S.catalog.filter(c=>
+    (!testsFilter.domain||c.domain===testsFilter.domain) &&
+    (!testsFilter.process||c.process===testsFilter.process) &&
+    (!testsFilter.app||c.application===testsFilter.app) &&
+    (testsFilter.scope==="all"||(testsFilter.scope==="in"?c.inScope:!c.inScope)) &&
+    (!testsFilter.q||(c.title+" "+c.id+" "+c.process).toLowerCase().includes(testsFilter.q.toLowerCase())))
+   .forEach(c=>c.inScope=v);
+  persist();
 }
 /* ordering */
 function setOrder(id,v){ const c=catById(id); if(c){c.order=parseInt(v)||0; persist();} }
@@ -696,20 +675,67 @@ function renderAssigned(){
 }
 
 /* =========================================================================
-   COVERAGE MATRIX (Process × Entity) — rendered on the Dashboard
+   ASSIGNMENT (mass)
    ========================================================================= */
-function coverageMatrixCard(){
-  const iter=activeIter(); const ex=iterExecs();
-  const procOf=e=>{const c=catById(e.testCaseId);return c&&c.process?c.process:"(unknown)";};
-  const procList=[...new Set(ex.map(procOf))].sort();
-  if(!procList.length) return "";
-  const cnt=(proc,ent)=>ex.filter(e=>procOf(e)===proc&&e.entity===ent).length;
-  return `<div class="card">
-    <b>Coverage — Process × Entity</b> <span class="muted">(assignments in ${esc(iter?iter.name:"")})</span>
-    <div class="scrollbox" style="margin-top:8px">
-    <table class="matrix"><thead><tr><th class="proc">Process</th>${S.config.entities.map(en=>`<th>${badge(en.code,en.color)}</th>`).join("")}<th>Total</th></tr></thead><tbody>
-    ${procList.map(p=>{let tot=0;const cells=S.config.entities.map(en=>{const n=cnt(p,en.code);tot+=n;return `<td>${n||'<span class="muted">·</span>'}</td>`;}).join("");return `<tr><td class="proc">${esc(p)}</td>${cells}<td><b>${tot}</b></td></tr>`;}).join("")}
-    </tbody></table></div></div>`;
+let asgFilter={domain:"",process:""};
+function renderAssign(){
+  const iter=activeIter();
+  const inScope=S.catalog.filter(c=>c.inScope);
+  const domains=[...new Set(inScope.map(c=>c.domain))].sort();
+  const procs=[...new Set(inScope.filter(c=>!asgFilter.domain||c.domain===asgFilter.domain).map(c=>c.process))].sort();
+  const ex=iterExecs();
+  const procList=[...new Set(inScope.map(c=>c.process))].sort();
+  const cnt=(proc,ent)=>ex.filter(e=>{const c=catById(e.testCaseId);return c&&c.process===proc&&e.entity===ent;}).length;
+
+  $("#view-assign").innerHTML=`
+    <h2>Assignment — ${esc(iter?iter.name:"—")}</h2>
+    <p class="sub">Assign <b>in-scope</b> test cases to the 4 entities and to testers, for the active iteration. An assignment creates a "Not started" execution. <b>Select one or more testers</b> to assign the same tests to several people at once — each tester gets their own line to fill in. If you select no tester, each test case's <b>default tester</b> (from the DevOps TesterName column) is used.</p>
+    ${inScope.length===0?`<div class="card empty">No test in scope. First select tests in the <b>Library</b> tab.</div>`:`
+    <div class="card">
+      <b>Mass assignment</b>
+      <div class="row" style="margin-top:10px">
+        <div class="field"><label>Domain</label><select id="asgDom" onchange="asgFilter.domain=this.value;asgFilter.process='';renderAssign()"><option value="">— all —</option>${domains.map(d=>`<option ${asgFilter.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select></div>
+        <div class="field"><label>Process</label><select id="asgProc" onchange="asgFilter.process=this.value;renderAssign()"><option value="">— all (in domain) —</option>${procs.map(p=>`<option ${asgFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select></div>
+        <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="asgEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
+        <div class="field"><label>Testers <span class="muted">(pick one or several)</span></label><div class="chiprow" style="max-width:420px">${S.config.testers.length? S.config.testers.map(t=>`<label class="pill"><input type="checkbox" class="asgTester" value="${t.id}"/> ${esc(t.name)}${t.entity?` (${esc(t.entity)})`:''}</label>`).join("") : '<span class="muted" style="font-size:12px">No tester yet — the default tester will be used.</span>'}</div></div>
+        <div class="field"><label>Recurrence</label><select id="asgRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
+        <button class="primary" onclick="doAssign()">Assign</button>
+      </div>
+      <p class="hint">Target: ${countAsgTarget()} in-scope test case(s) × selected entities × selected testers. Duplicates already created (test case × entity × tester × iteration) are skipped.</p>
+    </div>
+    <div class="card">
+      <b>Process × Entity matrix</b> <span class="muted">(assignments in ${esc(iter?iter.name:"")})</span>
+      <div class="scrollbox" style="margin-top:8px">
+      <table class="matrix"><thead><tr><th class="proc">Process</th>${S.config.entities.map(en=>`<th>${badge(en.code,en.color)}</th>`).join("")}<th>Total</th></tr></thead><tbody>
+      ${procList.map(p=>{let tot=0;const cells=S.config.entities.map(en=>{const n=cnt(p,en.code);tot+=n;return `<td>${n||'<span class="muted">·</span>'}</td>`;}).join("");return `<tr><td class="proc">${esc(p)}</td>${cells}<td><b>${tot}</b></td></tr>`;}).join("")}
+      </tbody></table>
+      </div>
+    </div>`}`;
+}
+function asgTargetCats(){
+  return S.catalog.filter(c=>c.inScope && (!asgFilter.domain||c.domain===asgFilter.domain) && (!asgFilter.process||c.process===asgFilter.process));
+}
+function countAsgTarget(){ return asgTargetCats().length; }
+function doAssign(){
+  const ents=[...document.querySelectorAll(".asgEnt:checked")].map(x=>x.value);
+  if(!ents.length){ alert("Select at least one target entity."); return; }
+  const formTesters=[...document.querySelectorAll(".asgTester:checked")].map(x=>x.value);
+  const rec=$("#asgRec").value;
+  const cats=asgTargetCats(); const iterId=S.activeIterationId;
+  let created=0, skipped=0;
+  cats.forEach(c=>ents.forEach(ent=>{
+    // one execution per selected tester; if none selected, fall back to the test case's default tester
+    const testerIds = formTesters.length ? formTesters : [c.defaultTesterId||""];
+    testerIds.forEach(testerId=>{
+      const exists=S.executions.some(e=>e.iterationId===iterId&&String(e.testCaseId)===String(c.id)&&e.entity===ent&&e.testerId===testerId);
+      if(exists){ skipped++; return; }
+      const tester=S.config.testers.find(t=>t.id===testerId);
+      S.executions.push({id:uid(),iterationId:iterId,testCaseId:c.id,entity:ent,testerId,
+        dept:tester?tester.dept||"":"",status:"Not started",businessComment:"",recurrence:rec||"",testDate:"",defectLink:"",updatedAt:new Date().toISOString()});
+      created++;
+    });
+  }));
+  persist(); alert(created+" assignment(s) created"+(skipped?", "+skipped+" duplicate(s) skipped":"")+".");
 }
 
 /* =========================================================================
@@ -749,18 +775,10 @@ function renderIterations(){
       </tbody></table>
     </div>
     <div class="cards">
-      <button class="primary" onclick="newIter()">+ New iteration (empty)</button>
-      <button onclick="carryOverAll()">⟳ New iteration — replay ALL assignments</button>
-      <button onclick="carryOver()">↪ New iteration — only Failed/Blocked/Not started</button>
+      <button class="primary" onclick="newIter()">+ New iteration</button>
+      <button onclick="carryOver()">↪ New iteration carrying over Failed/Blocked</button>
     </div>
-    <p class="hint"><b>Replay ALL</b> copies every assignment from the active iteration into a new one with results reset to "Not started" (same tests, testers and entities) — so you set assignments up once and re-run them each wave. The other option copies only the Failed / Blocked / Not started ones.</p>`;
-}
-function carryOverAll(){
-  const from=activeIter(); const name=prompt("New iteration name (replays ALL assignments):","UAT "+(S.iterations.length+1)); if(!name)return;
-  const it={id:uid(),name,startDate:"",endDate:"",active:true,locked:false}; S.iterations.push(it);
-  const src=S.executions.filter(e=>e.iterationId===from.id);
-  src.forEach(e=>S.executions.push({...e,id:uid(),iterationId:it.id,status:"Not started",businessComment:"",testDate:"",defectLink:"",updatedAt:new Date().toISOString()}));
-  S.activeIterationId=it.id; renderAll(); save(); alert(src.length+" assignment(s) replayed in "+name+".");
+    <p class="hint">Carry-over copies, from the active iteration, the assignments whose status is Failed, Blocked or Not started, reset to "Not started" in the new iteration (same testers/entities).</p>`;
 }
 function newIter(){ const name=prompt("Iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
   const it={id:uid(),name,startDate:"",endDate:"",active:true,locked:false}; S.iterations.push(it); S.activeIterationId=it.id; renderAll(); save(); }
