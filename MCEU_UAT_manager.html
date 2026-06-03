@@ -360,6 +360,7 @@ function renderTests(){
   rows=sortedCatalog(rows);
   displayedTC=rows.map(c=>String(c.id));
   const inScope=S.catalog.filter(c=>c.inScope).length;
+  const allInScope = rows.length>0 && rows.every(c=>c.inScope);
   const iter=activeIter();
 
   $("#view-tests").innerHTML = `
@@ -378,14 +379,14 @@ function renderTests(){
       </select>
       <div class="spacer"></div>
       <span class="muted">${rows.length} shown</span>
-      <button class="sm" onclick="bulkScope(true)">✓ Include filtered</button>
-      <button class="sm" onclick="bulkScope(false)">✗ Exclude</button>
+      <button class="sm" onclick="bulkScope(true)">☑ Select all</button>
+      <button class="sm" onclick="bulkScope(false)">☐ Deselect all</button>
       <button class="sm" onclick="resetOrder()">↕ Reset order (chronological)</button>
       <button class="sm" onclick="newTestCase()">+ New</button>
     </div>
     <div class="scrollbox">
     <table>
-      <thead><tr><th style="width:60px">Order</th><th style="width:34px">Scope</th><th>Test Case</th><th>Domain</th><th>Process</th><th>App</th><th style="width:60px"></th></tr></thead>
+      <thead><tr><th style="width:60px">Order</th><th style="width:48px" title="Select / deselect all shown">Scope<br><input type="checkbox" ${allInScope?'checked':''} onchange="bulkScope(this.checked)"/></th><th>Test Case</th><th>Domain</th><th>Process</th><th>App</th><th style="width:60px"></th></tr></thead>
       <tbody>
       ${rows.slice(0,300).map((c,i)=>testCaseBlock(c)).join("")}
       </tbody>
