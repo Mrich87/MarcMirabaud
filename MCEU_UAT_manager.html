@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MCEU — UAT Campaign Manager</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
+    --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --accent2:#0ea5e9;
+    --ok:#22c55e; --fail:#ef4444; --block:#f59e0b; --na:#64748b; --prog:#a855f7;
+    --chip:#0b1220;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  header{background:linear-gradient(90deg,#0b1220,#16233b);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+  header .brand{color:var(--accent)}
+  .iter-pill{margin-left:auto;display:flex;align-items:center;gap:8px}
+  select,input,textarea{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit}
+  textarea{width:100%;min-height:60px;resize:vertical}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:13px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent2);border-color:var(--accent2);color:#06283b;font-weight:600}
+  button.primary:hover{background:var(--accent)}
+  button.danger{border-color:var(--fail);color:#fca5a5}
+  button.sm{padding:3px 8px;font-size:12px}
+  nav{display:flex;gap:4px;background:#0b1220;padding:6px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  nav button{background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;padding:8px 14px;color:var(--muted)}
+  nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  main{padding:18px;max-width:1500px;margin:0 auto}
+  .view{display:none}
+  .view.active{display:block}
+  h2{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 16px;font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+  .grid{display:grid;gap:12px}
+  .cards{display:flex;gap:12px;flex-wrap:wrap}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:130px;flex:1}
+  .kpi .n{font-size:26px;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel);cursor:pointer;user-select:none}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .toolbar .spacer{flex:1}
+  .pbar{height:10px;background:#0b1220;border-radius:6px;overflow:hidden;display:flex;min-width:120px}
+  .pbar span{display:block;height:100%}
+  .muted{color:var(--muted)}
+  .tag{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:11px;margin:1px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:12px;color:var(--muted)}
+  .scrollbox{max-height:600px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .matrix td,.matrix th{text-align:center}
+  .matrix td.proc{text-align:left}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;max-width:680px;width:92%;max-height:88vh;overflow:auto}
+  .pill{background:var(--chip);border:1px solid var(--line);border-radius:20px;padding:3px 10px;font-size:12px}
+  .req::after{content:" *";color:var(--fail)}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  details summary{cursor:pointer;color:var(--accent);font-size:12px}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  .chiprow{display:flex;gap:6px;flex-wrap:wrap}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle}
+  code{background:var(--chip);padding:1px 5px;border-radius:4px}
+  .banner{background:#422006;border:1px solid var(--block);color:#fde68a;padding:10px 14px;border-radius:8px;margin-bottom:14px;display:none}
+  .banner.show{display:block}
+  .ord{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .ord button{padding:0 6px;line-height:1.4;font-size:11px}
+  .ord input{width:48px;text-align:center;padding:2px}
+  tr.tc-exec td{background:rgba(56,189,248,.04);border-bottom:1px dashed var(--line)}
+  .exline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .exline .grow{flex:1;min-width:160px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="brand">MCEU</span> · UAT Campaign Manager</h1>
+  <div class="iter-pill">
+    <span class="muted" style="font-size:12px">Active&nbsp;iteration</span>
+    <select id="iterSelect" onchange="setActiveIteration(this.value)"></select>
+  </div>
+</header>
+<nav id="nav"></nav>
+<main>
+  <div id="packetBanner" class="banner"></div>
+  <div id="view-dashboard" class="view"></div>
+  <div id="view-tests" class="view"></div>
+  <div id="view-assign" class="view"></div>
+  <div id="view-tracking" class="view"></div>
+  <div id="view-iterations" class="view"></div>
+  <div id="view-admin" class="view"></div>
+  <div id="view-data" class="view"></div>
+</main>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBox"></div></div>
+
+<script>
+/* =========================================================================
+   MCEU UAT MANAGER — local single-file web app
+   Model: Catalog (deduplicated test cases) + Executions (test case x entity
+   x tester x iteration). The Tests tab merges catalog management and
+   execution capture. Persistence: localStorage + xlsx/JSON import-export.
+   ========================================================================= */
+
+const LS_KEY = "mceu_uat_state_v1";
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+
+/* ---------- default state ---------- */
+function defaultState(){
+  const it1 = {id:uid(), name:"UAT 1", startDate:"", endDate:"", active:true, locked:false};
+  return {
+    version:2,
+    config:{
+      campaignName:"MCEU UAT Campaign",
+      entities:[
+        {code:"Lu", label:"Luxembourg",     color:"#38bdf8"},
+        {code:"FR", label:"France",         color:"#a855f7"},
+        {code:"SP", label:"Spain",          color:"#f59e0b"},
+        {code:"UK", label:"United Kingdom",  color:"#22c55e"},
+      ],
+      departments:["Wealth Management","Operations","Compliance","Finance","Investment","Risk"],
+      testers:[],
+      statuses:[
+        {value:"Not started", color:"#64748b", requiresComment:false},
+        {value:"In progress", color:"#a855f7", requiresComment:false},
+        {value:"Passed",      color:"#22c55e", requiresComment:false},
+        {value:"Failed",      color:"#ef4444", requiresComment:true},
+        {value:"Blocked",     color:"#f59e0b", requiresComment:true},
+        {value:"N/A",         color:"#475569", requiresComment:false},
+      ],
+      recurrences:["Often","Rarely","Exceptionally"],
+      columnMapping:{
+        testCaseId:"TestCaseId", title:"TitleTC", domain:"TitleLevel2",
+        process:"TitleLevel3", subProcess:"TitleLevel4", variant:"TitleLevel5",
+        subVariant:"TitleLevel6", application:"ProductApplication",
+        bankArea:"Custom_BankArea", tester:"TesterName",
+        devopsLink:"TestSuiteLink"
+      }
+    },
+    iterations:[it1],
+    activeIterationId:it1.id,
+    catalog:[],
+    executions:[],
+    packet:null   // {scope:{testerId,entity,iterationId}} in tester mode
+  };
+}
+
+let S = load();
+function load(){
+  try{ const r = localStorage.getItem(LS_KEY); if(r) return migrate(JSON.parse(r)); }catch(e){}
+  return defaultState();
+}
+function migrate(s){ const d=defaultState();
+  const cfg=Object.assign(d.config,s.config||{});
+  cfg.columnMapping=Object.assign(d.config.columnMapping,(s.config||{}).columnMapping||{});
+  return Object.assign(d,s,{config:cfg}); }
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(S)); }
+function persist(){ save(); renderTab(currentTab); }
+
+/* ---------- helpers ---------- */
+const $ = sel => document.querySelector(sel);
+const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const statusMeta = v => S.config.statuses.find(x=>x.value===v) || {value:v,color:"#64748b",requiresComment:false};
+const entityMeta = c => S.config.entities.find(x=>x.code===c) || {code:c,label:c,color:"#64748b"};
+const testerName = id => { const t=S.config.testers.find(x=>x.id===id); return t?t.name:"—"; };
+const activeIter = () => S.iterations.find(i=>i.id===S.activeIterationId) || S.iterations[0];
+const isPacket = () => !!S.packet;
+const catById = id => S.catalog.find(c=>String(c.id)===String(id));
+
+/* Natural sort key so PRC-001-01-02 comes before PRC-001-01-10 */
+const naturalKey = s => String(s||"").toLowerCase().replace(/\d+/g, m=>m.padStart(10,"0"));
+
+function badge(text,color){ return `<span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}66">${esc(text)}</span>`; }
+
+/* Executions of an iteration (scoped to packet when in tester mode) */
+function iterExecs(iterId){
+  iterId = iterId || S.activeIterationId;
+  let ex = S.executions.filter(e=>e.iterationId===iterId);
+  if(isPacket()){
+    const sc=S.packet.scope;
+    ex = ex.filter(e=> (!sc.testerId || e.testerId===sc.testerId) && (!sc.entity || e.entity===sc.entity));
+  }
+  return ex;
+}
+function execsFor(testCaseId, iterId){
+  iterId = iterId || S.activeIterationId;
+  let ex = S.executions.filter(e=>e.iterationId===iterId && String(e.testCaseId)===String(testCaseId));
+  if(isPacket()){ const sc=S.packet.scope;
+    ex = ex.filter(e=> (!sc.testerId||e.testerId===sc.testerId) && (!sc.entity||e.entity===sc.entity)); }
+  return ex;
+}
+
+/* =========================================================================
+   NAVIGATION
+   ========================================================================= */
+const TABS = [
+  ["dashboard","Dashboard"],
+  ["tests","Tests"],
+  ["assign","Assignment"],
+  ["tracking","Tracking"],
+  ["iterations","Iterations"],
+  ["admin","Admin"],
+  ["data","Import / Export"],
+];
+let currentTab = "dashboard";
+function buildNav(){
+  const tabs = isPacket() ? TABS.filter(t=>["tests","dashboard"].includes(t[0])) : TABS;
+  $("#nav").innerHTML = tabs.map(([id,label])=>
+    `<button class="${id===currentTab?'active':''}" onclick="go('${id}')">${label}</button>`).join("");
+}
+function go(tab){ currentTab=tab; document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  $("#view-"+tab).classList.add("active"); buildNav(); renderTab(tab); }
+
+function renderAll(){ buildIterSelect(); buildNav(); renderTab(currentTab); renderPacketBanner(); }
+function renderTab(tab){
+  buildIterSelect(); renderPacketBanner();
+  ({dashboard:renderDashboard,tests:renderTests,assign:renderAssign,
+    tracking:renderTracking,iterations:renderIterations,admin:renderAdmin,data:renderData}[tab]||(()=>{}))();
+}
+function renderPacketBanner(){
+  const b=$("#packetBanner");
+  if(isPacket()){
+    const sc=S.packet.scope;
+    b.className="banner show";
+    b.innerHTML=`📦 <b>Tester packet mode</b> — scope limited to
+      ${sc.testerId?("tester <b>"+esc(testerName(sc.testerId))+"</b>"):""}
+      ${sc.entity?(" · entity <b>"+esc(sc.entity)+"</b>"):""}.
+      Enter your results, then export them. <button class="sm" onclick="exitPacket()">Exit packet mode</button>`;
+  } else b.className="banner";
+}
+
+/* ---------- iteration selector ---------- */
+function buildIterSelect(){
+  $("#iterSelect").innerHTML = S.iterations.map(i=>
+    `<option value="${i.id}" ${i.id===S.activeIterationId?'selected':''}>${esc(i.name)}${i.locked?' 🔒':''}</option>`).join("");
+}
+function setActiveIteration(id){ S.activeIterationId=id; renderAll(); }
+
+/* =========================================================================
+   MODAL
+   ========================================================================= */
+function modal(html){ $("#modalBox").innerHTML=html; $("#modalBg").classList.add("open"); }
+function closeModal(){ $("#modalBg").classList.remove("open"); }
+$("#modalBg").addEventListener("click",e=>{ if(e.target.id==="modalBg") closeModal(); });
+
+/* =========================================================================
+   DASHBOARD
+   ========================================================================= */
+function aggregate(execs){
+  const a={total:execs.length,byStatus:{},done:0,passed:0,failed:0,blocked:0,notrun:0};
+  execs.forEach(e=>{ a.byStatus[e.status]=(a.byStatus[e.status]||0)+1;
+    if(e.status==="Passed"){a.passed++;a.done++;}
+    else if(e.status==="Failed"){a.failed++;a.done++;}
+    else if(e.status==="Blocked"){a.blocked++;a.done++;}
+    else if(e.status==="N/A"){a.done++;}
+    else a.notrun++;
+  });
+  return a;
+}
+function progressBar(execs){
+  const a=aggregate(execs); if(!a.total) return '<div class="pbar"></div>';
+  const seg=(n,c)=> n? `<span style="width:${n/a.total*100}%;background:${c}"></span>`:"";
+  return `<div class="pbar">${seg(a.passed,'#22c55e')}${seg(a.failed,'#ef4444')}${seg(a.blocked,'#f59e0b')}${seg(a.byStatus['N/A']||0,'#475569')}${seg(a.byStatus['In progress']||0,'#a855f7')}</div>`;
+}
+function renderDashboard(){
+  const iter=activeIter(); const ex=iterExecs();
+  const a=aggregate(ex);
+  const pct = n => a.total? Math.round(n/a.total*100):0;
+  const kpi=(n,l,c)=>`<div class="kpi"><div class="n" style="color:${c||'inherit'}">${n}</div><div class="l">${l}</div></div>`;
+
+  const byEntity = S.config.entities.map(en=>{
+    const sub=ex.filter(e=>e.entity===en.code); return {en, a:aggregate(sub), bar:progressBar(sub)};
+  });
+  const domains={};
+  ex.forEach(e=>{ const c=catById(e.testCaseId); const d=c?c.domain:"(unknown)"; (domains[d]=domains[d]||[]).push(e); });
+  const testers={};
+  ex.forEach(e=>{ (testers[e.testerId]=testers[e.testerId]||[]).push(e); });
+
+  $("#view-dashboard").innerHTML = `
+    <h2>Dashboard — ${esc(iter?iter.name:"—")}</h2>
+    <p class="sub">${esc(S.config.campaignName)} · live progress for the active iteration.</p>
+    <div class="cards">
+      ${kpi(a.total,"Assigned")}
+      ${kpi(a.done+" ("+pct(a.done)+"%)","Executed",'#38bdf8')}
+      ${kpi(a.passed,"Passed",'#22c55e')}
+      ${kpi(a.failed,"Failed",'#ef4444')}
+      ${kpi(a.blocked,"Blocked",'#f59e0b')}
+      ${kpi(a.notrun,"To do",'#94a3b8')}
+    </div>
+    <div class="card">
+      <b>Overall progress</b>
+      ${progressBar(ex)}
+      <div class="legend">
+        <span><i style="background:#22c55e"></i>Passed</span><span><i style="background:#ef4444"></i>Failed</span>
+        <span><i style="background:#f59e0b"></i>Blocked</span><span><i style="background:#a855f7"></i>In progress</span>
+        <span><i style="background:#475569"></i>N/A</span>
+      </div>
+    </div>
+    <div class="split">
+      <div class="card">
+        <b>By entity</b>
+        <table><thead><tr><th>Entity</th><th>Assigned</th><th>Progress</th><th>Pass/Fail/Block</th></tr></thead><tbody>
+        ${byEntity.map(b=>`<tr>
+          <td>${badge(b.en.code,b.en.color)} ${esc(b.en.label)}</td>
+          <td>${b.a.total}</td><td style="min-width:140px">${b.bar}</td>
+          <td><span style="color:#22c55e">${b.a.passed}</span>/<span style="color:#ef4444">${b.a.failed}</span>/<span style="color:#f59e0b">${b.a.blocked}</span></td>
+        </tr>`).join("")}
+        </tbody></table>
+      </div>
+      <div class="card">
+        <b>By tester</b>
+        <table><thead><tr><th>Tester</th><th>Assigned</th><th>Progress</th></tr></thead><tbody>
+        ${Object.keys(testers).map(tid=>{const sub=testers[tid];return `<tr>
+          <td>${esc(testerName(tid))}</td><td>${sub.length}</td><td style="min-width:140px">${progressBar(sub)}</td></tr>`;}).join("")
+          || '<tr><td colspan="3" class="muted">No assignment</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <b>By business domain</b>
+      <table><thead><tr><th>Domain</th><th>Assigned</th><th>Progress</th><th>Failed</th></tr></thead><tbody>
+      ${Object.keys(domains).sort().map(d=>{const sub=domains[d];const sa=aggregate(sub);return `<tr>
+        <td>${esc(d)}</td><td>${sub.length}</td><td style="min-width:160px">${progressBar(sub)}</td>
+        <td>${sa.failed?badge(sa.failed+" failed",'#ef4444'):'<span class="muted">0</span>'}</td></tr>`;}).join("")
+        || '<tr><td colspan="4" class="muted">Import the catalog and assign tests to see numbers.</td></tr>'}
+      </tbody></table>
+    </div>`;
+}
+
+/* =========================================================================
+   TESTS — merged Catalog + Execution
+   ========================================================================= */
+let testsFilter={q:"",domain:"",process:"",app:"",scope:"in"};
+let displayedTC=[];   // ids of currently displayed catalog rows (for reorder)
+
+function sortedCatalog(list){
+  return list.slice().sort((a,b)=> (a.order||0)-(b.order||0)
+    || naturalKey(a.title).localeCompare(naturalKey(b.title)));
+}
+function renderTests(){
+  if(isPacket()) return renderTestsPacket();
+  const domains=[...new Set(S.catalog.map(c=>c.domain))].sort();
+  const procs=[...new Set(S.catalog.filter(c=>!testsFilter.domain||c.domain===testsFilter.domain).map(c=>c.process))].sort();
+  const apps=[...new Set(S.catalog.map(c=>c.application).filter(Boolean))].sort();
+  let rows=S.catalog.filter(c=>
+    (!testsFilter.domain||c.domain===testsFilter.domain) &&
+    (!testsFilter.process||c.process===testsFilter.process) &&
+    (!testsFilter.app||c.application===testsFilter.app) &&
+    (testsFilter.scope==="all" || (testsFilter.scope==="in"?c.inScope:!c.inScope)) &&
+    (!testsFilter.q || (c.title+" "+c.id+" "+c.process).toLowerCase().includes(testsFilter.q.toLowerCase()))
+  );
+  rows=sortedCatalog(rows);
+  displayedTC=rows.map(c=>String(c.id));
+  const inScope=S.catalog.filter(c=>c.inScope).length;
+  const iter=activeIter();
+
+  $("#view-tests").innerHTML = `
+    <h2>Tests — ${esc(iter?iter.name:"—")}</h2>
+    <p class="sub">${S.catalog.length} test cases (deduplicated from DevOps) · <b style="color:var(--accent)">${inScope}</b> in scope. Manage scope, edit test cases, reorder them, and capture execution results — all in one place. L4→L6 are kept as folded metadata.</p>
+    ${S.catalog.length===0 ? `<div class="card empty">No catalog yet. Go to <b>Import / Export</b> to load the DevOps export (.xlsx), or add a test case manually below.<div style="margin-top:12px"><button class="primary" onclick="newTestCase()">+ New test case</button></div></div>` : `
+    <div class="toolbar">
+      <input id="tQ" placeholder="🔍 search…" value="${esc(testsFilter.q)}" oninput="testsFilter.q=this.value;renderTests()" style="min-width:200px"/>
+      <select onchange="testsFilter.domain=this.value;testsFilter.process='';renderTests()"><option value="">All domains</option>${domains.map(d=>`<option ${testsFilter.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
+      <select onchange="testsFilter.process=this.value;renderTests()"><option value="">All processes</option>${procs.map(p=>`<option ${testsFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
+      <select onchange="testsFilter.app=this.value;renderTests()"><option value="">All apps</option>${apps.map(p=>`<option ${testsFilter.app===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
+      <select onchange="testsFilter.scope=this.value;renderTests()">
+        <option value="in" ${testsFilter.scope==='in'?'selected':''}>In scope</option>
+        <option value="out" ${testsFilter.scope==='out'?'selected':''}>Out of scope</option>
+        <option value="all" ${testsFilter.scope==='all'?'selected':''}>All</option>
+      </select>
+      <div class="spacer"></div>
+      <span class="muted">${rows.length} shown</span>
+      <button class="sm" onclick="bulkScope(true)">✓ Include filtered</button>
+      <button class="sm" onclick="bulkScope(false)">✗ Exclude</button>
+      <button class="sm" onclick="resetOrder()">↕ Reset order (chronological)</button>
+      <button class="sm" onclick="newTestCase()">+ New</button>
+    </div>
+    <div class="scrollbox">
+    <table>
+      <thead><tr><th style="width:60px">Order</th><th style="width:34px">Scope</th><th>Test Case</th><th>Domain</th><th>Process</th><th>App</th><th style="width:60px"></th></tr></thead>
+      <tbody>
+      ${rows.slice(0,300).map((c,i)=>testCaseBlock(c)).join("")}
+      </tbody>
+    </table>
+    </div>
+    ${rows.length>300?`<p class="hint">Showing first 300 rows — refine the filters.</p>`:""}
+    `}`;
+}
+function testCaseBlock(c){
+  const exs=execsFor(c.id);
+  const main=`<tr class="tc-main">
+    <td><div class="ord">
+      <button onclick="moveOrder('${c.id}',-1)" title="up">▲</button>
+      <input type="number" value="${c.order||0}" onchange="setOrder('${c.id}',this.value)"/>
+      <button onclick="moveOrder('${c.id}',1)" title="down">▼</button>
+    </div></td>
+    <td><input type="checkbox" ${c.inScope?'checked':''} onchange="toggleScope('${c.id}',this.checked)"/></td>
+    <td><b>${esc(c.title)}</b><div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
+      <details><summary>metadata</summary><div class="muted" style="font-size:12px">
+        ${c.subProcess?`<div>L4: ${esc(c.subProcess)}</div>`:''}
+        ${c.variant?`<div>L5: ${esc(c.variant)}</div>`:''}
+        ${c.subVariant?`<div>L6: ${esc(c.subVariant)}</div>`:''}
+        ${c.bankArea?`<div>Bank area: ${esc(c.bankArea)}</div>`:''}
+      </div></details></td>
+    <td>${esc(c.domain)}</td>
+    <td>${esc(c.process)}</td>
+    <td>${c.application?`<span class="tag">${esc(c.application)}</span>`:''}</td>
+    <td><button class="sm" onclick="editTestCase('${c.id}')">✎</button></td>
+  </tr>`;
+  const execRows = exs.map(e=>{
+    const sm=statusMeta(e.status); const need=sm.requiresComment&&!e.businessComment;
+    return `<tr class="tc-exec"><td></td><td colspan="6"><div class="exline">
+      ${badge(e.entity,entityMeta(e.entity).color)}
+      <select onchange="setExecTester('${e.id}',this.value)" title="tester"><option value="">— tester —</option>${S.config.testers.map(t=>`<option value="${t.id}" ${t.id===e.testerId?'selected':''}>${esc(t.name)}</option>`).join("")}</select>
+      <select onchange="setStatus('${e.id}',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
+      <input class="grow" placeholder="${sm.requiresComment?'business comment (required)':'business comment'}" style="${need?'border-color:#ef4444':''}" value="${esc(e.businessComment)}" oninput="setComment('${e.id}',this.value)"/>
+      <button class="sm danger" onclick="delExec('${e.id}')" title="remove">✕</button>
+    </div>${need?'<div class="hint" style="color:#ef4444">Comment required for '+esc(e.status)+'</div>':''}</td></tr>`;
+  }).join("");
+  const assignRow=`<tr class="tc-exec"><td></td><td colspan="6"><div class="exline">
+    <span class="muted" style="font-size:12px">Assign to:</span>
+    ${S.config.entities.map(en=>`<button class="sm" onclick="quickAssign('${c.id}','${en.code}')">+ ${esc(en.code)}</button>`).join("")}
+    <span class="muted" style="font-size:11px">+ adds a line with the default tester; change the dropdown to assign someone else, then add again for several people.</span>
+  </div></td></tr>`;
+  return main+execRows+assignRow;
+}
+function renderTestsPacket(){
+  // tester mode: flat execution list
+  let ex=iterExecs();
+  ex=ex.slice().sort((a,b)=>{const ca=catById(a.testCaseId)||{},cb=catById(b.testCaseId)||{};
+    return (ca.order||0)-(cb.order||0)||naturalKey(ca.title).localeCompare(naturalKey(cb.title));});
+  $("#view-tests").innerHTML=`
+    <h2>Tests — ${esc(activeIter()?.name||"")}</h2>
+    <p class="sub">Enter the result of each test. <b style="color:#ef4444">A business comment is mandatory</b> for Failed/Blocked.</p>
+    ${ex.length===0?`<div class="card empty">No tests assigned to your scope in this iteration.</div>`:`
+    <div class="scrollbox"><table><thead><tr><th>Test Case</th><th>Entity</th><th>Tester</th><th style="width:130px">Status</th><th>Business comment</th></tr></thead><tbody>
+    ${ex.map(e=>{const c=catById(e.testCaseId)||{};const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.businessComment;
+      return `<tr>
+      <td><b>${esc(c.title||("#"+e.testCaseId))}</b><div class="muted" style="font-size:11px">${esc(c.process||"")} ${c.application?'· '+esc(c.application):''}</div></td>
+      <td>${badge(e.entity,entityMeta(e.entity).color)}</td><td class="muted">${esc(testerName(e.testerId))}</td>
+      <td><select onchange="setStatus('${e.id}',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
+      <td><textarea style="min-height:38px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setComment('${e.id}',this.value)">${esc(e.businessComment)}</textarea>${need?'<div class="hint" style="color:#ef4444">Comment required</div>':''}</td>
+    </tr>`;}).join("")}
+    </tbody></table></div>`}`;
+}
+
+/* scope */
+function toggleScope(id,v){ const c=catById(id); if(c){c.inScope=v; save();} }
+function bulkScope(v){
+  S.catalog.filter(c=>
+    (!testsFilter.domain||c.domain===testsFilter.domain) &&
+    (!testsFilter.process||c.process===testsFilter.process) &&
+    (!testsFilter.app||c.application===testsFilter.app) &&
+    (testsFilter.scope==="all"||(testsFilter.scope==="in"?c.inScope:!c.inScope)) &&
+    (!testsFilter.q||(c.title+" "+c.id+" "+c.process).toLowerCase().includes(testsFilter.q.toLowerCase())))
+   .forEach(c=>c.inScope=v);
+  persist();
+}
+/* ordering */
+function setOrder(id,v){ const c=catById(id); if(c){c.order=parseInt(v)||0; persist();} }
+function moveOrder(id,dir){
+  const idx=displayedTC.indexOf(String(id)); const j=idx+dir;
+  if(idx<0||j<0||j>=displayedTC.length) return;
+  const a=catById(displayedTC[idx]), b=catById(displayedTC[j]);
+  const t=a.order; a.order=b.order; b.order=t; persist();
+}
+function resetOrder(){
+  let maxO=0; const sorted=S.catalog.slice().sort((a,b)=>naturalKey(a.title).localeCompare(naturalKey(b.title)));
+  sorted.forEach(c=>c.order=++maxO); persist();
+}
+/* test case editing */
+function editTestCase(id){ const c=catById(id); openTCModal(c); }
+function newTestCase(){
+  const c={id:"NEW-"+uid(),title:"New test case",domain:"",process:"",subProcess:"",variant:"",subVariant:"",
+    application:"",bankArea:"",devopsLink:"",defaultTesterId:"",inScope:true,tags:[],order:(S.catalog.reduce((m,x)=>Math.max(m,x.order||0),0)+1)};
+  S.catalog.push(c); save(); openTCModal(c);
+}
+function openTCModal(c){
+  modal(`<h2>Edit test case</h2>
+    <div class="field"><label>Identifier</label><input id="tc_id" value="${esc(c.id)}"/></div>
+    <div class="field" style="margin-top:8px"><label>Title</label><input id="tc_title" value="${esc(c.title)}"/></div>
+    <div class="row" style="margin-top:8px">
+      <div class="field"><label>Domain</label><input id="tc_domain" value="${esc(c.domain)}"/></div>
+      <div class="field"><label>Process</label><input id="tc_process" value="${esc(c.process)}"/></div>
+      <div class="field"><label>Application</label><input id="tc_app" value="${esc(c.application)}"/></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field"><label>Sub-process (L4)</label><input id="tc_sub" value="${esc(c.subProcess)}"/></div>
+      <div class="field"><label>Variant (L5)</label><input id="tc_var" value="${esc(c.variant)}"/></div>
+      <div class="field"><label>Sub-variant (L6)</label><input id="tc_subv" value="${esc(c.subVariant)}"/></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field"><label>Bank area</label><input id="tc_bank" value="${esc(c.bankArea)}"/></div>
+      <div class="field"><label>Default tester</label><select id="tc_tester"><option value="">—</option>${S.config.testers.map(t=>`<option value="${t.id}" ${t.id===c.defaultTesterId?'selected':''}>${esc(t.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Order</label><input type="number" id="tc_order" value="${c.order||0}"/></div>
+    </div>
+    <div class="field" style="margin-top:8px"><label>DevOps link</label><input id="tc_link" value="${esc(c.devopsLink)}"/></div>
+    <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delTestCase('${c.id}')">Delete test case</button><div class="spacer"></div>
+      <button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveTC('${c.id}')">Save</button></div>`);
+}
+function saveTC(id){ const c=catById(id); if(!c)return;
+  const newId=$("#tc_id").value.trim()||c.id;
+  if(newId!==c.id){ S.executions.forEach(e=>{ if(String(e.testCaseId)===String(c.id)) e.testCaseId=newId; }); c.id=newId; }
+  c.title=$("#tc_title").value; c.domain=$("#tc_domain").value; c.process=$("#tc_process").value;
+  c.application=$("#tc_app").value; c.subProcess=$("#tc_sub").value; c.variant=$("#tc_var").value;
+  c.subVariant=$("#tc_subv").value; c.bankArea=$("#tc_bank").value; c.defaultTesterId=$("#tc_tester").value;
+  c.order=parseInt($("#tc_order").value)||0; c.devopsLink=$("#tc_link").value;
+  closeModal(); persist();
+}
+function delTestCase(id){ if(!confirm("Delete this test case and its executions (all iterations)?"))return;
+  S.catalog=S.catalog.filter(c=>String(c.id)!==String(id));
+  S.executions=S.executions.filter(e=>String(e.testCaseId)!==String(id));
+  closeModal(); persist(); }
+/* quick assign one entity in active iteration */
+function quickAssign(catId,ent){
+  const c=catById(catId); const iterId=S.activeIterationId;
+  if(S.executions.some(e=>e.iterationId===iterId&&String(e.testCaseId)===String(catId)&&e.entity===ent&&e.testerId===(c.defaultTesterId||""))) return;
+  const tester=S.config.testers.find(t=>t.id===c.defaultTesterId);
+  S.executions.push({id:uid(),iterationId:iterId,testCaseId:catId,entity:ent,testerId:c.defaultTesterId||"",
+    dept:tester?tester.dept||"":"",status:"Not started",businessComment:"",recurrence:"",testDate:"",defectLink:"",updatedAt:new Date().toISOString()});
+  persist();
+}
+/* execution edits */
+function setStatus(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  e.status=v; e.updatedAt=new Date().toISOString(); if(v!=="Not started"&&!e.testDate) e.testDate=new Date().toISOString().slice(0,10);
+  save(); renderTab(currentTab); }
+function setComment(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.businessComment=v; e.updatedAt=new Date().toISOString(); save(); }
+function setExecTester(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.testerId=v; const t=S.config.testers.find(x=>x.id===v); e.dept=t?t.dept||"":""; e.updatedAt=new Date().toISOString(); save(); }
+function delExec(id){ S.executions=S.executions.filter(x=>x.id!==id); persist(); }
+
+/* =========================================================================
+   ASSIGNMENT (mass)
+   ========================================================================= */
+let asgFilter={domain:"",process:""};
+function renderAssign(){
+  const iter=activeIter();
+  const inScope=S.catalog.filter(c=>c.inScope);
+  const domains=[...new Set(inScope.map(c=>c.domain))].sort();
+  const procs=[...new Set(inScope.filter(c=>!asgFilter.domain||c.domain===asgFilter.domain).map(c=>c.process))].sort();
+  const ex=iterExecs();
+  const procList=[...new Set(inScope.map(c=>c.process))].sort();
+  const cnt=(proc,ent)=>ex.filter(e=>{const c=catById(e.testCaseId);return c&&c.process===proc&&e.entity===ent;}).length;
+
+  $("#view-assign").innerHTML=`
+    <h2>Assignment — ${esc(iter?iter.name:"—")}</h2>
+    <p class="sub">Assign <b>in-scope</b> test cases to the 4 entities and to testers, for the active iteration. An assignment creates a "Not started" execution. <b>Select one or more testers</b> to assign the same tests to several people at once — each tester gets their own line to fill in. If you select no tester, each test case's <b>default tester</b> (from the DevOps TesterName column) is used.</p>
+    ${inScope.length===0?`<div class="card empty">No test in scope. First select tests in the <b>Tests</b> tab.</div>`:`
+    <div class="card">
+      <b>Mass assignment</b>
+      <div class="row" style="margin-top:10px">
+        <div class="field"><label>Domain</label><select id="asgDom" onchange="asgFilter.domain=this.value;asgFilter.process='';renderAssign()"><option value="">— all —</option>${domains.map(d=>`<option ${asgFilter.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select></div>
+        <div class="field"><label>Process</label><select id="asgProc" onchange="asgFilter.process=this.value;renderAssign()"><option value="">— all (in domain) —</option>${procs.map(p=>`<option ${asgFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select></div>
+        <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="asgEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
+        <div class="field"><label>Testers <span class="muted">(pick one or several)</span></label><div class="chiprow" style="max-width:420px">${S.config.testers.length? S.config.testers.map(t=>`<label class="pill"><input type="checkbox" class="asgTester" value="${t.id}"/> ${esc(t.name)}${t.entity?` (${esc(t.entity)})`:''}</label>`).join("") : '<span class="muted" style="font-size:12px">No tester yet — the default tester will be used.</span>'}</div></div>
+        <div class="field"><label>Recurrence</label><select id="asgRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
+        <button class="primary" onclick="doAssign()">Assign</button>
+      </div>
+      <p class="hint">Target: ${countAsgTarget()} in-scope test case(s) × selected entities × selected testers. Duplicates already created (test case × entity × tester × iteration) are skipped.</p>
+    </div>
+    <div class="card">
+      <b>Process × Entity matrix</b> <span class="muted">(assignments in ${esc(iter?iter.name:"")})</span>
+      <div class="scrollbox" style="margin-top:8px">
+      <table class="matrix"><thead><tr><th class="proc">Process</th>${S.config.entities.map(en=>`<th>${badge(en.code,en.color)}</th>`).join("")}<th>Total</th></tr></thead><tbody>
+      ${procList.map(p=>{let tot=0;const cells=S.config.entities.map(en=>{const n=cnt(p,en.code);tot+=n;return `<td>${n||'<span class="muted">·</span>'}</td>`;}).join("");return `<tr><td class="proc">${esc(p)}</td>${cells}<td><b>${tot}</b></td></tr>`;}).join("")}
+      </tbody></table>
+      </div>
+    </div>`}`;
+}
+function asgTargetCats(){
+  return S.catalog.filter(c=>c.inScope && (!asgFilter.domain||c.domain===asgFilter.domain) && (!asgFilter.process||c.process===asgFilter.process));
+}
+function countAsgTarget(){ return asgTargetCats().length; }
+function doAssign(){
+  const ents=[...document.querySelectorAll(".asgEnt:checked")].map(x=>x.value);
+  if(!ents.length){ alert("Select at least one target entity."); return; }
+  const formTesters=[...document.querySelectorAll(".asgTester:checked")].map(x=>x.value);
+  const rec=$("#asgRec").value;
+  const cats=asgTargetCats(); const iterId=S.activeIterationId;
+  let created=0, skipped=0;
+  cats.forEach(c=>ents.forEach(ent=>{
+    // one execution per selected tester; if none selected, fall back to the test case's default tester
+    const testerIds = formTesters.length ? formTesters : [c.defaultTesterId||""];
+    testerIds.forEach(testerId=>{
+      const exists=S.executions.some(e=>e.iterationId===iterId&&String(e.testCaseId)===String(c.id)&&e.entity===ent&&e.testerId===testerId);
+      if(exists){ skipped++; return; }
+      const tester=S.config.testers.find(t=>t.id===testerId);
+      S.executions.push({id:uid(),iterationId:iterId,testCaseId:c.id,entity:ent,testerId,
+        dept:tester?tester.dept||"":"",status:"Not started",businessComment:"",recurrence:rec||"",testDate:"",defectLink:"",updatedAt:new Date().toISOString()});
+      created++;
+    });
+  }));
+  persist(); alert(created+" assignment(s) created"+(skipped?", "+skipped+" duplicate(s) skipped":"")+".");
+}
+
+/* =========================================================================
+   TRACKING
+   ========================================================================= */
+function renderTracking(){
+  const ex=iterExecs();
+  $("#view-tracking").innerHTML=`
+    <h2>Detailed tracking — ${esc(activeIter()?.name||"")}</h2>
+    <p class="sub">Tabular view of every execution in the iteration. Export the report from <b>Import / Export</b>.</p>
+    <div class="scrollbox">
+    <table><thead><tr><th>Test Case</th><th>Domain</th><th>Process</th><th>Entity</th><th>Tester</th><th>Status</th><th>Recurrence</th><th>Date</th><th>Comment</th></tr></thead><tbody>
+    ${ex.slice(0,1000).map(e=>{const c=catById(e.testCaseId)||{};const sm=statusMeta(e.status);return `<tr>
+      <td>${esc(c.title||("#"+e.testCaseId))}</td><td>${esc(c.domain||"")}</td><td>${esc(c.process||"")}</td>
+      <td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))}</td>
+      <td>${badge(e.status,sm.color)}</td><td>${esc(e.recurrence||"")}</td><td>${esc(e.testDate||"")}</td>
+      <td class="muted">${esc(e.businessComment||"")}</td></tr>`;}).join("")
+      || '<tr><td colspan="9" class="empty">No execution.</td></tr>'}
+    </tbody></table></div>`;
+}
+
+/* =========================================================================
+   ITERATIONS (UAT 1, UAT 2, …)
+   ========================================================================= */
+function renderIterations(){
+  $("#view-iterations").innerHTML=`
+    <h2>Iterations</h2>
+    <p class="sub">Manage UAT 1, UAT 2… waves. Every execution belongs to an iteration. You can create a new iteration carrying over the tests to replay.</p>
+    <div class="card">
+      <table><thead><tr><th>Name</th><th>Start</th><th>End</th><th>Assigned</th><th>Progress</th><th></th></tr></thead><tbody>
+      ${S.iterations.map(it=>{const ex=S.executions.filter(e=>e.iterationId===it.id);return `<tr>
+        <td><b>${esc(it.name)}</b> ${it.id===S.activeIterationId?'<span class="tag">active</span>':''}</td>
+        <td>${esc(it.startDate||"—")}</td><td>${esc(it.endDate||"—")}</td><td>${ex.length}</td>
+        <td style="min-width:160px">${progressBar(ex)}</td>
+        <td><button class="sm" onclick="editIter('${it.id}')">Edit</button> ${S.iterations.length>1?`<button class="sm danger" onclick="delIter('${it.id}')">✕</button>`:''}</td>
+      </tr>`;}).join("")}
+      </tbody></table>
+    </div>
+    <div class="cards">
+      <button class="primary" onclick="newIter()">+ New iteration</button>
+      <button onclick="carryOver()">↪ New iteration carrying over Failed/Blocked</button>
+    </div>
+    <p class="hint">Carry-over copies, from the active iteration, the assignments whose status is Failed, Blocked or Not started, reset to "Not started" in the new iteration (same testers/entities).</p>`;
+}
+function newIter(){ const name=prompt("Iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
+  const it={id:uid(),name,startDate:"",endDate:"",active:true,locked:false}; S.iterations.push(it); S.activeIterationId=it.id; renderAll(); save(); }
+function editIter(id){ const it=S.iterations.find(x=>x.id===id);
+  modal(`<h2>Edit iteration</h2>
+    <div class="field"><label>Name</label><input id="it_name" value="${esc(it.name)}"/></div>
+    <div class="row" style="margin-top:10px">
+      <div class="field"><label>Start</label><input type="date" id="it_start" value="${esc(it.startDate)}"/></div>
+      <div class="field"><label>End</label><input type="date" id="it_end" value="${esc(it.endDate)}"/></div>
+    </div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button>
+    <button class="primary" onclick="saveIter('${id}')">Save</button></div>`); }
+function saveIter(id){ const it=S.iterations.find(x=>x.id===id); it.name=$("#it_name").value; it.startDate=$("#it_start").value; it.endDate=$("#it_end").value; closeModal(); renderAll(); save(); }
+function delIter(id){ if(!confirm("Delete this iteration and its executions?"))return;
+  S.iterations=S.iterations.filter(x=>x.id!==id); S.executions=S.executions.filter(e=>e.iterationId!==id);
+  if(S.activeIterationId===id) S.activeIterationId=S.iterations[0].id; renderAll(); save(); }
+function carryOver(){
+  const from=activeIter(); const name=prompt("New iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
+  const it={id:uid(),name,startDate:"",endDate:"",active:true,locked:false}; S.iterations.push(it);
+  const src=S.executions.filter(e=>e.iterationId===from.id && ["Failed","Blocked","Not started"].includes(e.status));
+  src.forEach(e=>S.executions.push({...e,id:uid(),iterationId:it.id,status:"Not started",businessComment:"",testDate:"",defectLink:"",updatedAt:new Date().toISOString()}));
+  S.activeIterationId=it.id; renderAll(); save(); alert(src.length+" test(s) carried over to "+name+".");
+}
+
+/* =========================================================================
+   ADMIN
+   ========================================================================= */
+function renderAdmin(){
+  const m=S.config.columnMapping;
+  $("#view-admin").innerHTML=`
+    <h2>Administration</h2>
+    <p class="sub">Configure the campaign, entities, departments, testers, statuses and the DevOps import mapping.</p>
+
+    <div class="card"><b>Campaign</b>
+      <div class="field" style="margin-top:8px;max-width:420px"><label>Campaign name</label>
+        <input value="${esc(S.config.campaignName)}" onchange="S.config.campaignName=this.value;persist()"/></div>
+    </div>
+
+    <div class="split">
+      <div class="card"><b>Entities</b>
+        <table><thead><tr><th>Code</th><th>Label</th><th>Color</th><th></th></tr></thead><tbody>
+        ${S.config.entities.map((en,i)=>`<tr>
+          <td><input value="${esc(en.code)}" style="width:60px" onchange="S.config.entities[${i}].code=this.value;persist()"/></td>
+          <td><input value="${esc(en.label)}" onchange="S.config.entities[${i}].label=this.value;persist()"/></td>
+          <td><input type="color" value="${en.color}" onchange="S.config.entities[${i}].color=this.value;persist()"/></td>
+          <td><button class="sm danger" onclick="S.config.entities.splice(${i},1);persist()">✕</button></td></tr>`).join("")}
+        </tbody></table>
+        <button class="sm" onclick="S.config.entities.push({code:'XX',label:'New',color:'#38bdf8'});persist()">+ Entity</button>
+      </div>
+
+      <div class="card"><b>Statuses</b>
+        <table><thead><tr><th>Value</th><th>Color</th><th>Comment required</th><th></th></tr></thead><tbody>
+        ${S.config.statuses.map((s,i)=>`<tr>
+          <td><input value="${esc(s.value)}" onchange="S.config.statuses[${i}].value=this.value;persist()"/></td>
+          <td><input type="color" value="${s.color}" onchange="S.config.statuses[${i}].color=this.value;persist()"/></td>
+          <td style="text-align:center"><input type="checkbox" ${s.requiresComment?'checked':''} onchange="S.config.statuses[${i}].requiresComment=this.checked;persist()"/></td>
+          <td><button class="sm danger" onclick="S.config.statuses.splice(${i},1);persist()">✕</button></td></tr>`).join("")}
+        </tbody></table>
+        <button class="sm" onclick="S.config.statuses.push({value:'New',color:'#64748b',requiresComment:false});persist()">+ Status</button>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="card"><b>Departments</b>
+        <div class="field" style="margin-top:8px"><textarea onchange="S.config.departments=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.departments.join("\n"))}</textarea><div class="hint">One department per line.</div></div>
+      </div>
+      <div class="card"><b>Recurrences</b>
+        <div class="field" style="margin-top:8px"><textarea onchange="S.config.recurrences=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.recurrences.join("\n"))}</textarea><div class="hint">One value per line.</div></div>
+      </div>
+    </div>
+
+    <div class="card"><b>Testers</b> <span class="muted">— auto-created from the DevOps TesterName column on import; create/edit them freely here.</span>
+      <table><thead><tr><th>Name</th><th>Email</th><th>Entity</th><th>Department</th><th></th></tr></thead><tbody>
+      ${S.config.testers.map((t,i)=>`<tr>
+        <td><input value="${esc(t.name)}" onchange="S.config.testers[${i}].name=this.value;persist()"/></td>
+        <td><input value="${esc(t.email||'')}" onchange="S.config.testers[${i}].email=this.value;persist()"/></td>
+        <td><select onchange="S.config.testers[${i}].entity=this.value;persist()"><option value="">—</option>${S.config.entities.map(en=>`<option ${t.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
+        <td><select onchange="S.config.testers[${i}].dept=this.value;persist()"><option value="">—</option>${S.config.departments.map(d=>`<option ${t.dept===d?'selected':''}>${esc(d)}</option>`).join("")}</select></td>
+        <td><button class="sm danger" onclick="delTester(${i})">✕</button></td></tr>`).join("")
+        || '<tr><td colspan="5" class="muted">No tester.</td></tr>'}
+      </tbody></table>
+      <button class="sm" onclick="S.config.testers.push({id:uid(),name:'New tester',email:'',entity:'',dept:''});persist()">+ Tester</button>
+    </div>
+
+    <div class="card"><b>DevOps import column mapping</b>
+      <p class="hint">Map each model field to the column header of your .xlsx export.</p>
+      <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+      ${Object.keys(m).map(k=>`<div class="field"><label>${esc(k)}</label><input value="${esc(m[k])}" onchange="S.config.columnMapping['${k}']=this.value;persist()"/></div>`).join("")}
+      </div>
+    </div>`;
+}
+function delTester(i){ const t=S.config.testers[i];
+  const used=S.executions.some(e=>e.testerId===t.id)||S.catalog.some(c=>c.defaultTesterId===t.id);
+  if(used && !confirm("This tester is referenced by some tests. Remove anyway?")) return;
+  S.config.testers.splice(i,1); persist(); }
+
+/* =========================================================================
+   IMPORT / EXPORT
+   ========================================================================= */
+function renderData(){
+  $("#view-data").innerHTML=`
+    <h2>Import / Export</h2>
+    <p class="sub">Import the DevOps export, back up your work, and run the tester round-trip.</p>
+
+    <div class="card"><b>1. Import DevOps catalog (.xlsx)</b>
+      <p class="hint">Test cases are deduplicated by identifier. The Admin column mapping is applied. Testers found in the TesterName column are auto-created and set as each test case's default tester.</p>
+      <input type="file" id="impDevops" accept=".xlsx,.xls" onchange="importDevops(this)"/>
+      <div class="field" style="margin-top:8px;max-width:260px"><label>Sheet</label><input id="impSheet" value="LUX" placeholder="sheet name"/></div>
+    </div>
+
+    <div class="card"><b>2. Full backup (JSON)</b>
+      <p class="hint">All data (config, catalog, iterations, executions). This is your coordinator working file.</p>
+      <div class="cards"><button class="primary" onclick="exportJSON()">⬇ Export backup</button>
+        <label class="pill" style="cursor:pointer">⬆ Restore<input type="file" accept=".json" style="display:none" onchange="importJSON(this)"/></label></div>
+    </div>
+
+    <div class="card"><b>3. Tester round-trip</b>
+      <p class="hint">The coordinator exports a packet per tester/entity (active iteration). The tester opens this same <code>index.html</code>, imports the packet, enters results, then exports results. The coordinator merges them back.</p>
+      <div class="row">
+        <div class="field"><label>Tester</label><select id="pkTester"><option value="">— all —</option>${S.config.testers.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></div>
+        <div class="field"><label>Entity</label><select id="pkEntity"><option value="">— all —</option>${S.config.entities.map(en=>`<option value="${en.code}">${esc(en.code)}</option>`).join("")}</select></div>
+        <button onclick="exportPacket()">⬇ Export tester packet</button>
+      </div>
+      <div class="cards" style="margin-top:12px">
+        <label class="pill" style="cursor:pointer">📦 Import packet (tester side)<input type="file" accept=".json" style="display:none" onchange="importPacket(this)"/></label>
+        <button onclick="exportResults()">⬆ Export my results (tester side)</button>
+        <label class="pill" style="cursor:pointer">↩ Merge results (coordinator side)<input type="file" accept=".json" style="display:none" onchange="mergeResults(this)"/></label>
+      </div>
+    </div>
+
+    <div class="card"><b>4. Consolidated report (.xlsx)</b>
+      <p class="hint">Excel export of every execution (all iterations) for sharing / reporting.</p>
+      <button class="primary" onclick="exportReport()">⬇ Export Excel report</button>
+    </div>
+
+    <div class="card"><b>Reset</b>
+      <button class="danger" onclick="if(confirm('Erase everything and start over?')){localStorage.removeItem(LS_KEY);location.reload();}">Reset application</button>
+    </div>`;
+}
+
+/* ---------- import DevOps xlsx ---------- */
+function importDevops(input){
+  const file=input.files[0]; if(!file)return;
+  const sheetName=$("#impSheet").value||null;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:"array"});
+    const sn = sheetName && wb.SheetNames.includes(sheetName) ? sheetName : wb.SheetNames[0];
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""});
+    const m=S.config.columnMapping;
+    const seen={}; let added=0,merged=0,newTesters=0;
+    rows.forEach(r=>{
+      const id=r[m.testCaseId]; if(id===""||id==null)return;
+      // tester from column E (TesterName)
+      let testerId="";
+      const tname=(r[m.tester]||"").toString().trim();
+      if(tname){ let t=S.config.testers.find(x=>x.name===tname);
+        if(!t){ t={id:uid(),name:tname,email:"",entity:"",dept:""}; S.config.testers.push(t); newTesters++; }
+        testerId=t.id; }
+      const obj={
+        id, title:r[m.title]||("#"+id), domain:r[m.domain]||"", process:r[m.process]||"",
+        subProcess:r[m.subProcess]||"", variant:r[m.variant]||"", subVariant:r[m.subVariant]||"",
+        application:r[m.application]||"", bankArea:r[m.bankArea]||"", devopsLink:r[m.devopsLink]||"",
+        defaultTesterId:testerId
+      };
+      if(seen[id])return; seen[id]=true;
+      const ex=catById(id);
+      if(ex){ Object.assign(ex,obj,{inScope:ex.inScope,tags:ex.tags,order:ex.order,defaultTesterId:testerId||ex.defaultTesterId}); merged++; }
+      else { S.catalog.push({...obj,inScope:false,tags:[],order:0}); added++; }
+    });
+    // assign natural order to items without one
+    let maxO=S.catalog.reduce((mm,c)=>Math.max(mm,c.order||0),0);
+    const noOrder=S.catalog.filter(c=>!c.order);
+    noOrder.sort((a,b)=>naturalKey(a.title).localeCompare(naturalKey(b.title)));
+    noOrder.forEach(c=>c.order=++maxO);
+    save(); go("tests");
+    alert(`Import done (sheet "${sn}"): ${added} new, ${merged} updated, ${newTesters} tester(s) created. Catalog total: ${S.catalog.length}.`);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ---------- JSON backup ---------- */
+function download(name,content,type){ const b=new Blob([content],{type:type||"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+function exportJSON(){ download(`MCEU_UAT_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(S,null,2)); }
+function importJSON(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ S=migrate(JSON.parse(e.target.result)); renderAll(); save(); alert("Backup restored."); }catch(err){ alert("Invalid file."); } };
+  r.readAsText(f); }
+
+/* ---------- round-trip ---------- */
+function exportPacket(){
+  const testerId=$("#pkTester").value, entity=$("#pkEntity").value, iterId=S.activeIterationId;
+  let ex=S.executions.filter(e=>e.iterationId===iterId && (!testerId||e.testerId===testerId) && (!entity||e.entity===entity));
+  if(!ex.length){ alert("No execution for this scope in the active iteration."); return; }
+  const ids=[...new Set(ex.map(e=>String(e.testCaseId)))];
+  const packet={
+    _type:"MCEU_UAT_PACKET",
+    config:{campaignName:S.config.campaignName,entities:S.config.entities,statuses:S.config.statuses,recurrences:S.config.recurrences,testers:S.config.testers},
+    iterations:S.iterations.filter(i=>i.id===iterId),
+    catalog:S.catalog.filter(c=>ids.includes(String(c.id))),
+    executions:ex,
+    activeIterationId:iterId,
+    packet:{scope:{testerId,entity,iterationId:iterId}}
+  };
+  const who=testerId?testerName(testerId):"all";
+  download(`packet_${who.replace(/\W+/g,'_')}_${entity||'all'}.json`, JSON.stringify(packet,null,2));
+}
+function importPacket(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_UAT_PACKET"){alert("This is not a tester packet.");return;}
+    const d=defaultState();
+    S={...d, config:{...d.config,...p.config,columnMapping:d.config.columnMapping},
+       iterations:p.iterations, activeIterationId:p.activeIterationId,
+       catalog:p.catalog, executions:p.executions, packet:p.packet};
+    save(); currentTab="tests"; renderAll(); go("tests");
+    alert("Packet loaded. You are in tester mode — enter your results then export them.");
+  }catch(err){ alert("Invalid packet."); } };
+  r.readAsText(f); }
+function exitPacket(){ if(!confirm("Exit packet mode? (your entries stay in this file — remember to export them)"))return;
+  S.packet=null; save(); currentTab="dashboard"; renderAll(); go("dashboard"); }
+function exportResults(){
+  const ex = S.packet ? iterExecs() : S.executions.filter(e=>e.iterationId===S.activeIterationId);
+  download(`results_${new Date().toISOString().slice(0,10)}.json`,
+    JSON.stringify({_type:"MCEU_UAT_RESULTS",executions:ex},null,2)); }
+function mergeResults(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_UAT_RESULTS"){alert("This is not a results file.");return;}
+    let upd=0,add=0;
+    p.executions.forEach(inc=>{ const cur=S.executions.find(x=>x.id===inc.id);
+      if(cur){ if(!cur.updatedAt || (inc.updatedAt||"")>=cur.updatedAt){ Object.assign(cur,inc); upd++; } }
+      else { S.executions.push(inc); add++; } });
+    renderAll(); save(); alert(`Results merged: ${upd} updated, ${add} added.`);
+  }catch(err){ alert("Invalid file."); } };
+  r.readAsText(f); }
+
+/* ---------- xlsx report ---------- */
+function exportReport(){
+  const data=S.executions.map(e=>{ const c=catById(e.testCaseId)||{}; const it=S.iterations.find(i=>i.id===e.iterationId)||{};
+    return {Iteration:it.name||"",TestCaseId:e.testCaseId,Title:c.title||"",Domain:c.domain||"",Process:c.process||"",
+      SubProcess:c.subProcess||"",Application:c.application||"",Entity:e.entity,Tester:testerName(e.testerId),
+      Status:e.status,Recurrence:e.recurrence||"",TestDate:e.testDate||"",BusinessComment:e.businessComment||"",
+      DefectLink:e.defectLink||"",DevOpsLink:c.devopsLink||""}; });
+  const ws=XLSX.utils.json_to_sheet(data.length?data:[{Info:"No execution"}]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"UAT Report");
+  XLSX.writeFile(wb,`MCEU_UAT_report_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+/* ---------- startup ---------- */
+renderAll(); go("dashboard");
+</script>
+</body>
+</html>
