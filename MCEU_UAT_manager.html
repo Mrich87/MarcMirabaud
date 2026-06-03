@@ -113,7 +113,7 @@
 const LS_KEY = "mceu_uat_state_v1";
 /* App version — bump APP_BUILD on every released change. Shown in the header and
    embedded in tester packets so a stale app can be detected. */
-const APP_BUILD = 8;
+const APP_BUILD = 9;
 const APP_VERSION = "2026-06-03 · build " + APP_BUILD;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
@@ -285,6 +285,36 @@ function modal(html){ $("#modalBox").innerHTML=html; $("#modalBg").classList.add
 function closeModal(){ $("#modalBg").classList.remove("open"); }
 $("#modalBg").addEventListener("click",e=>{ if(e.target.id==="modalBg") closeModal(); });
 
+/* ---------- searchable picker (type-to-filter single select) ---------- */
+let _picker={items:[],filtered:[],cb:null,title:"",q:""};
+function pickerOpen(title,items,cb){ _picker={items,filtered:items.slice(),cb,title:title||"Select",q:""}; pickerRender(); }
+function pickerRender(){
+  const q=(_picker.q||"").toLowerCase();
+  _picker.filtered=_picker.items.filter(it=>((it.label||"")+" "+(it.sub||"")).toLowerCase().includes(q));
+  modal(`<h2>${esc(_picker.title)}</h2>
+    <input id="pickerQ" autocomplete="off" placeholder="🔍 type to search…" value="${esc(_picker.q||"")}" oninput="_picker.q=this.value;pickerRender()" style="width:100%"/>
+    <div class="scrollbox" style="max-height:340px;margin-top:10px">
+      ${_picker.filtered.map((it,i)=>`<div onclick="pickerChoose(${i})" style="padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,.05)'" onmouseout="this.style.background=''">${esc(it.label)}${it.sub?`<div class="muted" style="font-size:11px">${esc(it.sub)}</div>`:''}</div>`).join("")||'<div class="empty">No match</div>'}
+    </div>`);
+  const inp=document.getElementById("pickerQ"); if(inp){ inp.focus(); }
+}
+function pickerChoose(i){ const it=_picker.filtered[i]; const cb=_picker.cb; closeModal(); if(cb&&it) cb(it.value); }
+/* tester options for the picker */
+function testerItems(allowNone){
+  const arr=allowNone?[{value:"",label:"— none —"}]:[];
+  return arr.concat(S.config.testers.map(t=>({value:t.id,label:t.name,sub:[t.entity,t.dept,t.email].filter(Boolean).join(" · ")})));
+}
+/* set a hidden input + its button label from a tester pick (used in modals/forms) */
+function pickTesterInto(inputId,btnId,allowNone,title){
+  pickerOpen(title||"Choose tester", testerItems(allowNone), v=>{
+    const inp=document.getElementById(inputId); if(inp) inp.value=v;
+    const b=document.getElementById(btnId); if(b) b.textContent = v?testerName(v):"—";
+  });
+}
+/* live-filter the labels inside a checkbox chip container */
+function filterPills(input,wrapId){ const q=input.value.toLowerCase(); const w=document.getElementById(wrapId);
+  if(w) w.querySelectorAll("label").forEach(l=>{ l.style.display = l.textContent.toLowerCase().includes(q)?"":"none"; }); }
+
 /* =========================================================================
    DASHBOARD
    ========================================================================= */
@@ -430,7 +460,7 @@ function renderTests(){
       <p class="hint" style="margin-top:8px">Assigns the <b>${targetCount}</b> test case(s) currently matching the filters below to each selected entity × tester, in <b>${esc(iter?iter.name:"")}</b>. Leave testers empty to use each test's default tester. Existing duplicates (test × entity × tester) are skipped.</p>
       <div class="row" style="margin-top:6px">
         <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="libEnt" value="${esc(en.code)}"/> ${esc(en.code)}</label>`).join("")}</div></div>
-        <div class="field"><label>Testers <span class="muted">(optional, multi)</span></label><div class="chiprow" style="max-width:420px">${S.config.testers.length?S.config.testers.map(t=>`<label class="pill"><input type="checkbox" class="libTester" value="${t.id}"/> ${esc(t.name)}${t.entity?` (${esc(t.entity)})`:''}</label>`).join(""):'<span class="muted" style="font-size:12px">No tester — default tester is used.</span>'}</div></div>
+        <div class="field"><label>Testers <span class="muted">(optional, multi)</span></label>${S.config.testers.length?`<input placeholder="🔍 filter testers…" oninput="filterPills(this,'libTesterWrap')" style="max-width:420px;margin-bottom:6px"/>`:''}<div id="libTesterWrap" class="chiprow" style="max-width:420px;max-height:160px;overflow:auto">${S.config.testers.length?S.config.testers.map(t=>`<label class="pill"><input type="checkbox" class="libTester" value="${t.id}"/> ${esc(t.name)}${t.entity?` (${esc(t.entity)})`:''}</label>`).join(""):'<span class="muted" style="font-size:12px">No tester — default tester is used.</span>'}</div></div>
         <div class="field"><label>Recurrence</label><select id="libRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
         <button class="primary" onclick="libBulkAssign()">Assign ${targetCount} filtered test(s)</button>
       </div>
@@ -598,7 +628,7 @@ function openTCModal(c){
     </div>
     <div class="row" style="margin-top:8px">
       <div class="field"><label>Bank area</label><input id="tc_bank" value="${esc(c.bankArea)}"/></div>
-      <div class="field"><label>Default tester</label><select id="tc_tester"><option value="">—</option>${S.config.testers.map(t=>`<option value="${t.id}" ${t.id===c.defaultTesterId?'selected':''}>${esc(t.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Default tester</label><input type="hidden" id="tc_tester" value="${esc(c.defaultTesterId||'')}"/><button type="button" id="tc_tester_btn" onclick="pickTesterInto('tc_tester','tc_tester_btn',true,'Default tester')">${c.defaultTesterId?esc(testerName(c.defaultTesterId)):'—'}</button></div>
       <div class="field"><label>Order</label><input type="number" id="tc_order" value="${c.order||0}"/></div>
     </div>
     <div class="field" style="margin-top:8px"><label>DevOps link</label><input id="tc_link" value="${esc(c.devopsLink)}"/></div>
@@ -682,7 +712,7 @@ function renderAssigned(){
     <div class="toolbar">
       <input placeholder="🔍 search…" value="${esc(assignedFilter.q)}" oninput="assignedFilter.q=this.value;renderAssigned()" style="min-width:200px"/>
       <select onchange="assignedFilter.entity=this.value;renderAssigned()"><option value="">All entities</option>${S.config.entities.map(en=>`<option value="${esc(en.code)}" ${assignedFilter.entity===en.code?'selected':''}>${esc(en.code)} — ${esc(en.label)}</option>`).join("")}</select>
-      <select onchange="assignedFilter.tester=this.value;renderAssigned()"><option value="">All testers</option>${S.config.testers.map(t=>`<option value="${t.id}" ${assignedFilter.tester===t.id?'selected':''}>${esc(t.name)}</option>`).join("")}</select>
+      <button class="sm" title="filter by tester (searchable)" onclick="pickerOpen('Filter by tester', [{value:'',label:'All testers'}].concat(testerItems(false)), v=>{assignedFilter.tester=v;renderAssigned();})">${assignedFilter.tester?'👤 '+esc(testerName(assignedFilter.tester)):'All testers ▾'}</button>
       <select onchange="assignedFilter.status=this.value;renderAssigned()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${assignedFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
       <select onchange="assignedFilter.stream=this.value;renderAssigned()" title="business stream"><option value="">All streams</option>${(S.config.businessStreams||[]).map(s=>`<option value="${esc(s.name)}" ${assignedFilter.stream===s.name?'selected':''}>${esc(s.name)}</option>`).join("")}<option value="__none__" ${assignedFilter.stream==='__none__'?'selected':''}>— no stream —</option></select>
       <button class="sm" onclick="assignedFilter={q:'',entity:'',tester:'',status:'',stream:''};renderAssigned()">Clear</button>
@@ -695,7 +725,7 @@ function renderAssigned(){
       return `<tr>
       <td><input style="width:100%;font-weight:600${e.scenarioTitle?';border-color:#38bdf8':''}" value="${esc(execTitle(e))}" title="Scenario for this assignment only — edit to specialise it (e.g. ‘Onboarding of a physical person – low risk’). Does not change the Library or the other testers' rows. Clear it to revert to the base title." onchange="setExecTitle('${e.id}',this.value);renderAssigned()"/><div class="muted" style="font-size:11px">#${esc(e.testCaseId)}${cm.title&&e.scenarioTitle?` · base: ${esc(cm.title)}`:''}${cm.process?' · '+esc(cm.process):''}${cm.application?' · '+esc(cm.application):''}</div>${st.length?`<div class="chiprow" style="margin-top:2px">${st.map(s=>badge(s.name,s.color)).join("")}</div>`:''}</td>
       <td>${badge(e.entity,entityMeta(e.entity).color)}</td>
-      <td><select onchange="setExecTester('${e.id}',this.value);renderAssigned()"><option value="" ${!e.testerId?'selected':''}>— set tester —</option>${S.config.testers.map(t=>`<option value="${t.id}" ${t.id===e.testerId?'selected':''}>${esc(t.name)}</option>`).join("")}</select></td>
+      <td><button class="sm" style="width:100%;text-align:left" onclick="pickerOpen('Choose tester for this assignment', testerItems(true), v=>{setExecTester('${e.id}',v);renderAssigned();})">${e.testerId?esc(testerName(e.testerId)):'<span class="muted">— set tester —</span>'}</button></td>
       <td><select onchange="setStatus('${e.id}',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
       <td><select onchange="setExecRecurrence('${e.id}',this.value)"><option value="">—</option>${S.config.recurrences.map(r=>`<option ${e.recurrence===r?'selected':''}>${esc(r)}</option>`).join("")}</select></td>
       <td><input style="width:100%;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" value="${esc(e.businessComment)}" oninput="setComment('${e.id}',this.value)"/>${need?'<div class="hint" style="color:#ef4444">Comment required</div>':''}</td>
@@ -914,7 +944,7 @@ function renderData(){
     <div class="card"><b>3. Tester round-trip</b>
       <p class="hint">The coordinator exports a packet per tester/entity (active iteration). The tester opens this same <code>index.html</code>, imports the packet, enters results, then exports results. The coordinator merges them back.</p>
       <div class="row">
-        <div class="field"><label>Tester</label><select id="pkTester"><option value="">— all —</option>${S.config.testers.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></div>
+        <div class="field"><label>Tester</label><input type="hidden" id="pkTester" value=""/><button type="button" id="pkTester_btn" onclick="pickTesterInto('pkTester','pkTester_btn',true,'Choose tester')">— all —</button></div>
         <div class="field"><label>Entity</label><select id="pkEntity"><option value="">— all —</option>${S.config.entities.map(en=>`<option value="${en.code}">${esc(en.code)}</option>`).join("")}</select></div>
         <button onclick="exportPacket()">⬇ Export tester packet</button>
       </div>
