@@ -113,7 +113,7 @@
 const LS_KEY = "mceu_uat_state_v1";
 /* App version — bump APP_BUILD on every released change. Shown in the header and
    embedded in tester packets so a stale app can be detected. */
-const APP_BUILD = 12;
+const APP_BUILD = 13;
 const APP_VERSION = "2026-06-03 · build " + APP_BUILD;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
@@ -433,6 +433,12 @@ let testsFilter={q:"",domain:"",process:"",app:"",stream:"",simplify:"",scope:"a
 /* A catalog test case is "in scope" when it is assigned at least once in the active iteration. */
 function isAssignedInIter(catId,iterId){ iterId=iterId||S.activeIterationId;
   return S.executions.some(e=>e.iterationId===iterId && String(e.testCaseId)===String(catId)); }
+/* process options for the searchable picker (respects the domain filter) */
+function processItems(){
+  return [{value:"",label:"All processes"}].concat(
+    [...new Set(S.catalog.filter(c=>!testsFilter.domain||c.domain===testsFilter.domain).map(c=>c.process).filter(Boolean))]
+      .sort().map(p=>({value:p,label:p})));
+}
 /* Catalog rows matching the Library content filters (domain/process/app/stream/search) — ignores assigned-state and dedup. */
 function libContentMatch(c){
   return (!testsFilter.domain||c.domain===testsFilter.domain) &&
@@ -460,7 +466,6 @@ function sortedCatalog(list){
 function renderTests(){
   if(isPacket()) return renderTestsPacket();
   const domains=[...new Set(S.catalog.map(c=>c.domain))].sort();
-  const procs=[...new Set(S.catalog.filter(c=>!testsFilter.domain||c.domain===testsFilter.domain).map(c=>c.process))].sort();
   const apps=[...new Set(S.catalog.map(c=>c.application).filter(Boolean))].sort();
   let rows=S.catalog.filter(c=> libContentMatch(c) &&
     (testsFilter.scope==="all" || (testsFilter.scope==="assigned"? isAssignedInIter(c.id) : !isAssignedInIter(c.id)))
@@ -495,7 +500,7 @@ function renderTests(){
     <div class="toolbar">
       <input id="tQ" placeholder="🔍 search…" value="${esc(testsFilter.q)}" oninput="testsFilter.q=this.value;renderTests()" style="min-width:200px"/>
       <select onchange="testsFilter.domain=this.value;testsFilter.process='';renderTests()"><option value="">All domains</option>${domains.map(d=>`<option ${testsFilter.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
-      <select onchange="testsFilter.process=this.value;renderTests()"><option value="">All processes</option>${procs.map(p=>`<option ${testsFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
+      <button class="sm" title="filter by process — click to search" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="pickerOpen('Filter by process', processItems(), v=>{testsFilter.process=v;renderTests();})">${testsFilter.process?('🔎 '+esc(testsFilter.process)):'All processes ▾'}</button>
       <select onchange="testsFilter.app=this.value;renderTests()"><option value="">All apps</option>${apps.map(p=>`<option ${testsFilter.app===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
       <select onchange="testsFilter.stream=this.value;renderTests()" title="business stream"><option value="">All streams</option>${(S.config.businessStreams||[]).map(s=>`<option value="${esc(s.name)}" ${testsFilter.stream===s.name?'selected':''}>${esc(s.name)}</option>`).join("")}<option value="__none__" ${testsFilter.stream==='__none__'?'selected':''}>— no stream detected —</option></select>
       <select onchange="testsFilter.simplify=this.value;renderTests()" title="standard vs differentiating"><option value="">Standard + differentiating</option><option value="differentiating" ${testsFilter.simplify==='differentiating'?'selected':''}>Differentiating only</option><option value="standard" ${testsFilter.simplify==='standard'?'selected':''}>Standard only</option><option value="unclassified" ${testsFilter.simplify==='unclassified'?'selected':''}>Unclassified</option></select>
