@@ -82,7 +82,7 @@
 </head>
 <body>
 <header>
-  <h1><span class="brand">MCEU</span> · UAT Campaign Manager</h1>
+  <h1><span class="brand">MCEU</span> · UAT Campaign Manager <span id="appVer" class="muted" style="font-size:11px;font-weight:400"></span></h1>
   <div class="iter-pill">
     <span class="muted" style="font-size:12px">Active&nbsp;iteration</span>
     <select id="iterSelect" onchange="setActiveIteration(this.value)"></select>
@@ -111,6 +111,10 @@
    ========================================================================= */
 
 const LS_KEY = "mceu_uat_state_v1";
+/* App version — bump APP_BUILD on every released change. Shown in the header and
+   embedded in tester packets so a stale app can be detected. */
+const APP_BUILD = 8;
+const APP_VERSION = "2026-06-03 · build " + APP_BUILD;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
 /* ---------- default state ---------- */
@@ -988,6 +992,7 @@ function exportPacket(){
   const ids=[...new Set(ex.map(e=>String(e.testCaseId)))];
   const packet={
     _type:"MCEU_UAT_PACKET",
+    appBuild:APP_BUILD, appVersion:APP_VERSION,
     config:{campaignName:S.config.campaignName,entities:S.config.entities,statuses:S.config.statuses,recurrences:S.config.recurrences,testers:S.config.testers},
     iterations:S.iterations.filter(i=>i.id===iterId),
     catalog:S.catalog.filter(c=>ids.includes(String(c.id))),
@@ -1000,6 +1005,7 @@ function exportPacket(){
 }
 function importPacket(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_UAT_PACKET"){alert("This is not a tester packet.");return;}
+    if(p.appBuild && p.appBuild>APP_BUILD && !confirm("⚠ This packet was created with a NEWER version of the app (build "+p.appBuild+") than the one you're using (build "+APP_BUILD+").\n\nSome details — like scenario titles — may not display correctly. Please ask for the latest MCEU_UAT_manager.html file.\n\nLoad anyway?")) return;
     const d=defaultState();
     S={...d, config:{...d.config,...p.config,columnMapping:d.config.columnMapping},
        iterations:p.iterations, activeIterationId:p.activeIterationId,
@@ -1037,6 +1043,7 @@ function exportReport(){
 }
 
 /* ---------- startup ---------- */
+const _vEl=document.getElementById("appVer"); if(_vEl) _vEl.textContent="("+APP_VERSION+")";
 renderAll(); go("dashboard");
 </script>
 </body>
