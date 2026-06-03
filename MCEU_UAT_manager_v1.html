@@ -199,11 +199,6 @@ function detectStreams(c){
   return (S.config.businessStreams||[]).filter(s=>streamKeywords(s).some(k=>text.includes(k)));
 }
 function streamMeta(name){ return (S.config.businessStreams||[]).find(s=>s.name===name)||{name,color:"#64748b"}; }
-/* effective stream(s): a manual override (array on the catalog item) wins over auto-detection */
-function effectiveStreams(c){
-  if(Array.isArray(c.streamOverride)) return c.streamOverride.map(n=>streamMeta(n));
-  return detectStreams(c);
-}
 
 /* Natural sort key so PRC-001-01-02 comes before PRC-001-01-10 */
 const naturalKey = s => String(s||"").toLowerCase().replace(/\d+/g, m=>m.padStart(10,"0"));
@@ -384,7 +379,7 @@ function renderTests(){
     (!testsFilter.domain||c.domain===testsFilter.domain) &&
     (!testsFilter.process||c.process===testsFilter.process) &&
     (!testsFilter.app||c.application===testsFilter.app) &&
-    (!testsFilter.stream || (testsFilter.stream==="__none__" ? effectiveStreams(c).length===0 : effectiveStreams(c).some(s=>s.name===testsFilter.stream))) &&
+    (!testsFilter.stream || (testsFilter.stream==="__none__" ? detectStreams(c).length===0 : detectStreams(c).some(s=>s.name===testsFilter.stream))) &&
     (testsFilter.scope==="all" || (testsFilter.scope==="in"?c.inScope:!c.inScope)) &&
     (!testsFilter.q || (c.title+" "+c.id+" "+c.process).toLowerCase().includes(testsFilter.q.toLowerCase()))
   );
@@ -437,9 +432,7 @@ function testCaseBlock(c){
     </div></td>
     <td><input type="checkbox" ${c.inScope?'checked':''} onchange="toggleScope('${c.id}',this.checked)"/></td>
     <td><b>${esc(c.title)}</b><div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
-      ${(()=>{const st=effectiveStreams(c);const man=Array.isArray(c.streamOverride);
-        const chips = st.length ? st.map(s=>badge(s.name,s.color)).join("") : badge('no stream','#64748b');
-        return `<div class="chiprow" style="margin-top:3px">${chips}<button class="sm" style="padding:0 6px;line-height:1.5;${man?'border-color:#f59e0b;color:#f59e0b':''}" title="${man?'stream set manually — click to change':'set stream manually'}" onclick="openStreamModal('${c.id}')">✎</button></div>`;})()}
+      ${(()=>{const st=detectStreams(c);return st.length?`<div class="chiprow" style="margin-top:3px">${st.map(s=>badge(s.name,s.color)).join("")}</div>`:`<div class="chiprow" style="margin-top:3px">${badge('no stream detected','#64748b')}</div>`;})()}
       <details><summary>metadata</summary><div class="muted" style="font-size:12px">
         ${c.subProcess?`<div>L4: ${esc(c.subProcess)}</div>`:''}
         ${c.variant?`<div>L5: ${esc(c.variant)}</div>`:''}
@@ -512,23 +505,6 @@ function resetOrder(){
   let maxO=0; const sorted=S.catalog.slice().sort((a,b)=>naturalKey(a.title).localeCompare(naturalKey(b.title)));
   sorted.forEach(c=>c.order=++maxO); persist();
 }
-/* manual stream override (used when auto-detection is wrong or ambiguous, e.g. 2 chips) */
-function openStreamModal(id){
-  const c=catById(id); if(!c)return;
-  const cur=new Set(effectiveStreams(c).map(s=>s.name));
-  const auto=detectStreams(c).map(s=>s.name);
-  modal(`<h2>Business stream for this test case</h2>
-    <p class="muted" style="font-size:13px;margin:0 0 6px">${esc(c.title)}</p>
-    <p class="hint" style="margin-top:0">Auto-detected from the text: ${auto.length?auto.map(n=>badge(n,streamMeta(n).color)).join(" "):'<span class="muted">none</span>'}. Tick the stream(s) that actually apply — your choice overrides the auto-detection for this test case.</p>
-    <div class="chiprow">${(S.config.businessStreams||[]).map(s=>`<label class="pill"><input type="checkbox" class="strmChk" value="${esc(s.name)}" ${cur.has(s.name)?'checked':''}/> ${badge(s.name,s.color)}</label>`).join("")||'<span class="muted">Define streams in the Admin tab first.</span>'}</div>
-    <div class="toolbar" style="margin-top:16px"><button onclick="resetStreamOverride('${esc(c.id)}')" title="go back to keyword auto-detection">↺ Reset to auto-detect</button><div class="spacer"></div>
-      <button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveStreamOverride('${esc(c.id)}')">Save</button></div>`);
-}
-function saveStreamOverride(id){ const c=catById(id); if(!c)return;
-  c.streamOverride=[...document.querySelectorAll('.strmChk:checked')].map(x=>x.value);
-  closeModal(); persist(); }
-function resetStreamOverride(id){ const c=catById(id); if(!c)return; delete c.streamOverride; closeModal(); persist(); }
-
 /* test case editing */
 function editTestCase(id){ const c=catById(id); openTCModal(c); }
 function newTestCase(){
