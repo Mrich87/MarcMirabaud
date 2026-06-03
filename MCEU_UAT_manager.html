@@ -513,7 +513,7 @@ function renderTestsPacket(){
     <div class="scrollbox"><table><thead><tr><th>Test Case</th><th>Entity</th><th>Tester</th><th style="width:130px">Status</th><th>Business comment</th></tr></thead><tbody>
     ${ex.map(e=>{const c=catById(e.testCaseId)||{};const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.businessComment;
       return `<tr>
-      <td><b>${esc(c.title||("#"+e.testCaseId))}</b><div class="muted" style="font-size:11px">${esc(c.process||"")} ${c.application?'· '+esc(c.application):''}</div></td>
+      <td><b>${esc(execTitle(e))}</b><div class="muted" style="font-size:11px">${esc(c.process||"")} ${c.application?'· '+esc(c.application):''}</div></td>
       <td>${badge(e.entity,entityMeta(e.entity).color)}</td><td class="muted">${esc(testerName(e.testerId))}</td>
       <td><select onchange="setStatus('${e.id}',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
       <td><textarea style="min-height:38px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setComment('${e.id}',this.value)">${esc(e.businessComment)}</textarea>${need?'<div class="hint" style="color:#ef4444">Comment required</div>':''}</td>
@@ -630,8 +630,13 @@ function setStatus(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return;
 function setComment(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.businessComment=v; e.updatedAt=new Date().toISOString(); save(); }
 function setExecTester(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.testerId=v; const t=S.config.testers.find(x=>x.id===v); e.dept=t?t.dept||"":""; e.updatedAt=new Date().toISOString(); save(); }
 function setExecRecurrence(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.recurrence=v; e.updatedAt=new Date().toISOString(); save(); }
-/* edit a test case title (lives on the catalog, so it updates the Library and every row using it) */
-function setCatTitle(catId,v){ const c=catById(catId); if(!c)return; c.title=v; save(); renderTab(currentTab); }
+/* effective title for an execution: a per-assignment scenario override wins over the Library title */
+function execTitle(e){ const c=catById(e.testCaseId); return (e.scenarioTitle&&e.scenarioTitle.trim()) || (c&&c.title) || ("#"+e.testCaseId); }
+/* set a per-assignment scenario title; clearing it (or matching the Library title) reverts to the base title */
+function setExecTitle(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  v=(v||"").trim(); const c=catById(e.testCaseId);
+  if(v && !(c&&v===c.title)) e.scenarioTitle=v; else delete e.scenarioTitle;
+  e.updatedAt=new Date().toISOString(); save(); }
 function delExec(id){ S.executions=S.executions.filter(x=>x.id!==id); persist(); }
 
 /* =========================================================================
@@ -649,7 +654,7 @@ function renderAssigned(){
     if(assignedFilter.tester && (e.testerId||"")!==assignedFilter.tester) return false;
     if(assignedFilter.status && e.status!==assignedFilter.status) return false;
     if(assignedFilter.stream){ const ok = assignedFilter.stream==="__none__" ? effectiveStreams(c).length===0 : effectiveStreams(c).some(s=>s.name===assignedFilter.stream); if(!ok) return false; }
-    if(assignedFilter.q){ const t=((c.title||"")+" "+e.testCaseId+" "+(c.process||"")).toLowerCase(); if(!t.includes(assignedFilter.q.toLowerCase())) return false; }
+    if(assignedFilter.q){ const t=(execTitle(e)+" "+e.testCaseId+" "+(c.process||"")).toLowerCase(); if(!t.includes(assignedFilter.q.toLowerCase())) return false; }
     return true;
   });
   ex=ex.slice().sort((a,b)=>{const ca=catById(a.testCaseId)||{},cb=catById(b.testCaseId)||{};
@@ -684,7 +689,7 @@ function renderAssigned(){
     <table><thead><tr><th>Test Case</th><th>Entity</th><th style="min-width:150px">Tester</th><th style="width:140px">Status</th><th style="width:120px">Recurrence</th><th>Business comment</th><th style="width:90px">Date</th><th style="width:40px"></th></tr></thead><tbody>
     ${ex.slice(0,1000).map(e=>{const c=catById(e.testCaseId);const cm=c||{};const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.businessComment;const st=effectiveStreams(cm);
       return `<tr>
-      <td>${c?`<input style="width:100%;font-weight:600" value="${esc(c.title)}" title="Edit the test case title (updates it everywhere, incl. the Library)" onchange="setCatTitle('${esc(e.testCaseId)}',this.value)"/>`:`<b>${esc("#"+e.testCaseId)}</b>`}<div class="muted" style="font-size:11px">#${esc(e.testCaseId)}${cm.process?' · '+esc(cm.process):''}${cm.application?' · '+esc(cm.application):''}</div>${st.length?`<div class="chiprow" style="margin-top:2px">${st.map(s=>badge(s.name,s.color)).join("")}</div>`:''}</td>
+      <td><input style="width:100%;font-weight:600${e.scenarioTitle?';border-color:#38bdf8':''}" value="${esc(execTitle(e))}" title="Scenario for this assignment only — edit to specialise it (e.g. ‘Onboarding of a physical person – low risk’). Does not change the Library or the other testers' rows. Clear it to revert to the base title." onchange="setExecTitle('${e.id}',this.value);renderAssigned()"/><div class="muted" style="font-size:11px">#${esc(e.testCaseId)}${cm.title&&e.scenarioTitle?` · base: ${esc(cm.title)}`:''}${cm.process?' · '+esc(cm.process):''}${cm.application?' · '+esc(cm.application):''}</div>${st.length?`<div class="chiprow" style="margin-top:2px">${st.map(s=>badge(s.name,s.color)).join("")}</div>`:''}</td>
       <td>${badge(e.entity,entityMeta(e.entity).color)}</td>
       <td><select onchange="setExecTester('${e.id}',this.value);renderAssigned()"><option value="" ${!e.testerId?'selected':''}>— set tester —</option>${S.config.testers.map(t=>`<option value="${t.id}" ${t.id===e.testerId?'selected':''}>${esc(t.name)}</option>`).join("")}</select></td>
       <td><select onchange="setStatus('${e.id}',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
@@ -725,7 +730,7 @@ function renderTracking(){
     <div class="scrollbox">
     <table><thead><tr><th>Test Case</th><th>Domain</th><th>Process</th><th>Entity</th><th>Tester</th><th>Status</th><th>Recurrence</th><th>Date</th><th>Comment</th></tr></thead><tbody>
     ${ex.slice(0,1000).map(e=>{const c=catById(e.testCaseId)||{};const sm=statusMeta(e.status);return `<tr>
-      <td>${esc(c.title||("#"+e.testCaseId))}</td><td>${esc(c.domain||"")}</td><td>${esc(c.process||"")}</td>
+      <td>${esc(execTitle(e))}</td><td>${esc(c.domain||"")}</td><td>${esc(c.process||"")}</td>
       <td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))}</td>
       <td>${badge(e.status,sm.color)}</td><td>${esc(e.recurrence||"")}</td><td>${esc(e.testDate||"")}</td>
       <td class="muted">${esc(e.businessComment||"")}</td></tr>`;}).join("")
@@ -1022,7 +1027,7 @@ function mergeResults(input){ const f=input.files[0]; if(!f)return; const r=new 
 /* ---------- xlsx report ---------- */
 function exportReport(){
   const data=S.executions.map(e=>{ const c=catById(e.testCaseId)||{}; const it=S.iterations.find(i=>i.id===e.iterationId)||{};
-    return {Iteration:it.name||"",TestCaseId:e.testCaseId,Title:c.title||"",Domain:c.domain||"",Process:c.process||"",
+    return {Iteration:it.name||"",TestCaseId:e.testCaseId,Title:execTitle(e),BaseTitle:c.title||"",Domain:c.domain||"",Process:c.process||"",
       SubProcess:c.subProcess||"",Application:c.application||"",Entity:e.entity,Tester:testerName(e.testerId),
       Status:e.status,Recurrence:e.recurrence||"",TestDate:e.testDate||"",BusinessComment:e.businessComment||"",
       DefectLink:e.defectLink||"",DevOpsLink:c.devopsLink||""}; });
