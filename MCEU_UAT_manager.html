@@ -93,6 +93,7 @@
   <div id="packetBanner" class="banner"></div>
   <div id="view-dashboard" class="view"></div>
   <div id="view-tests" class="view"></div>
+  <div id="view-assigned" class="view"></div>
   <div id="view-assign" class="view"></div>
   <div id="view-tracking" class="view"></div>
   <div id="view-iterations" class="view"></div>
@@ -233,7 +234,8 @@ function execsFor(testCaseId, iterId){
    ========================================================================= */
 const TABS = [
   ["dashboard","Dashboard"],
-  ["tests","Tests"],
+  ["tests","Library"],
+  ["assigned","Assigned"],
   ["assign","Assignment"],
   ["tracking","Tracking"],
   ["iterations","Iterations"],
@@ -252,7 +254,7 @@ function go(tab){ currentTab=tab; document.querySelectorAll(".view").forEach(v=>
 function renderAll(){ buildIterSelect(); buildNav(); renderTab(currentTab); renderPacketBanner(); }
 function renderTab(tab){
   buildIterSelect(); renderPacketBanner();
-  ({dashboard:renderDashboard,tests:renderTests,assign:renderAssign,
+  ({dashboard:renderDashboard,tests:renderTests,assigned:renderAssigned,assign:renderAssign,
     tracking:renderTracking,iterations:renderIterations,admin:renderAdmin,data:renderData}[tab]||(()=>{}))();
 }
 function renderPacketBanner(){
@@ -412,7 +414,7 @@ function renderTests(){
   const iter=activeIter();
 
   $("#view-tests").innerHTML = `
-    <h2>Tests — ${esc(iter?iter.name:"—")}</h2>
+    <h2>Library — ${esc(iter?iter.name:"—")}</h2>
     <p class="sub">${S.catalog.length} test cases (deduplicated from DevOps) · <b style="color:var(--accent)">${inScope}</b> in scope. Manage scope, edit test cases, reorder them, and capture execution results — all in one place. L4→L6 are kept as folded metadata.</p>
     ${S.catalog.length===0 ? `<div class="card empty">No catalog yet. Go to <b>Import / Export</b> to load the DevOps export (.xlsx), or add a test case manually below.<div style="margin-top:12px"><button class="primary" onclick="newTestCase()">+ New test case</button></div></div>` : `
     <div class="toolbar">
@@ -606,7 +608,71 @@ function setStatus(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return;
   save(); renderTab(currentTab); }
 function setComment(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.businessComment=v; e.updatedAt=new Date().toISOString(); save(); }
 function setExecTester(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.testerId=v; const t=S.config.testers.find(x=>x.id===v); e.dept=t?t.dept||"":""; e.updatedAt=new Date().toISOString(); save(); }
+function setExecRecurrence(id,v){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.recurrence=v; e.updatedAt=new Date().toISOString(); save(); }
 function delExec(id){ S.executions=S.executions.filter(x=>x.id!==id); persist(); }
+
+/* =========================================================================
+   ASSIGNED — every assigned test (execution) for the active iteration,
+   still editable. The Library (Tests) tab holds the catalog; this tab is
+   the working list of what has actually been assigned.
+   ========================================================================= */
+let assignedFilter={q:"",entity:"",tester:"",status:"",stream:""};
+function renderAssigned(){
+  const iter=activeIter();
+  let ex=iterExecs();
+  ex=ex.filter(e=>{
+    const c=catById(e.testCaseId)||{};
+    if(assignedFilter.entity && e.entity!==assignedFilter.entity) return false;
+    if(assignedFilter.tester && (e.testerId||"")!==assignedFilter.tester) return false;
+    if(assignedFilter.status && e.status!==assignedFilter.status) return false;
+    if(assignedFilter.stream){ const ok = assignedFilter.stream==="__none__" ? effectiveStreams(c).length===0 : effectiveStreams(c).some(s=>s.name===assignedFilter.stream); if(!ok) return false; }
+    if(assignedFilter.q){ const t=((c.title||"")+" "+e.testCaseId+" "+(c.process||"")).toLowerCase(); if(!t.includes(assignedFilter.q.toLowerCase())) return false; }
+    return true;
+  });
+  ex=ex.slice().sort((a,b)=>{const ca=catById(a.testCaseId)||{},cb=catById(b.testCaseId)||{};
+    return (ca.order||0)-(cb.order||0)||naturalKey(ca.title).localeCompare(naturalKey(cb.title))||String(a.entity).localeCompare(String(b.entity));});
+  const a=aggregate(ex);
+  const totalAssigned=iterExecs().length;
+
+  $("#view-assigned").innerHTML=`
+    <h2>Assigned tests — ${esc(iter?iter.name:"—")}</h2>
+    <p class="sub">${totalAssigned} test(s) assigned in this iteration. This is your working list — update status, tester, recurrence or comment here at any time. Create assignments from the <b>Assignment</b> tab; manage the catalog in <b>Library</b>.</p>
+    ${totalAssigned===0?`<div class="card empty">Nothing assigned yet in ${esc(iter?iter.name:"")}. Put tests in scope in <b>Library</b>, then assign them in the <b>Assignment</b> tab.</div>`:`
+    <div class="cards" style="margin-bottom:12px">
+      <div class="kpi"><div class="n">${a.total}</div><div class="l">Shown</div></div>
+      <div class="kpi"><div class="n" style="color:#38bdf8">${a.done}</div><div class="l">Executed</div></div>
+      <div class="kpi"><div class="n" style="color:#22c55e">${a.passed}</div><div class="l">Passed</div></div>
+      <div class="kpi"><div class="n" style="color:#ef4444">${a.failed}</div><div class="l">Failed</div></div>
+      <div class="kpi"><div class="n" style="color:#f59e0b">${a.blocked}</div><div class="l">Blocked</div></div>
+      <div class="kpi"><div class="n" style="color:#94a3b8">${a.notrun}</div><div class="l">To do</div></div>
+    </div>
+    <div class="card" style="padding:10px 12px">${progressBar(ex)}</div>
+    <div class="toolbar">
+      <input placeholder="🔍 search…" value="${esc(assignedFilter.q)}" oninput="assignedFilter.q=this.value;renderAssigned()" style="min-width:200px"/>
+      <select onchange="assignedFilter.entity=this.value;renderAssigned()"><option value="">All entities</option>${S.config.entities.map(en=>`<option value="${esc(en.code)}" ${assignedFilter.entity===en.code?'selected':''}>${esc(en.code)} — ${esc(en.label)}</option>`).join("")}</select>
+      <select onchange="assignedFilter.tester=this.value;renderAssigned()"><option value="">All testers</option>${S.config.testers.map(t=>`<option value="${t.id}" ${assignedFilter.tester===t.id?'selected':''}>${esc(t.name)}</option>`).join("")}</select>
+      <select onchange="assignedFilter.status=this.value;renderAssigned()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${assignedFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
+      <select onchange="assignedFilter.stream=this.value;renderAssigned()" title="business stream"><option value="">All streams</option>${(S.config.businessStreams||[]).map(s=>`<option value="${esc(s.name)}" ${assignedFilter.stream===s.name?'selected':''}>${esc(s.name)}</option>`).join("")}<option value="__none__" ${assignedFilter.stream==='__none__'?'selected':''}>— no stream —</option></select>
+      <button class="sm" onclick="assignedFilter={q:'',entity:'',tester:'',status:'',stream:''};renderAssigned()">Clear</button>
+      <div class="spacer"></div>
+      <span class="muted">${ex.length} shown</span>
+    </div>
+    <div class="scrollbox">
+    <table><thead><tr><th>Test Case</th><th>Entity</th><th style="min-width:150px">Tester</th><th style="width:140px">Status</th><th style="width:120px">Recurrence</th><th>Business comment</th><th style="width:90px">Date</th><th style="width:40px"></th></tr></thead><tbody>
+    ${ex.slice(0,1000).map(e=>{const c=catById(e.testCaseId)||{};const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.businessComment;const st=effectiveStreams(c);
+      return `<tr>
+      <td><b>${esc(c.title||("#"+e.testCaseId))}</b><div class="muted" style="font-size:11px">${esc(c.process||"")}${c.application?' · '+esc(c.application):''}</div>${st.length?`<div class="chiprow" style="margin-top:2px">${st.map(s=>badge(s.name,s.color)).join("")}</div>`:''}</td>
+      <td>${badge(e.entity,entityMeta(e.entity).color)}</td>
+      <td><select onchange="setExecTester('${e.id}',this.value);renderAssigned()"><option value="" ${!e.testerId?'selected':''}>— set tester —</option>${S.config.testers.map(t=>`<option value="${t.id}" ${t.id===e.testerId?'selected':''}>${esc(t.name)}</option>`).join("")}</select></td>
+      <td><select onchange="setStatus('${e.id}',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
+      <td><select onchange="setExecRecurrence('${e.id}',this.value)"><option value="">—</option>${S.config.recurrences.map(r=>`<option ${e.recurrence===r?'selected':''}>${esc(r)}</option>`).join("")}</select></td>
+      <td><input style="width:100%;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" value="${esc(e.businessComment)}" oninput="setComment('${e.id}',this.value)"/>${need?'<div class="hint" style="color:#ef4444">Comment required</div>':''}</td>
+      <td class="muted">${esc(e.testDate||"")}</td>
+      <td><button class="sm danger" onclick="delExec('${e.id}')" title="remove assignment">✕</button></td>
+    </tr>`;}).join("") || '<tr><td colspan="8" class="empty">No assignment matches the filters.</td></tr>'}
+    </tbody></table></div>
+    ${ex.length>1000?'<p class="hint">Showing first 1000 — refine the filters.</p>':''}`}`;
+}
 
 /* =========================================================================
    ASSIGNMENT (mass)
@@ -624,7 +690,7 @@ function renderAssign(){
   $("#view-assign").innerHTML=`
     <h2>Assignment — ${esc(iter?iter.name:"—")}</h2>
     <p class="sub">Assign <b>in-scope</b> test cases to the 4 entities and to testers, for the active iteration. An assignment creates a "Not started" execution. <b>Select one or more testers</b> to assign the same tests to several people at once — each tester gets their own line to fill in. If you select no tester, each test case's <b>default tester</b> (from the DevOps TesterName column) is used.</p>
-    ${inScope.length===0?`<div class="card empty">No test in scope. First select tests in the <b>Tests</b> tab.</div>`:`
+    ${inScope.length===0?`<div class="card empty">No test in scope. First select tests in the <b>Library</b> tab.</div>`:`
     <div class="card">
       <b>Mass assignment</b>
       <div class="row" style="margin-top:10px">
@@ -817,7 +883,7 @@ function renderAdmin(){
         <div class="spacer"></div>
         <span class="muted">${S.catalog.length?`${S.catalog.filter(c=>detectStreams(c).length===0).length} of ${S.catalog.length} step(s) have no stream detected`:'Import the catalog to see match counts.'}</span>
       </div>
-      <p class="hint">Tip: open the <b>Tests</b> tab — each step now shows a coloured stream chip, and you can filter by stream. Check the chips are right before we build the scenario grouping on top.</p>
+      <p class="hint">Tip: open the <b>Library</b> tab — each step now shows a coloured stream chip, and you can filter by stream. Check the chips are right before we build the scenario grouping on top.</p>
     </div>
 
     <div class="card"><b>DevOps import column mapping</b>
