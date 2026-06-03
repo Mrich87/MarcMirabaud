@@ -113,7 +113,7 @@
 const LS_KEY = "mceu_uat_state_v1";
 /* App version — bump APP_BUILD on every released change. Shown in the header and
    embedded in tester packets so a stale app can be detected. */
-const APP_BUILD = 13;
+const APP_BUILD = 14;
 const APP_VERSION = "2026-06-03 · build " + APP_BUILD;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
@@ -233,6 +233,15 @@ function classBadge(c){
   const man=(c.simplify==="standard"||c.simplify==="differentiating");
   return k==="differentiating" ? badge((man?"★ ":"")+"differentiating","#22c55e")
                                : badge((man?"★ ":"")+"standard","#64748b");
+}
+/* Sub-process enriched with the main differentiating metadata (variant, sub-variant,
+   application, bank area) — shown as the "↳ …" line so differentiation reads at a glance. */
+function subMeta(c){
+  const parts=[c.subProcess, c.variant];
+  if(c.subVariant && c.subVariant!==c.title) parts.push(c.subVariant);
+  if(c.application) parts.push(c.application);
+  if(c.bankArea) parts.push(c.bankArea);
+  return parts.map(x=>String(x||"").trim()).filter(Boolean).join("  ·  ");
 }
 
 /* Natural sort key so PRC-001-01-02 comes before PRC-001-01-10 */
@@ -537,7 +546,7 @@ function testCaseBlock(c, dups){
     </div></td>
     <td style="text-align:center">${exs.length?badge(exs.length,'#22c55e'):'<span class="muted">—</span>'}</td>
     <td><b>${esc(c.title)}</b>${dups>1?` <span class="tag" title="${dups} test cases share this title once the PRC- serial number is ignored">×${dups}</span>`:''}<div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
-      ${c.subProcess?`<div style="font-size:11px;color:var(--accent)" title="sub-process">↳ ${esc(c.subProcess)}</div>`:''}
+      ${(()=>{const sm=subMeta(c);return sm?`<div style="font-size:11px;color:var(--accent)" title="sub-process + differentiating metadata">↳ ${esc(sm)}</div>`:'';})()}
       ${(()=>{const st=effectiveStreams(c);const man=Array.isArray(c.streamOverride);
         const chips = st.length ? st.map(s=>badge(s.name,s.color)).join("") : badge('no stream','#64748b');
         return `<div class="chiprow" style="margin-top:3px">${chips}${classBadge(c)}<button class="sm" style="padding:0 6px;line-height:1.5;${man?'border-color:#f59e0b;color:#f59e0b':''}" title="${man?'stream set manually — click to change':'set stream manually'}" onclick="openStreamModal('${c.id}')">✎</button></div>`;})()}
@@ -764,7 +773,7 @@ function renderAssigned(){
     <table><thead><tr><th>Test Case</th><th>Entity</th><th style="min-width:150px">Tester</th><th style="width:140px">Status</th><th style="width:120px">Recurrence</th><th>Business comment</th><th style="width:90px">Date</th><th style="width:40px"></th></tr></thead><tbody>
     ${ex.slice(0,1000).map(e=>{const c=catById(e.testCaseId);const cm=c||{};const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.businessComment;const st=effectiveStreams(cm);
       return `<tr>
-      <td><input style="width:100%;font-weight:600${e.scenarioTitle?';border-color:#38bdf8':''}" value="${esc(execTitle(e))}" title="Scenario for this assignment only — edit to specialise it (e.g. ‘Onboarding of a physical person – low risk’). Does not change the Library or the other testers' rows. Clear it to revert to the base title." onchange="setExecTitle('${e.id}',this.value);renderAssigned()"/><div class="muted" style="font-size:11px">#${esc(e.testCaseId)}${cm.title&&e.scenarioTitle?` · base: ${esc(cm.title)}`:''}${cm.process?' · '+esc(cm.process):''}${cm.application?' · '+esc(cm.application):''}</div>${cm.subProcess?`<div style="font-size:11px;color:var(--accent)" title="sub-process">↳ ${esc(cm.subProcess)}</div>`:''}${st.length?`<div class="chiprow" style="margin-top:2px">${st.map(s=>badge(s.name,s.color)).join("")}</div>`:''}</td>
+      <td><input style="width:100%;font-weight:600${e.scenarioTitle?';border-color:#38bdf8':''}" value="${esc(execTitle(e))}" title="Scenario for this assignment only — edit to specialise it (e.g. ‘Onboarding of a physical person – low risk’). Does not change the Library or the other testers' rows. Clear it to revert to the base title." onchange="setExecTitle('${e.id}',this.value);renderAssigned()"/><div class="muted" style="font-size:11px">#${esc(e.testCaseId)}${cm.title&&e.scenarioTitle?` · base: ${esc(cm.title)}`:''}${cm.process?' · '+esc(cm.process):''}${cm.application?' · '+esc(cm.application):''}</div>${(()=>{const sm=subMeta(cm);return sm?`<div style="font-size:11px;color:var(--accent)" title="sub-process + differentiating metadata">↳ ${esc(sm)}</div>`:'';})()}${st.length?`<div class="chiprow" style="margin-top:2px">${st.map(s=>badge(s.name,s.color)).join("")}</div>`:''}</td>
       <td>${badge(e.entity,entityMeta(e.entity).color)}</td>
       <td><button class="sm" style="width:100%;text-align:left" onclick="pickerOpen('Choose tester for this assignment', testerItems(true), v=>{setExecTester('${e.id}',v);renderAssigned();})">${e.testerId?esc(testerName(e.testerId)):'<span class="muted">— set tester —</span>'}</button></td>
       <td><select onchange="setStatus('${e.id}',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
@@ -805,7 +814,7 @@ function renderTracking(){
     <div class="scrollbox">
     <table><thead><tr><th>Test Case</th><th>Domain</th><th>Process</th><th>Sub-process</th><th>Entity</th><th>Tester</th><th>Status</th><th>Recurrence</th><th>Date</th><th>Comment</th></tr></thead><tbody>
     ${ex.slice(0,1000).map(e=>{const c=catById(e.testCaseId)||{};const sm=statusMeta(e.status);return `<tr>
-      <td>${esc(execTitle(e))}</td><td>${esc(c.domain||"")}</td><td>${esc(c.process||"")}</td><td>${esc(c.subProcess||"")}</td>
+      <td>${esc(execTitle(e))}</td><td>${esc(c.domain||"")}</td><td>${esc(c.process||"")}</td><td>${esc(subMeta(c))}</td>
       <td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))}</td>
       <td>${badge(e.status,sm.color)}</td><td>${esc(e.recurrence||"")}</td><td>${esc(e.testDate||"")}</td>
       <td class="muted">${esc(e.businessComment||"")}</td></tr>`;}).join("")
