@@ -113,7 +113,7 @@
 const LS_KEY = "mceu_uat_state_v1";
 /* App version — bump APP_BUILD on every released change. Shown in the header and
    embedded in tester packets so a stale app can be detected. */
-const APP_BUILD = 9;
+const APP_BUILD = 10;
 const APP_VERSION = "2026-06-03 · build " + APP_BUILD;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
@@ -144,7 +144,7 @@ function defaultState(){
       // Business streams = the team that performs a step. The stream name is
       // usually written inside the test case text (e.g. "RM - Central File -
       // BRM - Compliance"), so each stream is matched by keyword(s).
-      streamDetectField:"title",   // where to look for the stream: title | subProcess | variant | subVariant | bankArea | all
+      streamDetectField:"all",   // where to look for the stream: title | subProcess | variant | subVariant | bankArea | all
       businessStreams:[
         {name:"RM",           keywords:"RM, Relationship Manager", color:"#38bdf8"},
         {name:"Central File", keywords:"Central File, CF",         color:"#a855f7"},
@@ -152,9 +152,9 @@ function defaultState(){
         {name:"Compliance",   keywords:"Compliance, AML, KYC",     color:"#22c55e"},
       ],
       columnMapping:{
-        testCaseId:"TestCaseId", title:"TitleTC", domain:"TitleLevel2",
+        testCaseId:"TestCaseId", title:"TitleLevel6", domain:"TitleLevel2",
         process:"TitleLevel3", subProcess:"TitleLevel4", variant:"TitleLevel5",
-        subVariant:"TitleLevel6", application:"ProductApplication",
+        subVariant:"TitleTC", application:"ProductApplication",
         bankArea:"Custom_BankArea", tester:"TesterName",
         devopsLink:"TestSuiteLink"
       }
