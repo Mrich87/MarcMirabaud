@@ -137,6 +137,16 @@ function defaultState(){
         {value:"N/A",         color:"#475569", requiresComment:false},
       ],
       recurrences:["Often","Rarely","Exceptionally"],
+      // Business streams = the team that performs a step. The stream name is
+      // usually written inside the test case text (e.g. "RM - Central File -
+      // BRM - Compliance"), so each stream is matched by keyword(s).
+      streamDetectField:"title",   // where to look for the stream: title | subProcess | variant | subVariant | bankArea | all
+      businessStreams:[
+        {name:"RM",           keywords:"RM, Relationship Manager", color:"#38bdf8"},
+        {name:"Central File", keywords:"Central File, CF",         color:"#a855f7"},
+        {name:"BRM",          keywords:"BRM",                      color:"#f59e0b"},
+        {name:"Compliance",   keywords:"Compliance, AML, KYC",     color:"#22c55e"},
+      ],
       columnMapping:{
         testCaseId:"TestCaseId", title:"TitleTC", domain:"TitleLevel2",
         process:"TitleLevel3", subProcess:"TitleLevel4", variant:"TitleLevel5",
@@ -174,6 +184,21 @@ const testerName = id => { const t=S.config.testers.find(x=>x.id===id); return t
 const activeIter = () => S.iterations.find(i=>i.id===S.activeIterationId) || S.iterations[0];
 const isPacket = () => !!S.packet;
 const catById = id => S.catalog.find(c=>String(c.id)===String(id));
+
+/* ---------- business stream detection ----------
+   The responsible business stream is written inside the test case text.
+   We scan the configured field and match each stream's keyword list. */
+function streamText(c){
+  const f=S.config.streamDetectField||"title";
+  if(f==="all") return [c.title,c.subProcess,c.variant,c.subVariant,c.bankArea].filter(Boolean).join(" · ");
+  return c[f]||"";
+}
+function streamKeywords(s){ return String(s.keywords||s.name||"").split(",").map(k=>k.trim().toLowerCase()).filter(Boolean); }
+function detectStreams(c){
+  const text=streamText(c).toLowerCase();
+  return (S.config.businessStreams||[]).filter(s=>streamKeywords(s).some(k=>text.includes(k)));
+}
+function streamMeta(name){ return (S.config.businessStreams||[]).find(s=>s.name===name)||{name,color:"#64748b"}; }
 
 /* Natural sort key so PRC-001-01-02 comes before PRC-001-01-10 */
 const naturalKey = s => String(s||"").toLowerCase().replace(/\d+/g, m=>m.padStart(10,"0"));
@@ -338,7 +363,7 @@ function renderDashboard(){
 /* =========================================================================
    TESTS — merged Catalog + Execution
    ========================================================================= */
-let testsFilter={q:"",domain:"",process:"",app:"",scope:"in"};
+let testsFilter={q:"",domain:"",process:"",app:"",stream:"",scope:"in"};
 let displayedTC=[];   // ids of currently displayed catalog rows (for reorder)
 
 function sortedCatalog(list){
@@ -354,6 +379,7 @@ function renderTests(){
     (!testsFilter.domain||c.domain===testsFilter.domain) &&
     (!testsFilter.process||c.process===testsFilter.process) &&
     (!testsFilter.app||c.application===testsFilter.app) &&
+    (!testsFilter.stream || (testsFilter.stream==="__none__" ? detectStreams(c).length===0 : detectStreams(c).some(s=>s.name===testsFilter.stream))) &&
     (testsFilter.scope==="all" || (testsFilter.scope==="in"?c.inScope:!c.inScope)) &&
     (!testsFilter.q || (c.title+" "+c.id+" "+c.process).toLowerCase().includes(testsFilter.q.toLowerCase()))
   );
@@ -372,6 +398,7 @@ function renderTests(){
       <select onchange="testsFilter.domain=this.value;testsFilter.process='';renderTests()"><option value="">All domains</option>${domains.map(d=>`<option ${testsFilter.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
       <select onchange="testsFilter.process=this.value;renderTests()"><option value="">All processes</option>${procs.map(p=>`<option ${testsFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
       <select onchange="testsFilter.app=this.value;renderTests()"><option value="">All apps</option>${apps.map(p=>`<option ${testsFilter.app===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
+      <select onchange="testsFilter.stream=this.value;renderTests()" title="business stream"><option value="">All streams</option>${(S.config.businessStreams||[]).map(s=>`<option value="${esc(s.name)}" ${testsFilter.stream===s.name?'selected':''}>${esc(s.name)}</option>`).join("")}<option value="__none__" ${testsFilter.stream==='__none__'?'selected':''}>— no stream detected —</option></select>
       <select onchange="testsFilter.scope=this.value;renderTests()">
         <option value="in" ${testsFilter.scope==='in'?'selected':''}>In scope</option>
         <option value="out" ${testsFilter.scope==='out'?'selected':''}>Out of scope</option>
@@ -405,6 +432,7 @@ function testCaseBlock(c){
     </div></td>
     <td><input type="checkbox" ${c.inScope?'checked':''} onchange="toggleScope('${c.id}',this.checked)"/></td>
     <td><b>${esc(c.title)}</b><div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
+      ${(()=>{const st=detectStreams(c);return st.length?`<div class="chiprow" style="margin-top:3px">${st.map(s=>badge(s.name,s.color)).join("")}</div>`:`<div class="chiprow" style="margin-top:3px">${badge('no stream detected','#64748b')}</div>`;})()}
       <details><summary>metadata</summary><div class="muted" style="font-size:12px">
         ${c.subProcess?`<div>L4: ${esc(c.subProcess)}</div>`:''}
         ${c.variant?`<div>L5: ${esc(c.variant)}</div>`:''}
@@ -724,6 +752,29 @@ function renderAdmin(){
         || '<tr><td colspan="5" class="muted">No tester.</td></tr>'}
       </tbody></table>
       <button class="sm" onclick="S.config.testers.push({id:uid(),name:'New tester',email:'',entity:'',dept:''});persist()">+ Tester</button>
+    </div>
+
+    <div class="card"><b>Business streams</b> <span class="muted">— the team that performs a step (RM, Central File, BRM, Compliance…). The stream name is read from the test case text; list the keyword(s) that identify each stream.</span>
+      <div class="field" style="margin-top:8px;max-width:340px"><label>Detect the stream in</label>
+        <select onchange="S.config.streamDetectField=this.value;persist()">
+          ${[["title","Test case title"],["subProcess","Sub-process (L4)"],["variant","Variant (L5)"],["subVariant","Sub-variant (L6)"],["bankArea","Bank area"],["all","All of the above"]]
+            .map(([v,l])=>`<option value="${v}" ${(S.config.streamDetectField||'title')===v?'selected':''}>${l}</option>`).join("")}
+        </select></div>
+      <table style="margin-top:10px"><thead><tr><th>Stream</th><th>Match keywords <span class="muted">(comma-separated)</span></th><th>Color</th><th title="how many catalog steps match">Matches</th><th></th></tr></thead><tbody>
+      ${(S.config.businessStreams||[]).map((s,i)=>{const cnt=S.catalog.filter(c=>detectStreams(c).some(x=>x.name===s.name)).length;return `<tr>
+        <td><input value="${esc(s.name)}" style="width:120px" onchange="S.config.businessStreams[${i}].name=this.value;persist()"/></td>
+        <td><input value="${esc(s.keywords||'')}" style="width:100%" placeholder="e.g. RM, Relationship Manager" onchange="S.config.businessStreams[${i}].keywords=this.value;persist()"/></td>
+        <td><input type="color" value="${s.color||'#64748b'}" onchange="S.config.businessStreams[${i}].color=this.value;persist()"/></td>
+        <td style="text-align:center"><b>${cnt}</b></td>
+        <td><button class="sm danger" onclick="S.config.businessStreams.splice(${i},1);persist()">✕</button></td></tr>`;}).join("")
+        || '<tr><td colspan="5" class="muted">No stream defined.</td></tr>'}
+      </tbody></table>
+      <div class="toolbar" style="margin-top:8px">
+        <button class="sm" onclick="S.config.businessStreams.push({name:'New stream',keywords:'',color:'#38bdf8'});persist()">+ Stream</button>
+        <div class="spacer"></div>
+        <span class="muted">${S.catalog.length?`${S.catalog.filter(c=>detectStreams(c).length===0).length} of ${S.catalog.length} step(s) have no stream detected`:'Import the catalog to see match counts.'}</span>
+      </div>
+      <p class="hint">Tip: open the <b>Tests</b> tab — each step now shows a coloured stream chip, and you can filter by stream. Check the chips are right before we build the scenario grouping on top.</p>
     </div>
 
     <div class="card"><b>DevOps import column mapping</b>
