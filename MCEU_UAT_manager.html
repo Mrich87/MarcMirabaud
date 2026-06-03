@@ -368,7 +368,16 @@ function renderDashboard(){
 /* =========================================================================
    TESTS — merged Catalog + Execution
    ========================================================================= */
-let testsFilter={q:"",domain:"",process:"",app:"",stream:"",scope:"in"};
+let testsFilter={q:"",domain:"",process:"",app:"",stream:"",scope:"in",hideDupTitles:true};
+/* Title key with the "PRC-<serial>" reference stripped, so titles that differ
+   only by their PRC serial number count as the same. */
+function normTitle(t){
+  return String(t||"")
+    .replace(/\bPRC[-_\s]?\d+(?:[-_.]\d+)*/gi,"")   // remove PRC- serial numbers
+    .replace(/\s+/g," ")
+    .replace(/^[\s\-_:–•.]+|[\s\-_:–•.]+$/g,"")     // trim leftover separators
+    .trim().toLowerCase();
+}
 let displayedTC=[];   // ids of currently displayed catalog rows (for reorder)
 
 function sortedCatalog(list){
@@ -389,6 +398,14 @@ function renderTests(){
     (!testsFilter.q || (c.title+" "+c.id+" "+c.process).toLowerCase().includes(testsFilter.q.toLowerCase()))
   );
   rows=sortedCatalog(rows);
+  // collapse rows whose title is identical once the PRC- serial number is ignored
+  const dupCount={};
+  rows.forEach(c=>{const k=normTitle(c.title); dupCount[k]=(dupCount[k]||0)+1;});
+  let dupHidden=0;
+  if(testsFilter.hideDupTitles){
+    const seen=new Set();
+    rows=rows.filter(c=>{const k=normTitle(c.title); if(seen.has(k)){dupHidden++;return false;} seen.add(k); return true;});
+  }
   displayedTC=rows.map(c=>String(c.id));
   const inScope=S.catalog.filter(c=>c.inScope).length;
   const allInScope = rows.length>0 && rows.every(c=>c.inScope);
@@ -409,8 +426,9 @@ function renderTests(){
         <option value="out" ${testsFilter.scope==='out'?'selected':''}>Out of scope</option>
         <option value="all" ${testsFilter.scope==='all'?'selected':''}>All</option>
       </select>
+      <label class="pill" title="Collapse rows whose title is identical once the PRC- serial number is ignored"><input type="checkbox" ${testsFilter.hideDupTitles?'checked':''} onchange="testsFilter.hideDupTitles=this.checked;renderTests()"/> Hide duplicate titles</label>
       <div class="spacer"></div>
-      <span class="muted">${rows.length} shown</span>
+      <span class="muted">${rows.length} shown${dupHidden?` · ${dupHidden} hidden`:''}</span>
       <button class="sm" onclick="bulkScope(true)">☑ Select all</button>
       <button class="sm" onclick="bulkScope(false)">☐ Deselect all</button>
       <button class="sm" onclick="resetOrder()">↕ Reset order (chronological)</button>
@@ -420,14 +438,15 @@ function renderTests(){
     <table>
       <thead><tr><th style="width:60px">Order</th><th style="width:48px" title="Select / deselect all shown">Scope<br><input type="checkbox" ${allInScope?'checked':''} onchange="bulkScope(this.checked)"/></th><th>Test Case</th><th>Domain</th><th>Process</th><th>App</th><th style="width:60px"></th></tr></thead>
       <tbody>
-      ${rows.slice(0,300).map((c,i)=>testCaseBlock(c)).join("")}
+      ${rows.slice(0,300).map((c,i)=>testCaseBlock(c, dupCount[normTitle(c.title)]||1)).join("")}
       </tbody>
     </table>
     </div>
+    ${testsFilter.hideDupTitles&&dupHidden?`<p class="hint">${dupHidden} duplicate row(s) hidden — titles that are identical once the <code>PRC-</code> serial number is ignored. Untick “Hide duplicate titles” to show them all.</p>`:""}
     ${rows.length>300?`<p class="hint">Showing first 300 rows — refine the filters.</p>`:""}
     `}`;
 }
-function testCaseBlock(c){
+function testCaseBlock(c, dups){
   const exs=execsFor(c.id);
   const main=`<tr class="tc-main">
     <td><div class="ord">
@@ -436,7 +455,7 @@ function testCaseBlock(c){
       <button onclick="moveOrder('${c.id}',1)" title="down">▼</button>
     </div></td>
     <td><input type="checkbox" ${c.inScope?'checked':''} onchange="toggleScope('${c.id}',this.checked)"/></td>
-    <td><b>${esc(c.title)}</b><div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
+    <td><b>${esc(c.title)}</b>${dups>1?` <span class="tag" title="${dups} test cases share this title once the PRC- serial number is ignored">×${dups}</span>`:''}<div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
       ${(()=>{const st=effectiveStreams(c);const man=Array.isArray(c.streamOverride);
         const chips = st.length ? st.map(s=>badge(s.name,s.color)).join("") : badge('no stream','#64748b');
         return `<div class="chiprow" style="margin-top:3px">${chips}<button class="sm" style="padding:0 6px;line-height:1.5;${man?'border-color:#f59e0b;color:#f59e0b':''}" title="${man?'stream set manually — click to change':'set stream manually'}" onclick="openStreamModal('${c.id}')">✎</button></div>`;})()}
