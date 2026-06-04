@@ -113,8 +113,8 @@
 const LS_KEY = "mceu_uat_state_v1";
 /* App version — bump APP_BUILD on every released change. Shown in the header and
    embedded in tester packets so a stale app can be detected. */
-const APP_BUILD = 15;
-const APP_VERSION = "2026-06-03 · build " + APP_BUILD;
+const APP_BUILD = 16;
+const APP_VERSION = "2026-06-04 · build " + APP_BUILD;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
 /* ---------- default state ---------- */
@@ -244,7 +244,7 @@ function subMeta(c){
   if(c.subVariant && c.subVariant!==c.title) parts.push(c.subVariant);
   if(c.application) parts.push(c.application);
   if(c.bankArea) parts.push(c.bankArea);
-  return parts.map(x=>String(x||"").trim()).filter(Boolean).join("  ·  ");
+  return parts.map(x=>cleanTitle(x)).filter(Boolean).join("  ·  ");
 }
 
 /* Natural sort key so PRC-001-01-02 comes before PRC-001-01-10 */
@@ -469,6 +469,31 @@ function normTitle(t){
     .replace(/^[\s\-_:–•.]+|[\s\-_:–•.]+$/g,"")     // trim leftover separators
     .trim().toLowerCase();
 }
+/* ---------- display-only formatting (non-destructive) ----------
+   The source export keeps its raw text (e.g. "278124 : P3_ADV_093 (01/08) …").
+   These helpers clean it for display only — nothing stored is modified, so the
+   keyword classification, dedup and traceability all keep working on the raw text. */
+function cleanTitle(t){
+  let s=String(t||"");
+  s=s.replace(/^\s*[A-Za-z0-9_]*\d+\s*:\s*/,"");          // work-item id prefix "278124 : " / "P1_278033 : "
+  s=s.replace(/\bP\d+_(?=[A-Za-z])/g,"");                 // phase tag  P3_ADV_093 -> ADV_093
+  s=s.replace(/^\s*PRC-\d+(?:[-_.]\d+)*\s*/i,"");         // leading PRC code token (shown as a chip instead)
+  s=s.replace(/^\s*\(\s*\d+\s*\/\s*\w+\s*\)\s*/,"");      // leading step index "(01/08)"
+  s=s.replace(/^\s*\d+\s*-\s*/,"");                       // leading catalogue index "14- "
+  s=s.replace(/\s*-{2,}\s*/g," - ").replace(/\s{2,}/g," ");
+  return s.replace(/^[\s\-_:–•.]+|[\s\-_:–•.]+$/g,"").trim();
+}
+function dispTitle(c){ return cleanTitle(c.title) || ("#"+c.id); }
+/* PRC process reference (PRC-### base) read from the work item. */
+function prcOf(c){
+  const m=String([c.process,c.title,c.subVariant].filter(Boolean).join(" ")).match(/PRC-\d+/i);
+  return m?m[0].toUpperCase():"";
+}
+/* Execution step number parsed from the "(NN/MM)" index in the test-point text. */
+function stepNoOf(c){
+  const m=String(c.subVariant||c.title||"").match(/\(\s*(\d+)\s*\/\s*\w+\s*\)/);
+  return m?parseInt(m[1],10):null;
+}
 let displayedTC=[];   // ids of currently displayed catalog rows (for reorder)
 
 function sortedCatalog(list){
@@ -548,7 +573,7 @@ function testCaseBlock(c, dups){
       <button onclick="moveOrder('${c.id}',1)" title="down">▼</button>
     </div></td>
     <td style="text-align:center">${exs.length?badge(exs.length,'#22c55e'):'<span class="muted">—</span>'}</td>
-    <td><b>${esc(c.title)}</b>${dups>1?` <span class="tag" title="${dups} test cases share this title once the PRC- serial number is ignored">×${dups}</span>`:''}<div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
+    <td>${(()=>{const p=prcOf(c);return p?badge(p,'#38bdf8'):'';})()}<b>${esc(dispTitle(c))}</b>${(()=>{const n=stepNoOf(c);return n!=null?` <span class="tag" title="execution step">step ${n}</span>`:'';})()}${dups>1?` <span class="tag" title="${dups} test cases share this title once the PRC- serial number is ignored">×${dups}</span>`:''}<div class="muted" style="font-size:11px">#${esc(c.id)}${c.devopsLink?` · <a href="${esc(c.devopsLink)}" target="_blank" style="color:var(--accent)">DevOps↗</a>`:''}</div>
       ${(()=>{const sm=subMeta(c);return sm?`<div style="font-size:11px;color:var(--accent)" title="sub-process + differentiating metadata">↳ ${esc(sm)}</div>`:'';})()}
       ${(()=>{const st=effectiveStreams(c);const man=Array.isArray(c.streamOverride);
         const chips = st.length ? st.map(s=>badge(s.name,s.color)).join("") : badge('no stream','#64748b');
@@ -592,7 +617,7 @@ function renderTestsPacket(){
     <div class="scrollbox"><table><thead><tr><th>Test Case</th><th>Entity</th><th>Tester</th><th style="width:130px">Status</th><th>Business comment</th></tr></thead><tbody>
     ${ex.map(e=>{const c=catById(e.testCaseId)||{};const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.businessComment;
       return `<tr>
-      <td><b>${esc(execTitle(e))}</b><div class="muted" style="font-size:11px">${esc(c.process||"")} ${c.application?'· '+esc(c.application):''}</div></td>
+      <td><b>${esc(cleanTitle(execTitle(e)))}</b><div class="muted" style="font-size:11px">${esc(c.process||"")} ${c.application?'· '+esc(c.application):''}</div></td>
       <td>${badge(e.entity,entityMeta(e.entity).color)}</td><td class="muted">${esc(testerName(e.testerId))}</td>
       <td><select onchange="setStatus('${e.id}',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
       <td><textarea style="min-height:38px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setComment('${e.id}',this.value)">${esc(e.businessComment)}</textarea>${need?'<div class="hint" style="color:#ef4444">Comment required</div>':''}</td>
@@ -639,7 +664,7 @@ function openStreamModal(id){
   const cur=new Set(effectiveStreams(c).map(s=>s.name));
   const auto=detectStreams(c).map(s=>s.name);
   modal(`<h2>Business stream for this test case</h2>
-    <p class="muted" style="font-size:13px;margin:0 0 6px">${esc(c.title)}</p>
+    <p class="muted" style="font-size:13px;margin:0 0 6px">${esc(dispTitle(c))}</p>
     <p class="hint" style="margin-top:0">Auto-detected from the text: ${auto.length?auto.map(n=>badge(n,streamMeta(n).color)).join(" "):'<span class="muted">none</span>'}. Tick the stream(s) that actually apply — your choice overrides the auto-detection for this test case.</p>
     <div class="chiprow">${(S.config.businessStreams||[]).map(s=>`<label class="pill"><input type="checkbox" class="strmChk" value="${esc(s.name)}" ${cur.has(s.name)?'checked':''}/> ${badge(s.name,s.color)}</label>`).join("")||'<span class="muted">Define streams in the Admin tab first.</span>'}</div>
     <div class="toolbar" style="margin-top:16px"><button onclick="resetStreamOverride('${esc(c.id)}')" title="go back to keyword auto-detection">↺ Reset to auto-detect</button><div class="spacer"></div>
@@ -817,7 +842,7 @@ function renderTracking(){
     <div class="scrollbox">
     <table><thead><tr><th>Test Case</th><th>Domain</th><th>Process</th><th>Sub-process</th><th>Entity</th><th>Tester</th><th>Status</th><th>Recurrence</th><th>Date</th><th>Comment</th></tr></thead><tbody>
     ${ex.slice(0,1000).map(e=>{const c=catById(e.testCaseId)||{};const sm=statusMeta(e.status);return `<tr>
-      <td>${esc(execTitle(e))}</td><td>${esc(c.domain||"")}</td><td>${esc(c.process||"")}</td><td>${esc(subMeta(c))}</td>
+      <td>${esc(cleanTitle(execTitle(e)))}</td><td>${esc(c.domain||"")}</td><td>${esc(c.process||"")}</td><td>${esc(subMeta(c))}</td>
       <td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))}</td>
       <td>${badge(e.status,sm.color)}</td><td>${esc(e.recurrence||"")}</td><td>${esc(e.testDate||"")}</td>
       <td class="muted">${esc(e.businessComment||"")}</td></tr>`;}).join("")
@@ -1065,7 +1090,10 @@ function importDevops(input){
     // assign natural order to items without one
     let maxO=S.catalog.reduce((mm,c)=>Math.max(mm,c.order||0),0);
     const noOrder=S.catalog.filter(c=>!c.order);
-    noOrder.sort((a,b)=>naturalKey(a.title).localeCompare(naturalKey(b.title)));
+    noOrder.sort((a,b)=>
+      naturalKey(a.process).localeCompare(naturalKey(b.process))
+      || ((stepNoOf(a)||0)-(stepNoOf(b)||0))
+      || naturalKey(a.title).localeCompare(naturalKey(b.title)));
     noOrder.forEach(c=>c.order=++maxO);
     save(); go("tests");
     alert(`Import done (sheet "${sn}"): ${added} new, ${merged} updated, ${newTesters} tester(s) created. Catalog total: ${S.catalog.length}.`);
@@ -1130,7 +1158,7 @@ function mergeResults(input){ const f=input.files[0]; if(!f)return; const r=new 
 /* ---------- xlsx report ---------- */
 function exportReport(){
   const data=S.executions.map(e=>{ const c=catById(e.testCaseId)||{}; const it=S.iterations.find(i=>i.id===e.iterationId)||{};
-    return {Iteration:it.name||"",TestCaseId:e.testCaseId,Title:execTitle(e),BaseTitle:c.title||"",Type:classOf(c)||"",Domain:c.domain||"",Process:c.process||"",
+    return {Iteration:it.name||"",TestCaseId:e.testCaseId,Title:cleanTitle(execTitle(e)),BaseTitle:c.title||"",PRC:prcOf(c),Step:stepNoOf(c)||"",Type:classOf(c)||"",Domain:c.domain||"",Process:c.process||"",
       SubProcess:c.subProcess||"",Application:c.application||"",Entity:e.entity,Tester:testerName(e.testerId),
       Status:e.status,Recurrence:e.recurrence||"",TestDate:e.testDate||"",BusinessComment:e.businessComment||"",
       DefectLink:e.defectLink||"",DevOpsLink:c.devopsLink||""}; });
