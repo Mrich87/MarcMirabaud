@@ -113,7 +113,7 @@
 const LS_KEY = "mceu_uat_state_v1";
 /* App version — bump APP_BUILD on every released change. Shown in the header and
    embedded in tester packets so a stale app can be detected. */
-const APP_BUILD = 14;
+const APP_BUILD = 15;
 const APP_VERSION = "2026-06-03 · build " + APP_BUILD;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
@@ -150,18 +150,21 @@ function defaultState(){
         {name:"Central File", keywords:"Central File, CF",         color:"#a855f7"},
         {name:"BRM",          keywords:"BRM",                      color:"#f59e0b"},
         {name:"Compliance",   keywords:"Compliance, AML, KYC",     color:"#22c55e"},
+        {name:"Team Head",    keywords:"Team Head",                color:"#ef4444"},
+        {name:"Credit",       keywords:"Credit",                   color:"#eab308"},
+        {name:"CESR",         keywords:"CESR",                     color:"#14b8a6"},
       ],
       // Simplified test plan rule — "standard" (implicit, can be dropped/absorbed)
       // vs "differentiating" (a business case / risk / stream / control worth keeping).
       // Differentiating always wins when both match. One keyword per line.
-      standardKeywords:["fill KYC","fill mandatory information","mandatory information","create case","create a case","upload document","upload documents","complete mailing instruction","mailing instruction","attach document"],
-      differentiatingKeywords:["trust","legal entity","natural person","individual","low risk","medium risk","high risk","PEP","true hit","false hit","world-check","world check","approval route","scoring","SICAM","SIX","Transact","TAP","FCM","US person","wet signature"],
+      standardKeywords:["fill KYC","fill mandatory information","mandatory information","create case","create a case","upload document","upload documents","complete mailing instruction","mailing instruction","attach document","screenshot","look and feel","pdf check","xml check","format check"],
+      differentiatingKeywords:["trust","legal entity","natural person","individual","joint account","minor","corporate","institutional","low risk","medium risk","high risk","risk score","PEP","true hit","false hit","world-check","world check","sanction","embargo","approval route","four-eyes","scoring","SICAM","SIX","Transact","TAP","FCM","performance fee","FATCA","CRS","dormant","blocking","unblock","offboarding","change of circumstance","US person","wet signature"],
       columnMapping:{
         testCaseId:"TestCaseId", title:"TitleLevel6", domain:"TitleLevel2",
         process:"TitleLevel3", subProcess:"TitleLevel4", variant:"TitleLevel5",
         subVariant:"TitleTC", application:"ProductApplication",
         bankArea:"Custom_BankArea", tester:"TesterName",
-        devopsLink:"TestSuiteLink"
+        devopsLink:"TestSuiteLink", classification:"Classification"
       }
     },
     iterations:[it1],
@@ -1051,6 +1054,9 @@ function importDevops(input){
         application:r[m.application]||"", bankArea:r[m.bankArea]||"", devopsLink:r[m.devopsLink]||"",
         defaultTesterId:testerId
       };
+      // optional Classification column -> standard/differentiating override
+      const clRaw=(m.classification && r[m.classification]!=null) ? String(r[m.classification]).trim().toLowerCase() : "";
+      if(clRaw==="standard"||clRaw==="differentiating") obj.simplify=clRaw;
       if(seen[id])return; seen[id]=true;
       const ex=catById(id);
       if(ex){ Object.assign(ex,obj,{inScope:ex.inScope,tags:ex.tags,order:ex.order,defaultTesterId:testerId||ex.defaultTesterId}); merged++; }
