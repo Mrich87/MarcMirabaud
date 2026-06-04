@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MCEU — UAT Campaign Manager</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
+    --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --accent2:#0ea5e9;
+    --ok:#22c55e; --fail:#ef4444; --block:#f59e0b; --na:#64748b; --prog:#a855f7;
+    --chip:#0b1220;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  header{background:linear-gradient(90deg,#0b1220,#16233b);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+  header .brand{color:var(--accent)}
+  .iter-pill{margin-left:auto;display:flex;align-items:center;gap:8px}
+  select,input,textarea{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit}
+  textarea{width:100%;min-height:50px;resize:vertical}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:13px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent2);border-color:var(--accent2);color:#06283b;font-weight:600}
+  button.primary:hover{background:var(--accent)}
+  button.danger{border-color:var(--fail);color:#fca5a5}
+  button.sm{padding:3px 8px;font-size:12px}
+  nav{display:flex;gap:4px;background:#0b1220;padding:6px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  nav button{background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;padding:9px 18px;color:var(--muted);font-size:14px}
+  nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  main{padding:18px;max-width:1600px;margin:0 auto}
+  .view{display:none}
+  .view.active{display:block}
+  h2{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 16px;font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+  .grid{display:grid;gap:12px}
+  .cards{display:flex;gap:12px;flex-wrap:wrap}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:120px;flex:1}
+  .kpi .n{font-size:26px;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel);z-index:1}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .toolbar .spacer{flex:1}
+  .pbar{height:10px;background:#0b1220;border-radius:6px;overflow:hidden;display:flex;min-width:120px}
+  .pbar span{display:block;height:100%}
+  .muted{color:var(--muted)}
+  .tag{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:11px;margin:1px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:12px;color:var(--muted)}
+  .matrix td,.matrix th{text-align:center}
+  .matrix td.proc{text-align:left}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;max-width:680px;width:92%;max-height:88vh;overflow:auto}
+  .pill{background:var(--chip);border:1px solid var(--line);border-radius:20px;padding:3px 10px;font-size:12px}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  .chiprow{display:flex;gap:6px;flex-wrap:wrap}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle}
+  code{background:var(--chip);padding:1px 5px;border-radius:4px}
+  .ord{display:flex;align-items:center;gap:3px}
+  .ord button{padding:0 6px;line-height:1.5;font-size:11px}
+  .ord input{width:52px;text-align:center;padding:3px}
+  details.sec>summary{cursor:pointer;font-weight:600;font-size:15px;padding:6px 0;list-style:none}
+  details.sec>summary::before{content:"▸ ";color:var(--accent)}
+  details.sec[open]>summary::before{content:"▾ "}
+  .stickyhead{position:sticky;top:88px;background:var(--bg);padding:6px 0;z-index:2}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="brand">MCEU</span> · UAT Campaign Manager</h1>
+  <div class="iter-pill">
+    <span class="muted" style="font-size:12px">Active&nbsp;iteration</span>
+    <select id="iterSelect" onchange="setActiveIteration(this.value)"></select>
+  </div>
+</header>
+<nav id="nav"></nav>
+<main>
+  <div id="view-dashboard" class="view"></div>
+  <div id="view-library" class="view"></div>
+  <div id="view-campaign" class="view"></div>
+  <div id="view-admin" class="view"></div>
+</main>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBox"></div></div>
+
+<script>
+/* =========================================================================
+   MCEU UAT MANAGER v2 — local single-file web app · 4 screens
+   Library (reusable PRC x Scenario definitions) -> Campaign (iterations,
+   testers w/ country, dispatch on entities, execution tracking, per-tester
+   standalone HTML) -> Dashboard + Admin (config + import/export).
+   Persistence: localStorage + xlsx/JSON.
+   ========================================================================= */
+
+const LS_KEY = "mceu_uat_state_v2";
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+
+function defaultState(){
+  const it1 = {id:uid(), name:"UAT 1", startDate:"", endDate:""};
+  return {
+    version:3,
+    config:{
+      campaignName:"MCEU UAT Campaign",
+      entities:[
+        {code:"LU", label:"Luxembourg",     color:"#38bdf8"},
+        {code:"FR", label:"France",         color:"#a855f7"},
+        {code:"SP", label:"Spain",          color:"#f59e0b"},
+        {code:"UK", label:"United Kingdom",  color:"#22c55e"},
+      ],
+      departments:["Wealth Management","Operations","Compliance","Finance","Investment","Risk"],
+      statuses:[
+        {value:"Not started", color:"#64748b", requiresComment:false},
+        {value:"In progress", color:"#a855f7", requiresComment:false},
+        {value:"Passed",      color:"#22c55e", requiresComment:false},
+        {value:"Failed",      color:"#ef4444", requiresComment:true},
+        {value:"Blocked",     color:"#f59e0b", requiresComment:true},
+        {value:"N/A",         color:"#475569", requiresComment:false},
+      ],
+      recurrences:["Often","Rarely","Exceptionally"],
+      columnMapping:{ process:"TitleLevel3", scenario:"TitleLevel4", domain:"TitleLevel2", tester:"TesterName" }
+    },
+    testers:[],
+    library:[],
+    iterations:[it1],
+    activeIterationId:it1.id,
+    executions:[]
+  };
+}
+
+let S = load();
+function load(){ try{ const r=localStorage.getItem(LS_KEY); if(r) return migrate(JSON.parse(r)); }catch(e){} return defaultState(); }
+function migrate(s){ const d=defaultState();
+  const cfg=Object.assign(d.config,s.config||{});
+  cfg.columnMapping=Object.assign(d.config.columnMapping,(s.config||{}).columnMapping||{});
+  return Object.assign(d,s,{config:cfg}); }
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(S)); }
+function persist(){ save(); renderTab(currentTab); }
+
+/* helpers */
+const $ = sel => document.querySelector(sel);
+const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const statusMeta = v => S.config.statuses.find(x=>x.value===v) || {value:v,color:"#64748b",requiresComment:false};
+const entityMeta = c => S.config.entities.find(x=>x.code===c) || {code:c,label:c,color:"#64748b"};
+const tester = id => S.testers.find(x=>x.id===id);
+const testerName = id => { const t=tester(id); return t?t.name:"—"; };
+const activeIter = () => S.iterations.find(i=>i.id===S.activeIterationId) || S.iterations[0];
+const libById = id => S.library.find(c=>String(c.id)===String(id));
+const naturalKey = s => String(s||"").toLowerCase().replace(/\d+/g, m=>m.padStart(10,"0"));
+const iterExecs = (iterId) => S.executions.filter(e=>e.iterationId===(iterId||S.activeIterationId));
+function badge(text,color){ return `<span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}66">${esc(text)}</span>`; }
+
+/* =========================================================================
+   NAVIGATION — 4 tabs
+   ========================================================================= */
+const TABS = [["dashboard","Dashboard"],["library","Library"],["campaign","Campaign"],["admin","Admin"]];
+let currentTab = "dashboard";
+function buildNav(){ $("#nav").innerHTML = TABS.map(([id,label])=>
+  `<button class="${id===currentTab?'active':''}" onclick="go('${id}')">${label}</button>`).join(""); }
+function go(tab){ currentTab=tab; document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  $("#view-"+tab).classList.add("active"); buildNav(); renderTab(tab); }
+function renderAll(){ buildIterSelect(); buildNav(); renderTab(currentTab); }
+function renderTab(tab){ buildIterSelect();
+  ({dashboard:renderDashboard,library:renderLibrary,campaign:renderCampaign,admin:renderAdmin}[tab]||(()=>{}))(); }
+function buildIterSelect(){ $("#iterSelect").innerHTML = S.iterations.map(i=>
+  `<option value="${i.id}" ${i.id===S.activeIterationId?'selected':''}>${esc(i.name)}</option>`).join(""); }
+function setActiveIteration(id){ S.activeIterationId=id; renderAll(); save(); }
+
+/* modal */
+function modal(html){ $("#modalBox").innerHTML=html; $("#modalBg").classList.add("open"); }
+function closeModal(){ $("#modalBg").classList.remove("open"); }
+$("#modalBg").addEventListener("click",e=>{ if(e.target.id==="modalBg") closeModal(); });
+
+/* aggregation */
+function aggregate(execs){
+  const a={total:execs.length,byStatus:{},done:0,passed:0,failed:0,blocked:0,notrun:0};
+  execs.forEach(e=>{ a.byStatus[e.status]=(a.byStatus[e.status]||0)+1;
+    if(e.status==="Passed"){a.passed++;a.done++;} else if(e.status==="Failed"){a.failed++;a.done++;}
+    else if(e.status==="Blocked"){a.blocked++;a.done++;} else if(e.status==="N/A"){a.done++;} else a.notrun++; });
+  return a;
+}
+function progressBar(execs){ const a=aggregate(execs); if(!a.total) return '<div class="pbar"></div>';
+  const seg=(n,c)=> n? `<span style="width:${n/a.total*100}%;background:${c}"></span>`:"";
+  return `<div class="pbar">${seg(a.passed,'#22c55e')}${seg(a.failed,'#ef4444')}${seg(a.blocked,'#f59e0b')}${seg(a.byStatus['N/A']||0,'#475569')}${seg(a.byStatus['In progress']||0,'#a855f7')}</div>`; }
+
+/* =========================================================================
+   DASHBOARD
+   ========================================================================= */
+function renderDashboard(){
+  const iter=activeIter(); const ex=iterExecs(); const a=aggregate(ex);
+  const pct=n=>a.total?Math.round(n/a.total*100):0;
+  const kpi=(n,l,c)=>`<div class="kpi"><div class="n" style="color:${c||'inherit'}">${n}</div><div class="l">${l}</div></div>`;
+  const byEntity=S.config.entities.map(en=>({en,sub:ex.filter(e=>e.entity===en.code)}));
+  const byTester={}; ex.forEach(e=>{(byTester[e.testerId]=byTester[e.testerId]||[]).push(e);});
+  const byDomain={}; ex.forEach(e=>{const d=e.domain||"(none)";(byDomain[d]=byDomain[d]||[]).push(e);});
+
+  $("#view-dashboard").innerHTML=`
+    <h2>Dashboard — ${esc(iter?iter.name:"—")}</h2>
+    <p class="sub">${esc(S.config.campaignName)} · live progress for the active iteration.</p>
+    <div class="cards">
+      ${kpi(a.total,"Assigned")}${kpi(a.done+" ("+pct(a.done)+"%)","Executed",'#38bdf8')}
+      ${kpi(a.passed,"Passed",'#22c55e')}${kpi(a.failed,"Failed",'#ef4444')}
+      ${kpi(a.blocked,"Blocked",'#f59e0b')}${kpi(a.notrun,"To do",'#94a3b8')}
+    </div>
+    <div class="card"><b>Overall progress</b>${progressBar(ex)}
+      <div class="legend"><span><i style="background:#22c55e"></i>Passed</span><span><i style="background:#ef4444"></i>Failed</span><span><i style="background:#f59e0b"></i>Blocked</span><span><i style="background:#a855f7"></i>In progress</span><span><i style="background:#475569"></i>N/A</span></div>
+    </div>
+    <div class="split">
+      <div class="card"><b>By entity</b>
+        <table><thead><tr><th>Entity</th><th>Assigned</th><th>Progress</th><th>P/F/B</th></tr></thead><tbody>
+        ${byEntity.map(({en,sub})=>{const sa=aggregate(sub);return `<tr><td>${badge(en.code,en.color)} ${esc(en.label)}</td><td>${sub.length}</td><td style="min-width:140px">${progressBar(sub)}</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td></tr>`;}).join("")}
+        </tbody></table>
+      </div>
+      <div class="card"><b>By tester</b>
+        <table><thead><tr><th>Tester</th><th>Country</th><th>Assigned</th><th>Progress</th></tr></thead><tbody>
+        ${Object.keys(byTester).map(tid=>{const sub=byTester[tid];const t=tester(tid);return `<tr><td>${esc(testerName(tid))}</td><td>${t&&t.country?badge(t.country,entityMeta(t.country).color):'<span class="muted">—</span>'}</td><td>${sub.length}</td><td style="min-width:140px">${progressBar(sub)}</td></tr>`;}).join("")||'<tr><td colspan="4" class="muted">No assignment</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>
+    <div class="card"><b>By business domain</b>
+      <table><thead><tr><th>Domain</th><th>Assigned</th><th>Progress</th><th>Failed</th></tr></thead><tbody>
+      ${Object.keys(byDomain).sort().map(d=>{const sub=byDomain[d];const sa=aggregate(sub);return `<tr><td>${esc(d)}</td><td>${sub.length}</td><td style="min-width:160px">${progressBar(sub)}</td><td>${sa.failed?badge(sa.failed+" failed",'#ef4444'):'<span class="muted">0</span>'}</td></tr>`;}).join("")||'<tr><td colspan="4" class="muted">Import the library and build a campaign to see numbers.</td></tr>'}
+      </tbody></table>
+    </div>`;
+}
+
+/* =========================================================================
+   LIBRARY — reusable PRC x Scenario definitions
+   ========================================================================= */
+let libFilter={q:"",domain:"",process:""};
+function sortedLib(list){ return list.slice().sort((a,b)=>(a.order||0)-(b.order||0)||naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))); }
+function renderLibrary(){
+  const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
+  const procs=[...new Set(S.library.filter(c=>!libFilter.domain||c.domain===libFilter.domain).map(c=>c.process))].sort();
+  let rows=S.library.filter(c=>
+    (!libFilter.domain||c.domain===libFilter.domain)&&(!libFilter.process||c.process===libFilter.process)&&
+    (!libFilter.q||((c.process||"")+" "+(c.scenario||"")).toLowerCase().includes(libFilter.q.toLowerCase())));
+  rows=sortedLib(rows);
+
+  $("#view-library").innerHTML=`
+    <h2>Library</h2>
+    <p class="sub">${S.library.length} reusable test definitions — deduplicated from the DevOps export on the <b>(PRC × Scenario)</b> combo (col H × col I). Edit, clone and reorder freely. This is the source of truth, independent from campaigns.</p>
+    ${S.library.length===0?`<div class="card empty">No library yet.<div style="margin-top:12px"><label class="pill" style="cursor:pointer">⬆ Import DevOps .xlsx<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label> &nbsp; <button onclick="newLibItem()">+ New definition</button></div><p class="hint" style="margin-top:8px">Default sheet: <code>LUX</code> · change mapping in Admin.</p></div>`:`
+    <div class="toolbar stickyhead">
+      <input placeholder="🔍 search PRC / scenario…" value="${esc(libFilter.q)}" oninput="libFilter.q=this.value;renderLibrary()" style="min-width:240px"/>
+      <select onchange="libFilter.domain=this.value;libFilter.process='';renderLibrary()"><option value="">All domains</option>${domains.map(d=>`<option ${libFilter.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
+      <select onchange="libFilter.process=this.value;renderLibrary()"><option value="">All PRC</option>${procs.map(p=>`<option ${libFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
+      <div class="spacer"></div><span class="muted">${rows.length} shown</span>
+      <button class="sm" onclick="resetLibOrder()">↕ Reset order</button>
+      <button class="sm" onclick="newLibItem()">+ New</button>
+      <label class="pill" style="cursor:pointer">⬆ Import .xlsx<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label>
+      <input id="impSheet" value="LUX" title="sheet name" style="width:70px"/>
+    </div>
+    <table>
+      <thead><tr><th style="width:120px">Order</th><th>PRC (process)</th><th>Scenario</th><th>Domain</th><th>Default tester</th><th style="width:110px"></th></tr></thead>
+      <tbody>
+      ${rows.map(c=>`<tr>
+        <td><div class="ord"><button onclick="moveLib('${c.id}',-1)">▲</button><input type="number" value="${c.order||0}" onchange="setLibOrder('${c.id}',this.value)"/><button onclick="moveLib('${c.id}',1)">▼</button></div></td>
+        <td><b>${esc(c.process)}</b></td>
+        <td>${esc(c.scenario)}</td>
+        <td>${esc(c.domain)}</td>
+        <td class="muted">${esc(testerName(c.defaultTesterId))}</td>
+        <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button></td>
+      </tr>`).join("")}
+      </tbody>
+    </table>`}`;
+}
+function libDisplayedIds(){ let rows=S.library.filter(c=>(!libFilter.domain||c.domain===libFilter.domain)&&(!libFilter.process||c.process===libFilter.process)&&(!libFilter.q||((c.process||"")+" "+(c.scenario||"")).toLowerCase().includes(libFilter.q.toLowerCase()))); return sortedLib(rows).map(c=>String(c.id)); }
+function setLibOrder(id,v){ const c=libById(id); if(c){c.order=parseInt(v)||0; persist();} }
+function moveLib(id,dir){ const ids=libDisplayedIds(); const idx=ids.indexOf(String(id)); const j=idx+dir;
+  if(idx<0||j<0||j>=ids.length)return; const a=libById(ids[idx]),b=libById(ids[j]); const t=a.order;a.order=b.order;b.order=t; persist(); }
+function resetLibOrder(){ let n=0; sortedLib(S.library).forEach(c=>c.order=++n); persist(); }
+function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterId:"",notes:""}; S.library.push(c); save(); editLibItem(c.id); }
+function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)"}; S.library.push(c); persist(); }
+function editLibItem(id){ const c=libById(id);
+  modal(`<h2>Edit library definition</h2>
+    <div class="row" style="margin-top:4px">
+      <div class="field" style="flex:1"><label>PRC (process)</label><input id="l_proc" value="${esc(c.process)}"/></div>
+      <div class="field"><label>Domain</label><input id="l_dom" value="${esc(c.domain)}"/></div>
+    </div>
+    <div class="field" style="margin-top:8px"><label>Scenario</label><input id="l_scen" value="${esc(c.scenario)}"/></div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1"><label>Default tester</label><select id="l_tester"><option value="">—</option>${S.testers.map(t=>`<option value="${t.id}" ${t.id===c.defaultTesterId?'selected':''}>${esc(t.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Order</label><input type="number" id="l_order" value="${c.order||0}"/></div>
+    </div>
+    <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="l_notes">${esc(c.notes||"")}</textarea></div>
+    <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delLibItem('${c.id}')">Delete</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveLibItem('${c.id}')">Save</button></div>`);
+}
+function saveLibItem(id){ const c=libById(id);
+  c.process=$("#l_proc").value;c.domain=$("#l_dom").value;c.scenario=$("#l_scen").value;
+  c.defaultTesterId=$("#l_tester").value;c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;
+  closeModal(); persist(); }
+function delLibItem(id){ if(!confirm("Delete this definition?"))return; S.library=S.library.filter(c=>String(c.id)!==String(id)); closeModal(); persist(); }
+
+/* import DevOps xlsx -> dedup (process,scenario) */
+function importDevops(input){
+  const file=input.files[0]; if(!file)return;
+  const sheetName=($("#impSheet")&&$("#impSheet").value)||"LUX";
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:"array"});
+    const sn=wb.SheetNames.includes(sheetName)?sheetName:wb.SheetNames[0];
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""});
+    const m=S.config.columnMapping;
+    const existing=new Set(S.library.map(c=>(c.process+"||"+c.scenario)));
+    let maxO=S.library.reduce((mm,c)=>Math.max(mm,c.order||0),0);
+    let added=0,newTesters=0; const seen=new Set();
+    rows.forEach(r=>{
+      const process=(r[m.process]||"").toString().trim();
+      const scenario=(r[m.scenario]||"").toString().trim();
+      if(!process&&!scenario) return;
+      const key=process+"||"+scenario;
+      if(seen.has(key)) return; seen.add(key);
+      // tester from col E
+      let testerId=""; const tname=(r[m.tester]||"").toString().trim();
+      if(tname){ let t=S.testers.find(x=>x.name===tname); if(!t){t={id:uid(),name:tname,email:"",country:"",dept:""};S.testers.push(t);newTesters++;} testerId=t.id; }
+      if(existing.has(key)) return;          // already in library
+      existing.add(key);
+      S.library.push({id:uid(),order:++maxO,domain:(r[m.domain]||"").toString().trim(),process,scenario,defaultTesterId:testerId,notes:""});
+      added++;
+    });
+    // natural order for freshly added (and any without order)
+    let n=0; sortedLib(S.library).forEach(c=>c.order=++n);
+    save(); go("library");
+    alert(`Import done (sheet "${sn}"): ${added} new definitions, ${newTesters} tester(s) created. Library total: ${S.library.length}.`);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* =========================================================================
+   CAMPAIGN — iterations, testers(country), dispatch, tracking, tester HTML
+   ========================================================================= */
+let trkFilter={entity:"",tester:"",status:"",process:"",q:""};
+let loadSel={domain:"",process:""};
+function renderCampaign(){
+  const iter=activeIter(); const ex=iterExecs();
+  $("#view-campaign").innerHTML=`
+    <h2>Campaign — ${esc(iter?iter.name:"—")}</h2>
+    <p class="sub">Manage iterations and testers, load Library definitions into the active iteration, dispatch them across entities and testers, track execution, and generate per-tester pages.</p>
+
+    <details class="sec" open><summary>Iterations</summary>
+      <div class="card">
+        <table><thead><tr><th>Name</th><th>Start</th><th>End</th><th>Assigned</th><th>Progress</th><th></th></tr></thead><tbody>
+        ${S.iterations.map(it=>{const e=S.executions.filter(x=>x.iterationId===it.id);return `<tr><td><b>${esc(it.name)}</b> ${it.id===S.activeIterationId?'<span class="tag">active</span>':''}</td><td>${esc(it.startDate||"—")}</td><td>${esc(it.endDate||"—")}</td><td>${e.length}</td><td style="min-width:160px">${progressBar(e)}</td><td><button class="sm" onclick="editIter('${it.id}')">Edit</button> ${S.iterations.length>1?`<button class="sm danger" onclick="delIter('${it.id}')">✕</button>`:''}</td></tr>`;}).join("")}
+        </tbody></table>
+        <div class="cards" style="margin-top:10px"><button class="primary" onclick="newIter()">+ New iteration</button><button onclick="carryOver()">↪ New iteration carrying over Failed/Blocked</button></div>
+      </div>
+    </details>
+
+    <details class="sec"><summary>Testers (${S.testers.length})</summary>
+      <div class="card">
+        <p class="hint">Each tester has a <b>Country (LU/FR/SP/UK)</b> to ease dispatch. Auto-created from the DevOps TesterName column on import.</p>
+        <table><thead><tr><th>Name</th><th>Email</th><th>Country</th><th>Department</th><th></th></tr></thead><tbody>
+        ${S.testers.map((t,i)=>`<tr>
+          <td><input value="${esc(t.name)}" onchange="S.testers[${i}].name=this.value;persist()"/></td>
+          <td><input value="${esc(t.email||'')}" onchange="S.testers[${i}].email=this.value;persist()"/></td>
+          <td><select onchange="S.testers[${i}].country=this.value;persist()"><option value="">—</option>${S.config.entities.map(en=>`<option ${t.country===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
+          <td><select onchange="S.testers[${i}].dept=this.value;persist()"><option value="">—</option>${S.config.departments.map(d=>`<option ${t.dept===d?'selected':''}>${esc(d)}</option>`).join("")}</select></td>
+          <td><button class="sm danger" onclick="delTester(${i})">✕</button></td></tr>`).join("")||'<tr><td colspan="5" class="muted">No tester yet.</td></tr>'}
+        </tbody></table>
+        <button class="sm" onclick="S.testers.push({id:uid(),name:'New tester',email:'',country:'',dept:''});persist()">+ Tester</button>
+      </div>
+    </details>
+
+    <details class="sec" ${ex.length===0?'open':''}><summary>Load Library → this iteration & dispatch</summary>
+      <div class="card">${renderLoadPanel()}</div>
+    </details>
+
+    <details class="sec" open><summary>Execution tracking (${ex.length})</summary>
+      <div class="card">
+        <div class="toolbar">
+          <input placeholder="🔍 search…" value="${esc(trkFilter.q)}" oninput="trkFilter.q=this.value;renderCampaign()" style="min-width:180px"/>
+          <select onchange="trkFilter.entity=this.value;renderCampaign()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${trkFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>
+          <select onchange="trkFilter.tester=this.value;renderCampaign()"><option value="">All testers</option>${S.testers.map(t=>`<option value="${t.id}" ${trkFilter.tester===t.id?'selected':''}>${esc(t.name)}</option>`).join("")}</select>
+          <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
+          <div class="spacer"></div>
+          <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
+          <button onclick="openGenTester()">⬇ Generate tester HTML</button>
+        </div>
+        ${renderTrackingTable()}
+      </div>
+    </details>`;
+}
+function renderLoadPanel(){
+  if(S.library.length===0) return '<p class="muted">Library is empty — import definitions first (Library tab).</p>';
+  const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
+  const procs=[...new Set(S.library.filter(c=>!loadSel.domain||c.domain===loadSel.domain).map(c=>c.process))].sort();
+  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
+  return `<p class="hint">Pick a full or partial set of the Library, choose target entities and tester, then add to <b>${esc(activeIter().name)}</b>. Each (definition × entity) becomes a "Not started" execution. Duplicates are skipped.</p>
+    <div class="row">
+      <div class="field"><label>Domain</label><select onchange="loadSel.domain=this.value;loadSel.process='';renderCampaign()"><option value="">— all —</option>${domains.map(d=>`<option ${loadSel.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select></div>
+      <div class="field"><label>PRC</label><select onchange="loadSel.process=this.value;renderCampaign()"><option value="">— all (in domain) —</option>${procs.map(p=>`<option ${loadSel.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select></div>
+      <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
+      <div class="field"><label>Tester</label><select id="ldTester"><option value="">— default tester —</option>${S.testers.map(t=>`<option value="${t.id}">${esc(t.name)}${t.country?' ('+esc(t.country)+')':''}</option>`).join("")}</select></div>
+      <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
+      <button class="primary" onclick="loadIntoIteration()">Add ${target.length} definition(s)</button>
+    </div>`;
+}
+function loadIntoIteration(){
+  const ents=[...document.querySelectorAll(".ldEnt:checked")].map(x=>x.value);
+  if(!ents.length){ alert("Select at least one target entity."); return; }
+  const formTester=$("#ldTester").value, rec=$("#ldRec").value, iterId=S.activeIterationId;
+  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
+  let created=0;
+  target.forEach(c=>ents.forEach(ent=>{
+    if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&e.entity===ent)) return;
+    const testerId=formTester||c.defaultTesterId||"";
+    S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
+      entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
+    created++;
+  }));
+  persist(); alert(created+" execution(s) added to "+activeIter().name+".");
+}
+function renderTrackingTable(){
+  let ex=iterExecs().filter(e=>
+    (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
+    (!trkFilter.status||e.status===trkFilter.status)&&(!trkFilter.process||e.process===trkFilter.process)&&
+    (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase())));
+  ex=ex.sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
+  if(ex.length===0) return '<div class="empty">No execution in this iteration yet — load Library definitions above.</div>';
+  return `<table><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th>Tester</th><th style="width:130px">Status</th><th>Business comment</th><th></th></tr></thead><tbody>
+    ${ex.map(e=>{const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.comment;return `<tr>
+      <td>${esc(e.process)}${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td>
+      <td><textarea style="min-height:36px" title="Edit the scenario text — it is used as-is in the generated tester HTML" oninput="setExec('${e.id}','scenario',this.value)">${esc(e.scenario)}</textarea></td>
+      <td><select onchange="setExec('${e.id}','entity',this.value)">${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
+      <td><select onchange="setExec('${e.id}','testerId',this.value)"><option value="">—</option>${S.testers.map(t=>`<option value="${t.id}" ${t.id===e.testerId?'selected':''}>${esc(t.name)}</option>`).join("")}</select></td>
+      <td><select onchange="setExec('${e.id}','status',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
+      <td><textarea style="min-height:36px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setExec('${e.id}','comment',this.value)">${esc(e.comment)}</textarea>${need?'<div class="hint" style="color:#ef4444">required</div>':''}</td>
+      <td><button class="sm danger" onclick="delExec('${e.id}')">✕</button></td></tr>`;}).join("")}
+    </tbody></table>`;
+}
+function setExec(id,field,val){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  e[field]=val; e.updatedAt=new Date().toISOString();
+  if(field==="status"&&val!=="Not started"&&!e.testDate) e.testDate=new Date().toISOString().slice(0,10);
+  if(field==="comment"||field==="scenario"){ save(); return; }   // don't re-render on each keystroke
+  persist(); }
+function delExec(id){ S.executions=S.executions.filter(x=>x.id!==id); persist(); }
+function delTester(i){ const t=S.testers[i];
+  if((S.executions.some(e=>e.testerId===t.id)||S.library.some(c=>c.defaultTesterId===t.id))&&!confirm("This tester is referenced. Remove anyway?"))return;
+  S.testers.splice(i,1); persist(); }
+
+/* iterations */
+function newIter(){ const name=prompt("Iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
+  const it={id:uid(),name,startDate:"",endDate:""}; S.iterations.push(it); S.activeIterationId=it.id; renderAll(); save(); }
+function editIter(id){ const it=S.iterations.find(x=>x.id===id);
+  modal(`<h2>Edit iteration</h2><div class="field"><label>Name</label><input id="it_name" value="${esc(it.name)}"/></div>
+    <div class="row" style="margin-top:10px"><div class="field"><label>Start</label><input type="date" id="it_start" value="${esc(it.startDate)}"/></div><div class="field"><label>End</label><input type="date" id="it_end" value="${esc(it.endDate)}"/></div></div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveIter('${id}')">Save</button></div>`); }
+function saveIter(id){ const it=S.iterations.find(x=>x.id===id); it.name=$("#it_name").value;it.startDate=$("#it_start").value;it.endDate=$("#it_end").value; closeModal(); renderAll(); save(); }
+function delIter(id){ if(!confirm("Delete this iteration and its executions?"))return; S.iterations=S.iterations.filter(x=>x.id!==id); S.executions=S.executions.filter(e=>e.iterationId!==id); if(S.activeIterationId===id)S.activeIterationId=S.iterations[0].id; renderAll(); save(); }
+function carryOver(){ const from=activeIter(); const name=prompt("New iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
+  const it={id:uid(),name,startDate:"",endDate:""}; S.iterations.push(it);
+  const src=S.executions.filter(e=>e.iterationId===from.id&&["Failed","Blocked","Not started"].includes(e.status));
+  src.forEach(e=>S.executions.push({...e,id:uid(),iterationId:it.id,status:"Not started",comment:"",testDate:"",updatedAt:new Date().toISOString()}));
+  S.activeIterationId=it.id; renderAll(); save(); alert(src.length+" test(s) carried over to "+name+"."); }
+
+/* =========================================================================
+   PER-TESTER STANDALONE HTML
+   ========================================================================= */
+function openGenTester(){
+  modal(`<h2>Generate tester page</h2>
+    <p class="hint">Creates a standalone HTML file with only this tester's tests for <b>${esc(activeIter().name)}</b>. The tester fills statuses/comments (can add ad-hoc tests), clicks <b>Save</b> and sends you back the JSON. Import it via "Import tester results".</p>
+    <div class="row">
+      <div class="field" style="flex:1"><label>Tester</label><select id="gtTester">${S.testers.map(t=>`<option value="${t.id}">${esc(t.name)}${t.country?' ('+esc(t.country)+')':''}</option>`).join("")||'<option value="">(no tester)</option>'}</select></div>
+      <div class="field"><label>Entity filter (optional)</label><select id="gtEntity"><option value="">— all —</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select></div>
+    </div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="genTesterPage()">Generate &amp; download</button></div>`);
+}
+function genTesterPage(){
+  const testerId=$("#gtTester").value, entFilter=$("#gtEntity").value, iter=activeIter();
+  const t=tester(testerId)||{name:"Tester",country:""};
+  const list=S.executions.filter(e=>e.iterationId===iter.id&&e.testerId===testerId&&(!entFilter||e.entity===entFilter))
+    .sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)))
+    .map(e=>({id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||""}));
+  if(!list.length){ alert("No test assigned to this tester for this iteration/entity."); return; }
+  const payload={campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,testerId,testerName:t.name,
+    entities:S.config.entities.map(x=>x.code),statuses:S.config.statuses,tests:list};
+  const html=buildTesterHTML(payload);
+  download(`UAT_${iter.name.replace(/\W+/g,'_')}_${t.name.replace(/\W+/g,'_')}.html`, html, "text/html");
+  closeModal();
+}
+function buildTesterHTML(payload){
+  const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c");
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>UAT — ${esc(payload.testerName)} — ${esc(payload.iteration)}</title>
+<style>
+body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px}
+header{background:#16233b;padding:12px 18px;position:sticky;top:0;display:flex;gap:16px;align-items:center;border-bottom:1px solid #334155}
+header h1{font-size:16px;margin:0}.muted{color:#94a3b8}
+main{padding:18px;max-width:1200px;margin:0 auto}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
+th{color:#94a3b8;position:sticky;top:56px;background:#0f172a}
+select,textarea,input{background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-family:inherit}
+textarea{width:100%;min-height:38px}
+button{background:#0ea5e9;color:#06283b;border:0;border-radius:6px;padding:9px 16px;font-weight:600;cursor:pointer}
+button.sec{background:#273449;color:#e2e8f0;border:1px solid #334155;font-weight:400}
+.req{border-color:#ef4444!important}.badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#334155}
+.bar{position:sticky;bottom:0;background:#16233b;border-top:1px solid #334155;padding:10px 18px;display:flex;gap:10px;align-items:center}
+.saved{color:#22c55e;font-size:12px}
+</style></head><body>
+<header><h1>UAT Test Sheet</h1><span class="muted" id="hdr"></span></header>
+<main>
+  <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
+  <table id="tbl"><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th style="width:140px">Status</th><th>Comment</th></tr></thead><tbody id="tb"></tbody></table>
+  <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Add ad-hoc test</button></p>
+</main>
+<div class="bar"><button onclick="saveJSON()">⬇ Save results (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
+<script>
+const DATA=${dataJson};
+const LSK="mceu_tester_"+DATA.iterationId+"_"+DATA.testerId;
+let rows=[], adhoc=[];
+function init(){
+  document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · "+DATA.testerName;
+  const saved=JSON.parse(localStorage.getItem(LSK)||"null");
+  rows=DATA.tests.map(t=>{const s=saved&&saved.results&&saved.results.find(r=>r.id===t.id);return {...t,status:s?s.status:t.status,comment:s?s.comment:t.comment};});
+  adhoc=(saved&&saved.adhoc)||[];
+  render();
+}
+function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.requiresComment;}
+function render(){
+  const tb=document.getElementById("tb"); tb.innerHTML="";
+  rows.forEach((t,i)=>tb.appendChild(rowEl(t,i,false)));
+  adhoc.forEach((t,i)=>tb.appendChild(rowEl(t,i,true)));
+  updateProg();
+}
+function rowEl(t,i,isAd){
+  const tr=document.createElement("tr");
+  const opts=DATA.statuses.map(s=>'<option '+(s.value===t.status?'selected':'')+'>'+s.value+'</option>').join("");
+  const entOpts=DATA.entities.map(e=>'<option '+(e===t.entity?'selected':'')+'>'+e+'</option>').join("");
+  tr.innerHTML='<td>'+(isAd?'<input value="'+(t.process||'')+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
+    '<td>'+(isAd?'<input value="'+(t.scenario||'')+'" data-k="scenario" style="width:100%"/>':esc(t.scenario))+'</td>'+
+    '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||'')+'</span>'))+'</td>'+
+    '<td><select data-k="status">'+opts+'</select></td>'+
+    '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?'required…':'optional')+'">'+esc(t.comment||'')+'</textarea></td>';
+  const arr=isAd?adhoc:rows;
+  tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{arr[i][el.dataset.k]=el.value; if(el.dataset.k==="status"){el.closest("tr").querySelector('textarea').className=reqComment(el.value)&&!arr[i].comment?'req':'';} autosave(); updateProg();}));
+  return tr;
+}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function addAdhoc(){adhoc.push({process:"",scenario:"",entity:DATA.entities[0]||"",status:DATA.statuses[0].value,comment:""});render();}
+function autosave(){localStorage.setItem(LSK,JSON.stringify(payloadOut()));document.getElementById("savedMsg").textContent="auto-saved ✓";setTimeout(()=>document.getElementById("savedMsg").textContent="",1500);}
+function updateProg(){const done=rows.filter(r=>r.status&&r.status!=="Not started").length;document.getElementById("prog").textContent=done+" / "+rows.length+" done";}
+function payloadOut(){return {_type:"MCEU_TESTER_RESULTS",iterationId:DATA.iterationId,testerId:DATA.testerId,testerName:DATA.testerName,
+  results:rows.map(r=>({id:r.id,status:r.status,comment:r.comment,testDate:r.testDate})),
+  adhoc:adhoc.filter(a=>a.process||a.scenario).map(a=>({process:a.process,scenario:a.scenario,entity:a.entity,status:a.status,comment:a.comment}))};}
+function saveJSON(){
+  const bad=rows.concat(adhoc).filter(r=>reqComment(r.status)&&!(r.comment||"").trim());
+  if(bad.length && !confirm(bad.length+" test(s) are Failed/Blocked without a comment. Save anyway?"))return;
+  const b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="results_"+DATA.testerName.replace(/\\W+/g,'_')+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();
+}
+init();
+<\/script></body></html>`;
+}
+function importTesterResults(input){
+  const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_TESTER_RESULTS"){alert("Not a tester results file.");return;}
+    let upd=0,add=0;
+    (p.results||[]).forEach(res=>{ const ex=S.executions.find(x=>x.id===res.id);
+      if(ex){ ex.status=res.status; ex.comment=res.comment||""; ex.testDate=res.testDate||ex.testDate; ex.updatedAt=new Date().toISOString(); upd++; } });
+    (p.adhoc||[]).forEach(a=>{ S.executions.push({id:uid(),iterationId:p.iterationId,libraryItemId:null,process:a.process||"(ad-hoc)",scenario:a.scenario||"",domain:"",
+      entity:a.entity||"",testerId:p.testerId,status:a.status||"Not started",comment:a.comment||"",recurrence:"",testDate:"",adhoc:true,updatedAt:new Date().toISOString()}); add++; });
+    renderAll(); save(); alert(`Results merged for ${esc(p.testerName||"tester")}: ${upd} updated, ${add} ad-hoc added.`);
+  }catch(err){ alert("Invalid file."); } };
+  r.readAsText(f);
+}
+
+/* =========================================================================
+   ADMIN — config + import/export
+   ========================================================================= */
+function renderAdmin(){
+  const m=S.config.columnMapping;
+  $("#view-admin").innerHTML=`
+    <h2>Admin</h2>
+    <p class="sub">Configuration, plus all import/export operations.</p>
+
+    <div class="card"><b>Campaign</b>
+      <div class="field" style="margin-top:8px;max-width:420px"><label>Campaign name</label><input value="${esc(S.config.campaignName)}" onchange="S.config.campaignName=this.value;persist()"/></div>
+    </div>
+
+    <div class="split">
+      <div class="card"><b>Entities (countries)</b>
+        <table><thead><tr><th>Code</th><th>Label</th><th>Color</th><th></th></tr></thead><tbody>
+        ${S.config.entities.map((en,i)=>`<tr><td><input value="${esc(en.code)}" style="width:60px" onchange="S.config.entities[${i}].code=this.value;persist()"/></td><td><input value="${esc(en.label)}" onchange="S.config.entities[${i}].label=this.value;persist()"/></td><td><input type="color" value="${en.color}" onchange="S.config.entities[${i}].color=this.value;persist()"/></td><td><button class="sm danger" onclick="S.config.entities.splice(${i},1);persist()">✕</button></td></tr>`).join("")}
+        </tbody></table><button class="sm" onclick="S.config.entities.push({code:'XX',label:'New',color:'#38bdf8'});persist()">+ Entity</button>
+      </div>
+      <div class="card"><b>Statuses</b>
+        <table><thead><tr><th>Value</th><th>Color</th><th>Comment req.</th><th></th></tr></thead><tbody>
+        ${S.config.statuses.map((s,i)=>`<tr><td><input value="${esc(s.value)}" onchange="S.config.statuses[${i}].value=this.value;persist()"/></td><td><input type="color" value="${s.color}" onchange="S.config.statuses[${i}].color=this.value;persist()"/></td><td style="text-align:center"><input type="checkbox" ${s.requiresComment?'checked':''} onchange="S.config.statuses[${i}].requiresComment=this.checked;persist()"/></td><td><button class="sm danger" onclick="S.config.statuses.splice(${i},1);persist()">✕</button></td></tr>`).join("")}
+        </tbody></table><button class="sm" onclick="S.config.statuses.push({value:'New',color:'#64748b',requiresComment:false});persist()">+ Status</button>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="card"><b>Departments</b><div class="field" style="margin-top:8px"><textarea onchange="S.config.departments=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.departments.join("\n"))}</textarea><div class="hint">One per line.</div></div></div>
+      <div class="card"><b>Recurrences</b><div class="field" style="margin-top:8px"><textarea onchange="S.config.recurrences=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.recurrences.join("\n"))}</textarea><div class="hint">One per line.</div></div></div>
+    </div>
+
+    <div class="card"><b>DevOps import column mapping</b>
+      <p class="hint">Library dedup is based on <code>process</code> (col H) × <code>scenario</code> (col I); <code>tester</code> reads col E.</p>
+      <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      ${Object.keys(m).map(k=>`<div class="field"><label>${esc(k)}</label><input value="${esc(m[k])}" onchange="S.config.columnMapping['${k}']=this.value;persist()"/></div>`).join("")}
+      </div>
+    </div>
+
+    <div class="card"><b>Import / Export</b>
+      <div class="cards" style="margin-top:8px">
+        <label class="pill" style="cursor:pointer">⬆ Import DevOps .xlsx (Library)<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label>
+        <input id="impSheet" value="LUX" title="sheet name" style="width:70px"/>
+        <button class="primary" onclick="exportJSON()">⬇ Full backup (JSON)</button>
+        <label class="pill" style="cursor:pointer">⬆ Restore backup<input type="file" accept=".json" style="display:none" onchange="importJSON(this)"/></label>
+        <button class="primary" onclick="exportReport()">⬇ Excel report</button>
+      </div>
+    </div>
+
+    <div class="card"><b>Reset</b>
+      <button class="danger" onclick="if(confirm('Erase everything and start over?')){localStorage.removeItem(LS_KEY);location.reload();}">Reset application</button>
+    </div>`;
+}
+
+/* =========================================================================
+   IMPORT / EXPORT
+   ========================================================================= */
+function download(name,content,type){ const b=new Blob([content],{type:type||"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+function exportJSON(){ download(`MCEU_UAT_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(S,null,2)); }
+function importJSON(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ S=migrate(JSON.parse(e.target.result)); renderAll(); save(); alert("Backup restored."); }catch(err){ alert("Invalid file."); } }; r.readAsText(f); }
+function exportReport(){
+  const data=S.executions.map(e=>{const it=S.iterations.find(i=>i.id===e.iterationId)||{};const t=tester(e.testerId)||{};
+    return {Iteration:it.name||"",PRC:e.process||"",Scenario:e.scenario||"",Domain:e.domain||"",Entity:e.entity,
+      Tester:t.name||"",TesterCountry:t.country||"",Status:e.status,Recurrence:e.recurrence||"",TestDate:e.testDate||"",
+      BusinessComment:e.comment||"",AdHoc:e.adhoc?"yes":""};});
+  const ws=XLSX.utils.json_to_sheet(data.length?data:[{Info:"No execution"}]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"UAT Report");
+  XLSX.writeFile(wb,`MCEU_UAT_report_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+/* startup */
+renderAll(); go("dashboard");
+</script>
+</body>
+</html>
