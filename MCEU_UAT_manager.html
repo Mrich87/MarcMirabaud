@@ -477,8 +477,8 @@ function cleanTitle(t){
   let s=String(t||"");
   s=s.replace(/^\s*[A-Za-z0-9_]*\d+\s*:\s*/,"");          // work-item id prefix "278124 : " / "P1_278033 : "
   s=s.replace(/\bP\d+_(?=[A-Za-z])/g,"");                 // phase tag  P3_ADV_093 -> ADV_093
-  s=s.replace(/^\s*PRC-\d+(?:[-_.]\d+)*\s*/i,"");         // leading PRC code token (shown as a chip instead)
-  s=s.replace(/^\s*\(\s*\d+\s*\/\s*\w+\s*\)\s*/,"");      // leading step index "(01/08)"
+  s=s.replace(/^\s*PRC-\d+(?:[-_.]\d+)*\s*/i,"");        // leading PRC code token (shown as a chip instead)
+  s=s.replace(/^\s*\(?\s*\d+\s*\/\s*\w+\s*\)?\s*/,"");   // leading step index, "(01/08)" or bare "02/X"
   s=s.replace(/^\s*\d+\s*-\s*/,"");                       // leading catalogue index "14- "
   s=s.replace(/\s*-{2,}\s*/g," - ").replace(/\s{2,}/g," ");
   return s.replace(/^[\s\-_:–•.]+|[\s\-_:–•.]+$/g,"").trim();
@@ -491,7 +491,9 @@ function prcOf(c){
 }
 /* Execution step number parsed from the "(NN/MM)" index in the test-point text. */
 function stepNoOf(c){
-  const m=String(c.subVariant||c.title||"").match(/\(\s*(\d+)\s*\/\s*\w+\s*\)/);
+  const s=String(c.subVariant||c.title||"");
+  let m=s.match(/\(\s*(\d+)\s*\/\s*\w+\s*\)/);                       // "(01/08)"
+  if(!m) m=s.match(/\bPRC-\d+(?:[-_.]\d+)*\s+(\d+)\s*\/\s*\w+/i);    // "PRC-139-04-01 02/X"
   return m?parseInt(m[1],10):null;
 }
 let displayedTC=[];   // ids of currently displayed catalog rows (for reorder)
