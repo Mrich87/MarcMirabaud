@@ -342,7 +342,7 @@ function moveLib(id,dir){ const ids=libDisplayedIds(); const idx=ids.indexOf(Str
   if(idx<0||j<0||j>=ids.length)return; const a=libById(ids[idx]),b=libById(ids[j]); const t=a.order;a.order=b.order;b.order=t; persist(); }
 function resetLibOrder(){ let n=0; sortedLib(S.library).forEach(c=>c.order=++n); persist(); }
 function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterId:"",notes:"",steps:[]}; S.library.push(c); save(); editLibItem(c.id); }
-function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)"}; S.library.push(c); persist(); }
+function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)",steps:(o.steps||[]).slice()}; S.library.push(c); persist(); }
 function editLibItem(id){ const c=libById(id);
   modal(`<h2>Edit library definition</h2>
     <div class="row" style="margin-top:4px">
@@ -405,13 +405,14 @@ function importDevops(input){
    ========================================================================= */
 let trkFilter={entity:"",tester:"",status:"",process:"",q:""};
 let loadSel={domain:"",process:""};
+let campSec={iter:true,testers:false,load:null,track:true}; /* remembered open/closed state per section */
 function renderCampaign(){
   const iter=activeIter(); const ex=iterExecs();
   $("#view-campaign").innerHTML=`
     <h2>Campaign — ${esc(iter?iter.name:"—")}</h2>
     <p class="sub">Manage iterations and testers, load Library definitions into the active iteration, dispatch them across entities and testers, track execution, and generate per-tester pages.</p>
 
-    <details class="sec" open><summary>Iterations</summary>
+    <details class="sec" ${campSec.iter?'open':''} ontoggle="campSec.iter=this.open"><summary>Iterations</summary>
       <div class="card">
         <table><thead><tr><th>Name</th><th>Start</th><th>End</th><th>Assigned</th><th>Progress</th><th></th></tr></thead><tbody>
         ${S.iterations.map(it=>{const e=S.executions.filter(x=>x.iterationId===it.id);return `<tr><td><b>${esc(it.name)}</b> ${it.id===S.activeIterationId?'<span class="tag">active</span>':''}</td><td>${esc(it.startDate||"—")}</td><td>${esc(it.endDate||"—")}</td><td>${e.length}</td><td style="min-width:160px">${progressBar(e)}</td><td><button class="sm" onclick="editIter('${it.id}')">Edit</button> ${S.iterations.length>1?`<button class="sm danger" onclick="delIter('${it.id}')">✕</button>`:''}</td></tr>`;}).join("")}
@@ -420,7 +421,7 @@ function renderCampaign(){
       </div>
     </details>
 
-    <details class="sec"><summary>Testers (${S.testers.length})</summary>
+    <details class="sec" ${campSec.testers?'open':''} ontoggle="campSec.testers=this.open"><summary>Testers (${S.testers.length})</summary>
       <div class="card">
         <p class="hint">Each tester has a <b>Country (LU/FR/SP/UK)</b> to ease dispatch. Auto-created from the DevOps TesterName column on import.</p>
         <table><thead><tr><th>Name</th><th>Email</th><th>Country</th><th>Department</th><th></th></tr></thead><tbody>
@@ -435,11 +436,11 @@ function renderCampaign(){
       </div>
     </details>
 
-    <details class="sec" ${ex.length===0?'open':''}><summary>Load Library → this iteration & dispatch</summary>
+    <details class="sec" ${(campSec.load==null?ex.length===0:campSec.load)?'open':''} ontoggle="campSec.load=this.open"><summary>Load Library → this iteration & dispatch</summary>
       <div class="card">${renderLoadPanel()}</div>
     </details>
 
-    <details class="sec" open><summary>Execution tracking (${ex.length})</summary>
+    <details class="sec" ${campSec.track?'open':''} ontoggle="campSec.track=this.open"><summary>Execution tracking (${ex.length})</summary>
       <div class="card">
         <div class="toolbar">
           <input placeholder="🔍 search…" value="${esc(trkFilter.q)}" oninput="trkFilter.q=this.value;renderCampaign()" style="min-width:180px"/>
