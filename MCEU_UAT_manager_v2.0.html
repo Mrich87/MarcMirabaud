@@ -79,6 +79,10 @@
   .combo-list{position:absolute;z-index:60;left:0;right:0;top:100%;margin-top:2px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;max-height:240px;overflow:auto;display:none;box-shadow:0 10px 26px rgba(0,0,0,.45);min-width:170px}
   .combo-opt{padding:6px 9px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .combo-opt:hover{background:var(--accent2);color:#06283b}
+  .steptoggle{color:var(--accent);cursor:pointer;font-size:12px;user-select:none;white-space:nowrap}
+  .steplist{margin:4px 0 2px;padding-left:20px}
+  .steplist li{margin:2px 0}
+  .steprow>td{background:var(--chip)}
 </style>
 </head>
 <body>
@@ -292,6 +296,8 @@ function renderDashboard(){
    LIBRARY — reusable PRC x Scenario definitions
    ========================================================================= */
 let libFilter={q:"",domain:"",process:""};
+let libExpanded=new Set();
+function toggleLibSteps(id){ id=String(id); if(libExpanded.has(id))libExpanded.delete(id); else libExpanded.add(id); renderLibrary(); }
 function sortedLib(list){ return list.slice().sort((a,b)=>(a.order||0)-(b.order||0)||naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))); }
 function renderLibrary(){
   const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
@@ -319,14 +325,14 @@ function renderLibrary(){
     <table>
       <thead><tr><th style="width:120px">Order</th><th>PRC (process)</th><th>Scenario</th><th>Domain</th><th>Default tester</th><th style="width:110px"></th></tr></thead>
       <tbody>
-      ${rows.map(c=>`<tr>
+      ${rows.map(c=>{const steps=c.steps||[];const open=libExpanded.has(String(c.id));return `<tr>
         <td><div class="ord"><button onclick="moveLib('${c.id}',-1)">▲</button><input type="number" value="${c.order||0}" onchange="setLibOrder('${c.id}',this.value)"/><button onclick="moveLib('${c.id}',1)">▼</button></div></td>
         <td><b>${esc(c.process)}</b></td>
-        <td>${esc(c.scenario)}</td>
+        <td>${esc(c.scenario)}${steps.length?` <span class="steptoggle" onclick="toggleLibSteps('${c.id}')">${open?'▾':'▸'} ${steps.length} step${steps.length>1?'s':''}</span>`:''}</td>
         <td>${esc(c.domain)}</td>
         <td class="muted">${esc(testerName(c.defaultTesterId))}</td>
         <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button></td>
-      </tr>`).join("")}
+      </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(s)}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
       </tbody>
     </table>`}`;
 }
@@ -335,7 +341,7 @@ function setLibOrder(id,v){ const c=libById(id); if(c){c.order=parseInt(v)||0; p
 function moveLib(id,dir){ const ids=libDisplayedIds(); const idx=ids.indexOf(String(id)); const j=idx+dir;
   if(idx<0||j<0||j>=ids.length)return; const a=libById(ids[idx]),b=libById(ids[j]); const t=a.order;a.order=b.order;b.order=t; persist(); }
 function resetLibOrder(){ let n=0; sortedLib(S.library).forEach(c=>c.order=++n); persist(); }
-function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterId:"",notes:""}; S.library.push(c); save(); editLibItem(c.id); }
+function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterId:"",notes:"",steps:[]}; S.library.push(c); save(); editLibItem(c.id); }
 function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)"}; S.library.push(c); persist(); }
 function editLibItem(id){ const c=libById(id);
   modal(`<h2>Edit library definition</h2>
@@ -348,12 +354,14 @@ function editLibItem(id){ const c=libById(id);
       <div class="field" style="flex:1"><label>Default tester</label>${tCombo('libTester',c.defaultTesterId,"",{hidden:'l_tester',emptyLabel:'— none —',width:'100%'})}</div>
       <div class="field"><label>Order</label><input type="number" id="l_order" value="${c.order||0}"/></div>
     </div>
+    <div class="field" style="margin-top:8px"><label>Steps to follow (one per line)</label><textarea id="l_steps" style="min-height:96px" placeholder="Step 1&#10;Step 2&#10;…">${esc((c.steps||[]).join("\n"))}</textarea><div class="hint">Pre-filled by the coordinator. The tester can expand the test case to view these steps.</div></div>
     <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="l_notes">${esc(c.notes||"")}</textarea></div>
     <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delLibItem('${c.id}')">Delete</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveLibItem('${c.id}')">Save</button></div>`);
 }
 function saveLibItem(id){ const c=libById(id);
   c.process=$("#l_proc").value;c.domain=$("#l_dom").value;c.scenario=$("#l_scen").value;
   c.defaultTesterId=$("#l_tester").value;c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;
+  c.steps=$("#l_steps").value.split("\n").map(x=>x.trim()).filter(Boolean);
   closeModal(); persist(); }
 function delLibItem(id){ if(!confirm("Delete this definition?"))return; S.library=S.library.filter(c=>String(c.id)!==String(id)); closeModal(); persist(); }
 
@@ -471,7 +479,7 @@ function loadIntoIteration(){
     if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&e.entity===ent)) return;
     const testerId=formTester||c.defaultTesterId||"";
     S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
-      entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
+      steps:(c.steps||[]).slice(),entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
     created++;
   }));
   persist(); alert(created+" execution(s) added to "+activeIter().name+".");
@@ -483,21 +491,20 @@ function renderTrackingTable(){
     (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase())));
   ex=ex.sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
   if(ex.length===0) return '<div class="empty">No execution in this iteration yet — load Library definitions above.</div>';
-  return `<table><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th>Tester</th><th style="width:130px">Status</th><th style="width:140px">Test date</th><th>Business comment</th><th></th></tr></thead><tbody>
+  return `<table><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th>Tester</th><th style="width:130px">Status</th><th style="width:150px">Execution due date</th><th>Business comment</th><th></th></tr></thead><tbody>
     ${ex.map(e=>{const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.comment;return `<tr>
       <td>${esc(e.process)}${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td>
       <td><textarea style="min-height:36px" title="Edit the scenario text — it is used as-is in the generated tester HTML" oninput="setExec('${e.id}','scenario',this.value)">${esc(e.scenario)}</textarea></td>
       <td><select onchange="setExec('${e.id}','entity',this.value)">${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
       <td>${tCombo('row_'+e.id,e.testerId,"setExec('"+e.id+"','testerId',v)",{emptyLabel:'—',width:'100%'})}</td>
       <td><select onchange="setExec('${e.id}','status',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
-      <td><input type="date" value="${esc(e.testDate||'')}" title="Execution date" onchange="setExec('${e.id}','testDate',this.value)"/></td>
+      <td><input type="date" value="${esc(e.testDate||'')}" title="Execution due date (set by coordinator, read-only for the tester)" onchange="setExec('${e.id}','testDate',this.value)"/></td>
       <td><textarea style="min-height:36px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setExec('${e.id}','comment',this.value)">${esc(e.comment)}</textarea>${need?'<div class="hint" style="color:#ef4444">required</div>':''}</td>
       <td><button class="sm danger" onclick="delExec('${e.id}')">✕</button></td></tr>`;}).join("")}
     </tbody></table>`;
 }
 function setExec(id,field,val){ const e=S.executions.find(x=>x.id===id); if(!e)return;
   e[field]=val; e.updatedAt=new Date().toISOString();
-  if(field==="status"&&val!=="Not started"&&!e.testDate) e.testDate=new Date().toISOString().slice(0,10);
   if(field==="comment"||field==="scenario"){ save(); return; }   // don't re-render on each keystroke
   persist(); }
 function delExec(id){ S.executions=S.executions.filter(x=>x.id!==id); persist(); }
@@ -537,7 +544,8 @@ function genTesterPage(){
   const t=tester(testerId)||{name:"Tester",country:""};
   const list=S.executions.filter(e=>e.iterationId===iter.id&&e.testerId===testerId&&(!entFilter||e.entity===entFilter))
     .sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)))
-    .map(e=>({id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||""}));
+    .map(e=>({id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||"",
+              steps:(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]))}));
   if(!list.length){ alert("No test assigned to this tester for this iteration/entity."); return; }
   const payload={campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,testerId,testerName:t.name,
     entities:S.config.entities.map(x=>x.code),statuses:S.config.statuses,tests:list};
@@ -563,24 +571,33 @@ button.sec{background:#273449;color:#e2e8f0;border:1px solid #334155;font-weight
 .req{border-color:#ef4444!important}.badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#334155}
 .bar{position:sticky;bottom:0;background:#16233b;border-top:1px solid #334155;padding:10px 18px;display:flex;gap:10px;align-items:center}
 .saved{color:#22c55e;font-size:12px}
+.stepToggle{color:#38bdf8;cursor:pointer;font-size:12px;user-select:none;white-space:nowrap}
+.steprow>td{background:#0b1220}
+ol.steps{margin:4px 0;padding-left:22px}
+ol.steps li{margin:3px 0}
+.duedate{white-space:nowrap}
 </style></head><body>
 <header><h1>UAT Test Sheet</h1><span class="muted" id="hdr"></span></header>
 <main>
-  <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
+  <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test case (▸&nbsp;steps) to view the steps to follow. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
   <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
     <label class="muted" for="procFilter">Process</label>
     <select id="procFilter" onchange="render()"><option value="">— All —</option></select>
     <span class="muted" id="shownCount"></span>
   </div>
-  <table id="tbl"><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th style="width:140px">Status</th><th style="width:150px;cursor:pointer;user-select:none" title="Click to sort by execution date" onclick="toggleSort()">Test date <span id="sortArrow"></span></th><th>Comment</th></tr></thead><tbody id="tb"></tbody></table>
+  <table id="tbl"><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th style="width:140px">Status</th><th style="width:160px;cursor:pointer;user-select:none" title="Click to sort by execution due date" onclick="toggleSort()">Execution due date <span id="sortArrow"></span></th><th>Comment</th></tr></thead><tbody id="tb"></tbody></table>
   <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Add ad-hoc test</button></p>
 </main>
 <div class="bar"><button onclick="saveJSON()">⬇ Save results (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
 <script>
 const DATA=${dataJson};
 const LSK="mceu_tester_"+DATA.iterationId+"_"+DATA.testerId;
-let rows=[], adhoc=[], sortDir=0; /* 0=as-loaded, 1=date asc, -1=date desc */
+let rows=[], adhoc=[], sortDir=0, expanded=new Set(); /* 0=as-loaded, 1=date asc, -1=date desc */
 function toggleSort(){ sortDir = sortDir===1?-1:(sortDir===-1?0:1); render(); }
+function toggleSteps(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); render(); }
+function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow";
+  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ol></td>';
+  return tr; }
 function init(){
   document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · "+DATA.testerName;
   const saved=JSON.parse(localStorage.getItem(LSK)||"null");
@@ -603,7 +620,8 @@ function render(){
   if(sortDir!==0){ list.sort((a,b)=>{ const da=a.t.testDate||"", db=b.t.testDate||"";
     if(!da&&!db) return 0; if(!da) return 1; if(!db) return -1;   /* undated rows last */
     return da<db ? -sortDir : (da>db ? sortDir : 0); }); }
-  list.forEach(it=>tb.appendChild(rowEl(it.t,it.i,it.isAd)));
+  list.forEach(it=>{ tb.appendChild(rowEl(it.t,it.i,it.isAd));
+    if(!it.isAd && it.t.steps && it.t.steps.length && expanded.has(it.t.id)) tb.appendChild(stepRowEl(it.t)); });
   const ar=document.getElementById("sortArrow"); if(ar) ar.textContent=sortDir===1?"▲":sortDir===-1?"▼":"";
   const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" shown"):"";
   updateProg();
@@ -612,16 +630,17 @@ function rowEl(t,i,isAd){
   const tr=document.createElement("tr");
   const opts=DATA.statuses.map(s=>'<option '+(s.value===t.status?'selected':'')+'>'+s.value+'</option>').join("");
   const entOpts=DATA.entities.map(e=>'<option '+(e===t.entity?'selected':'')+'>'+e+'</option>').join("");
+  const nSteps=(!isAd && t.steps)?t.steps.length:0;
+  const stepTog=nSteps?' <span class="stepToggle" onclick="toggleSteps(\''+t.id+'\')">'+(expanded.has(t.id)?'▾':'▸')+' steps ('+nSteps+')</span>':'';
   tr.innerHTML='<td>'+(isAd?'<input value="'+(t.process||'')+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
-    '<td>'+(isAd?'<input value="'+(t.scenario||'')+'" data-k="scenario" style="width:100%"/>':esc(t.scenario))+'</td>'+
+    '<td>'+(isAd?'<input value="'+(t.scenario||'')+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+stepTog))+'</td>'+
     '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||'')+'</span>'))+'</td>'+
     '<td><select data-k="status">'+opts+'</select></td>'+
-    '<td><input type="date" data-k="testDate" value="'+esc(t.testDate||'')+'"/></td>'+
+    '<td class="duedate">'+(t.testDate?esc(t.testDate):'<span class="muted">—</span>')+'</td>'+
     '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?'required…':'optional')+'">'+esc(t.comment||'')+'</textarea></td>';
   const arr=isAd?adhoc:rows;
   tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{arr[i][el.dataset.k]=el.value;
-    if(el.dataset.k==="status"){ el.closest("tr").querySelector('textarea').className=reqComment(el.value)&&!arr[i].comment?'req':'';
-      if(el.value&&el.value!=="Not started"&&!arr[i].testDate){ arr[i].testDate=new Date().toISOString().slice(0,10); const d=el.closest("tr").querySelector('input[type=date]'); if(d)d.value=arr[i].testDate; } }
+    if(el.dataset.k==="status"){ el.closest("tr").querySelector('textarea').className=reqComment(el.value)&&!arr[i].comment?'req':''; }
     autosave(); updateProg();}));
   return tr;
 }
