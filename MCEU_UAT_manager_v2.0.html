@@ -632,7 +632,7 @@ function rowEl(t,i,isAd){
   const opts=DATA.statuses.map(s=>'<option '+(s.value===t.status?'selected':'')+'>'+s.value+'</option>').join("");
   const entOpts=DATA.entities.map(e=>'<option '+(e===t.entity?'selected':'')+'>'+e+'</option>').join("");
   const nSteps=(!isAd && t.steps)?t.steps.length:0;
-  const stepTog=nSteps?' <span class="stepToggle" onclick="toggleSteps(\''+t.id+'\')">'+(expanded.has(t.id)?'▾':'▸')+' steps ('+nSteps+')</span>':'';
+  const stepTog=nSteps?' <span class="stepToggle" onclick="toggleSteps(\\''+t.id+'\\')">'+(expanded.has(t.id)?'▾':'▸')+' steps ('+nSteps+')</span>':'';
   tr.innerHTML='<td>'+(isAd?'<input value="'+(t.process||'')+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
     '<td>'+(isAd?'<input value="'+(t.scenario||'')+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+stepTog))+'</td>'+
     '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||'')+'</span>'))+'</td>'+
