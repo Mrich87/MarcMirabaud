@@ -74,6 +74,11 @@
   details.sec>summary::before{content:"▸ ";color:var(--accent)}
   details.sec[open]>summary::before{content:"▾ "}
   .stickyhead{position:sticky;top:88px;background:var(--bg);padding:6px 0;z-index:2}
+  .combo{position:relative;display:inline-block;vertical-align:top}
+  .combo .combo-in{width:100%}
+  .combo-list{position:absolute;z-index:60;left:0;right:0;top:100%;margin-top:2px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;max-height:240px;overflow:auto;display:none;box-shadow:0 10px 26px rgba(0,0,0,.45);min-width:170px}
+  .combo-opt{padding:6px 9px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .combo-opt:hover{background:var(--accent2);color:#06283b}
 </style>
 </head>
 <body>
@@ -159,6 +164,55 @@ const libById = id => S.library.find(c=>String(c.id)===String(id));
 const naturalKey = s => String(s||"").toLowerCase().replace(/\d+/g, m=>m.padStart(10,"0"));
 const iterExecs = (iterId) => S.executions.filter(e=>e.iterationId===(iterId||S.activeIterationId));
 function badge(text,color){ return `<span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}66">${esc(text)}</span>`; }
+
+/* =========================================================================
+   SEARCHABLE TESTER COMBOBOX — sorted by name + type-to-filter.
+   Drop-in replacement for the old unsorted <select> tester dropdowns.
+   tCombo(key,value,onpick,opts) returns HTML. onpick is a JS snippet run on
+   pick with the chosen id available as `v`. opts: {allowEmpty,emptyLabel,
+   placeholder,width,hidden}. When `hidden` is set, the picked id is mirrored
+   into a hidden <input id=hidden> so existing $("#id").value reads keep working.
+   ========================================================================= */
+const _combos={};
+const jsq = s => String(s==null?"":s).replace(/\\/g,"\\\\").replace(/'/g,"\\'");
+function tCombo(key,value,onpick,o){
+  o=o||{};
+  const list=S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  const items=[];
+  if(o.allowEmpty!==false) items.push({v:"",l:o.emptyLabel||"—"});
+  list.forEach(t=>items.push({v:t.id,l:t.name+(t.country?" ("+t.country+")":"")}));
+  _combos[key]={items,onpick:onpick||"",value:String(value||"")};
+  const sel=items.find(it=>String(it.v)===String(value||""));
+  const w=o.width||"200px";
+  const hid=o.hidden?`<input type="hidden" id="${o.hidden}" value="${esc(value||"")}"/>`:"";
+  return `<span class="combo" style="width:${w}" data-key="${esc(key)}">${hid}`+
+    `<input class="combo-in" autocomplete="off" placeholder="${esc(o.placeholder||"🔍 search tester…")}" value="${esc(sel?sel.l:"")}" `+
+    `onfocus="comboOpen('${jsq(key)}',this)" oninput="comboFilter('${jsq(key)}',this)" onkeydown="comboKey('${jsq(key)}',this,event)" onblur="comboBlur('${jsq(key)}')"/>`+
+    `<div class="combo-list" id="cl_${esc(key)}"></div></span>`;
+}
+function comboItems(key,q){ const c=_combos[key]; if(!c)return [];
+  q=(q||"").toLowerCase().trim();
+  return c.items.filter(it=> q ? (it.v!=="" && it.l.toLowerCase().includes(q)) : true); }
+function comboPaint(key,q){ const c=_combos[key],box=document.getElementById("cl_"+key); if(!c||!box)return;
+  const list=comboItems(key,q);
+  box.innerHTML=list.map(it=>`<div class="combo-opt" onmousedown="comboPick('${jsq(key)}','${jsq(it.v)}')">${esc(it.l)}</div>`).join("")||'<div class="combo-opt muted">no match</div>';
+  box.style.display="block"; }
+function comboOpen(key,inp){ comboPaint(key,""); if(inp.select)inp.select(); }
+function comboFilter(key,inp){ comboPaint(key,inp.value); }
+function comboBlur(key){ setTimeout(()=>{
+  const b=document.getElementById("cl_"+key); if(b)b.style.display="none";
+  const c=_combos[key],wrap=document.querySelector('.combo[data-key="'+key+'"]');
+  if(c&&wrap){ const it=c.items.find(x=>String(x.v)===String(c.value))||{l:""}; const inp=wrap.querySelector(".combo-in");
+    if(inp&&document.activeElement!==inp) inp.value=it.l; }
+},150); }
+function comboKey(key,inp,ev){ if(ev.key==="Enter"){ ev.preventDefault(); const l=comboItems(key,inp.value); if(l.length)comboPick(key,l[0].v); }
+  else if(ev.key==="Escape"){ const b=document.getElementById("cl_"+key); if(b)b.style.display="none"; } }
+function comboPick(key,v){ const c=_combos[key]; if(!c)return; c.value=String(v||"");
+  const it=c.items.find(x=>String(x.v)===String(v))||{v:"",l:""};
+  const wrap=document.querySelector('.combo[data-key="'+key+'"]');
+  if(wrap){ wrap.querySelector(".combo-in").value=it.l; const h=wrap.querySelector('input[type=hidden]'); if(h)h.value=v; }
+  const box=document.getElementById("cl_"+key); if(box)box.style.display="none";
+  if(c.onpick){ try{ new Function("v",c.onpick)(v); }catch(e){ console.error("combo onpick",e); } } }
 
 /* =========================================================================
    NAVIGATION — 4 tabs
@@ -257,7 +311,8 @@ function renderLibrary(){
       <select onchange="libFilter.process=this.value;renderLibrary()"><option value="">All PRC</option>${procs.map(p=>`<option ${libFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
       <div class="spacer"></div><span class="muted">${rows.length} shown</span>
       <button class="sm" onclick="resetLibOrder()">↕ Reset order</button>
-      <button class="sm" onclick="newLibItem()">+ New</button>
+      <button class="sm" onclick="newLibItem()">+ New PRC</button>
+      <button class="sm" onclick="exportLibrary()">⬇ Export .xlsx</button>
       <label class="pill" style="cursor:pointer">⬆ Import .xlsx<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label>
       <input id="impSheet" value="LUX" title="sheet name" style="width:70px"/>
     </div>
@@ -290,7 +345,7 @@ function editLibItem(id){ const c=libById(id);
     </div>
     <div class="field" style="margin-top:8px"><label>Scenario</label><input id="l_scen" value="${esc(c.scenario)}"/></div>
     <div class="row" style="margin-top:8px">
-      <div class="field" style="flex:1"><label>Default tester</label><select id="l_tester"><option value="">—</option>${S.testers.map(t=>`<option value="${t.id}" ${t.id===c.defaultTesterId?'selected':''}>${esc(t.name)}</option>`).join("")}</select></div>
+      <div class="field" style="flex:1"><label>Default tester</label>${tCombo('libTester',c.defaultTesterId,"",{hidden:'l_tester',emptyLabel:'— none —',width:'100%'})}</div>
       <div class="field"><label>Order</label><input type="number" id="l_order" value="${c.order||0}"/></div>
     </div>
     <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="l_notes">${esc(c.notes||"")}</textarea></div>
@@ -381,7 +436,7 @@ function renderCampaign(){
         <div class="toolbar">
           <input placeholder="🔍 search…" value="${esc(trkFilter.q)}" oninput="trkFilter.q=this.value;renderCampaign()" style="min-width:180px"/>
           <select onchange="trkFilter.entity=this.value;renderCampaign()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${trkFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>
-          <select onchange="trkFilter.tester=this.value;renderCampaign()"><option value="">All testers</option>${S.testers.map(t=>`<option value="${t.id}" ${trkFilter.tester===t.id?'selected':''}>${esc(t.name)}</option>`).join("")}</select>
+          ${tCombo('trkTester',trkFilter.tester,"trkFilter.tester=v;renderCampaign()",{emptyLabel:'All testers',placeholder:'🔍 all testers…',width:'180px'})}
           <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
           <div class="spacer"></div>
           <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
@@ -401,7 +456,7 @@ function renderLoadPanel(){
       <div class="field"><label>Domain</label><select onchange="loadSel.domain=this.value;loadSel.process='';renderCampaign()"><option value="">— all —</option>${domains.map(d=>`<option ${loadSel.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select></div>
       <div class="field"><label>PRC</label><select onchange="loadSel.process=this.value;renderCampaign()"><option value="">— all (in domain) —</option>${procs.map(p=>`<option ${loadSel.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select></div>
       <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
-      <div class="field"><label>Tester</label><select id="ldTester"><option value="">— default tester —</option>${S.testers.map(t=>`<option value="${t.id}">${esc(t.name)}${t.country?' ('+esc(t.country)+')':''}</option>`).join("")}</select></div>
+      <div class="field"><label>Tester</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— default tester —',width:'200px'})}</div>
       <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
       <button class="primary" onclick="loadIntoIteration()">Add ${target.length} definition(s)</button>
     </div>`;
@@ -428,13 +483,14 @@ function renderTrackingTable(){
     (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase())));
   ex=ex.sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
   if(ex.length===0) return '<div class="empty">No execution in this iteration yet — load Library definitions above.</div>';
-  return `<table><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th>Tester</th><th style="width:130px">Status</th><th>Business comment</th><th></th></tr></thead><tbody>
+  return `<table><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th>Tester</th><th style="width:130px">Status</th><th style="width:140px">Test date</th><th>Business comment</th><th></th></tr></thead><tbody>
     ${ex.map(e=>{const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.comment;return `<tr>
       <td>${esc(e.process)}${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td>
       <td><textarea style="min-height:36px" title="Edit the scenario text — it is used as-is in the generated tester HTML" oninput="setExec('${e.id}','scenario',this.value)">${esc(e.scenario)}</textarea></td>
       <td><select onchange="setExec('${e.id}','entity',this.value)">${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
-      <td><select onchange="setExec('${e.id}','testerId',this.value)"><option value="">—</option>${S.testers.map(t=>`<option value="${t.id}" ${t.id===e.testerId?'selected':''}>${esc(t.name)}</option>`).join("")}</select></td>
+      <td>${tCombo('row_'+e.id,e.testerId,"setExec('"+e.id+"','testerId',v)",{emptyLabel:'—',width:'100%'})}</td>
       <td><select onchange="setExec('${e.id}','status',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
+      <td><input type="date" value="${esc(e.testDate||'')}" title="Execution date" onchange="setExec('${e.id}','testDate',this.value)"/></td>
       <td><textarea style="min-height:36px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setExec('${e.id}','comment',this.value)">${esc(e.comment)}</textarea>${need?'<div class="hint" style="color:#ef4444">required</div>':''}</td>
       <td><button class="sm danger" onclick="delExec('${e.id}')">✕</button></td></tr>`;}).join("")}
     </tbody></table>`;
@@ -471,7 +527,7 @@ function openGenTester(){
   modal(`<h2>Generate tester page</h2>
     <p class="hint">Creates a standalone HTML file with only this tester's tests for <b>${esc(activeIter().name)}</b>. The tester fills statuses/comments (can add ad-hoc tests), clicks <b>Save</b> and sends you back the JSON. Import it via "Import tester results".</p>
     <div class="row">
-      <div class="field" style="flex:1"><label>Tester</label><select id="gtTester">${S.testers.map(t=>`<option value="${t.id}">${esc(t.name)}${t.country?' ('+esc(t.country)+')':''}</option>`).join("")||'<option value="">(no tester)</option>'}</select></div>
+      <div class="field" style="flex:1"><label>Tester</label>${tCombo('gtTester',(S.testers[0]||{}).id||'',"",{hidden:'gtTester',allowEmpty:false,width:'100%'})}</div>
       <div class="field"><label>Entity filter (optional)</label><select id="gtEntity"><option value="">— all —</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select></div>
     </div>
     <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="genTesterPage()">Generate &amp; download</button></div>`);
@@ -516,14 +572,15 @@ button.sec{background:#273449;color:#e2e8f0;border:1px solid #334155;font-weight
     <select id="procFilter" onchange="render()"><option value="">— All —</option></select>
     <span class="muted" id="shownCount"></span>
   </div>
-  <table id="tbl"><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th style="width:140px">Status</th><th>Comment</th></tr></thead><tbody id="tb"></tbody></table>
+  <table id="tbl"><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th style="width:140px">Status</th><th style="width:150px;cursor:pointer;user-select:none" title="Click to sort by execution date" onclick="toggleSort()">Test date <span id="sortArrow"></span></th><th>Comment</th></tr></thead><tbody id="tb"></tbody></table>
   <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Add ad-hoc test</button></p>
 </main>
 <div class="bar"><button onclick="saveJSON()">⬇ Save results (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
 <script>
 const DATA=${dataJson};
 const LSK="mceu_tester_"+DATA.iterationId+"_"+DATA.testerId;
-let rows=[], adhoc=[];
+let rows=[], adhoc=[], sortDir=0; /* 0=as-loaded, 1=date asc, -1=date desc */
+function toggleSort(){ sortDir = sortDir===1?-1:(sortDir===-1?0:1); render(); }
 function init(){
   document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · "+DATA.testerName;
   const saved=JSON.parse(localStorage.getItem(LSK)||"null");
@@ -540,9 +597,14 @@ function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.
 function render(){
   const tb=document.getElementById("tb"); tb.innerHTML="";
   const fEl=document.getElementById("procFilter"); const f=fEl?fEl.value:"";
-  let shown=0;
-  rows.forEach((t,i)=>{ if(!f||t.process===f){ tb.appendChild(rowEl(t,i,false)); shown++; } });
-  adhoc.forEach((t,i)=>tb.appendChild(rowEl(t,i,true)));
+  let shown=0; const list=[];
+  rows.forEach((t,i)=>{ if(!f||t.process===f){ list.push({t,i,isAd:false}); shown++; } });
+  adhoc.forEach((t,i)=>list.push({t,i,isAd:true}));
+  if(sortDir!==0){ list.sort((a,b)=>{ const da=a.t.testDate||"", db=b.t.testDate||"";
+    if(!da&&!db) return 0; if(!da) return 1; if(!db) return -1;   /* undated rows last */
+    return da<db ? -sortDir : (da>db ? sortDir : 0); }); }
+  list.forEach(it=>tb.appendChild(rowEl(it.t,it.i,it.isAd)));
+  const ar=document.getElementById("sortArrow"); if(ar) ar.textContent=sortDir===1?"▲":sortDir===-1?"▼":"";
   const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" shown"):"";
   updateProg();
 }
@@ -554,18 +616,22 @@ function rowEl(t,i,isAd){
     '<td>'+(isAd?'<input value="'+(t.scenario||'')+'" data-k="scenario" style="width:100%"/>':esc(t.scenario))+'</td>'+
     '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||'')+'</span>'))+'</td>'+
     '<td><select data-k="status">'+opts+'</select></td>'+
+    '<td><input type="date" data-k="testDate" value="'+esc(t.testDate||'')+'"/></td>'+
     '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?'required…':'optional')+'">'+esc(t.comment||'')+'</textarea></td>';
   const arr=isAd?adhoc:rows;
-  tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{arr[i][el.dataset.k]=el.value; if(el.dataset.k==="status"){el.closest("tr").querySelector('textarea').className=reqComment(el.value)&&!arr[i].comment?'req':'';} autosave(); updateProg();}));
+  tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{arr[i][el.dataset.k]=el.value;
+    if(el.dataset.k==="status"){ el.closest("tr").querySelector('textarea').className=reqComment(el.value)&&!arr[i].comment?'req':'';
+      if(el.value&&el.value!=="Not started"&&!arr[i].testDate){ arr[i].testDate=new Date().toISOString().slice(0,10); const d=el.closest("tr").querySelector('input[type=date]'); if(d)d.value=arr[i].testDate; } }
+    autosave(); updateProg();}));
   return tr;
 }
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
-function addAdhoc(){adhoc.push({process:"",scenario:"",entity:DATA.entities[0]||"",status:DATA.statuses[0].value,comment:""});render();}
+function addAdhoc(){adhoc.push({process:"",scenario:"",entity:DATA.entities[0]||"",status:DATA.statuses[0].value,comment:"",testDate:""});render();}
 function autosave(){localStorage.setItem(LSK,JSON.stringify(payloadOut()));document.getElementById("savedMsg").textContent="auto-saved ✓";setTimeout(()=>document.getElementById("savedMsg").textContent="",1500);}
 function updateProg(){const done=rows.filter(r=>r.status&&r.status!=="Not started").length;document.getElementById("prog").textContent=done+" / "+rows.length+" done";}
 function payloadOut(){return {_type:"MCEU_TESTER_RESULTS",iterationId:DATA.iterationId,testerId:DATA.testerId,testerName:DATA.testerName,
   results:rows.map(r=>({id:r.id,status:r.status,comment:r.comment,testDate:r.testDate})),
-  adhoc:adhoc.filter(a=>a.process||a.scenario).map(a=>({process:a.process,scenario:a.scenario,entity:a.entity,status:a.status,comment:a.comment}))};}
+  adhoc:adhoc.filter(a=>a.process||a.scenario).map(a=>({process:a.process,scenario:a.scenario,entity:a.entity,status:a.status,comment:a.comment,testDate:a.testDate||""}))};}
 function saveJSON(){
   const bad=rows.concat(adhoc).filter(r=>reqComment(r.status)&&!(r.comment||"").trim());
   if(bad.length && !confirm(bad.length+" test(s) are Failed/Blocked without a comment. Save anyway?"))return;
@@ -582,7 +648,7 @@ function importTesterResults(input){
     (p.results||[]).forEach(res=>{ const ex=S.executions.find(x=>x.id===res.id);
       if(ex){ ex.status=res.status; ex.comment=res.comment||""; ex.testDate=res.testDate||ex.testDate; ex.updatedAt=new Date().toISOString(); upd++; } });
     (p.adhoc||[]).forEach(a=>{ S.executions.push({id:uid(),iterationId:p.iterationId,libraryItemId:null,process:a.process||"(ad-hoc)",scenario:a.scenario||"",domain:"",
-      entity:a.entity||"",testerId:p.testerId,status:a.status||"Not started",comment:a.comment||"",recurrence:"",testDate:"",adhoc:true,updatedAt:new Date().toISOString()}); add++; });
+      entity:a.entity||"",testerId:p.testerId,status:a.status||"Not started",comment:a.comment||"",recurrence:"",testDate:a.testDate||"",adhoc:true,updatedAt:new Date().toISOString()}); add++; });
     renderAll(); save(); alert(`Results merged for ${esc(p.testerName||"tester")}: ${upd} updated, ${add} ad-hoc added.`);
   }catch(err){ alert("Invalid file."); } };
   r.readAsText(f);
@@ -632,6 +698,7 @@ function renderAdmin(){
         <input id="impSheet" value="LUX" title="sheet name" style="width:70px"/>
         <button class="primary" onclick="exportJSON()">⬇ Full backup (JSON)</button>
         <label class="pill" style="cursor:pointer">⬆ Restore backup<input type="file" accept=".json" style="display:none" onchange="importJSON(this)"/></label>
+        <button class="primary" onclick="exportLibrary()">⬇ Library (.xlsx)</button>
         <button class="primary" onclick="exportReport()">⬇ Excel report</button>
       </div>
     </div>
@@ -657,6 +724,19 @@ function exportReport(){
   const ws=XLSX.utils.json_to_sheet(data.length?data:[{Info:"No execution"}]);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"UAT Report");
   XLSX.writeFile(wb,`MCEU_UAT_report_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+/* Export the Library (PRC × Scenario definitions) to .xlsx using the same
+   column headers as the DevOps import — so added PRCs round-trip back in. */
+function exportLibrary(){
+  const m=S.config.columnMapping;
+  const rows=S.library.slice().sort((a,b)=>(a.order||0)-(b.order||0)||naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(c=>{
+    const t=tester(c.defaultTesterId); const r={};
+    r[m.domain]=c.domain||""; r[m.process]=c.process||""; r[m.scenario]=c.scenario||"";
+    r[m.tester]=t?t.name:""; r.Order=c.order||0; r.Notes=c.notes||"";
+    return r; });
+  const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{[m.process]:"",[m.scenario]:""}]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"LUX");
+  XLSX.writeFile(wb,`MCEU_UAT_library_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 /* startup */
