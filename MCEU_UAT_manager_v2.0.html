@@ -511,6 +511,11 @@ button.sec{background:#273449;color:#e2e8f0;border:1px solid #334155;font-weight
 <header><h1>UAT Test Sheet</h1><span class="muted" id="hdr"></span></header>
 <main>
   <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
+  <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+    <label class="muted" for="procFilter">Process</label>
+    <select id="procFilter" onchange="render()"><option value="">— All —</option></select>
+    <span class="muted" id="shownCount"></span>
+  </div>
   <table id="tbl"><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th style="width:140px">Status</th><th>Comment</th></tr></thead><tbody id="tb"></tbody></table>
   <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Add ad-hoc test</button></p>
 </main>
@@ -524,13 +529,21 @@ function init(){
   const saved=JSON.parse(localStorage.getItem(LSK)||"null");
   rows=DATA.tests.map(t=>{const s=saved&&saved.results&&saved.results.find(r=>r.id===t.id);return {...t,status:s?s.status:t.status,comment:s?s.comment:t.comment};});
   adhoc=(saved&&saved.adhoc)||[];
+  const procs=[...new Set(rows.map(t=>t.process).filter(Boolean))].sort();
+  if(procs.length>1){
+    document.getElementById("procFilter").innerHTML='<option value="">— All processes ('+procs.length+') —</option>'+procs.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join("");
+    document.getElementById("filterBar").style.display="flex";
+  }
   render();
 }
 function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.requiresComment;}
 function render(){
   const tb=document.getElementById("tb"); tb.innerHTML="";
-  rows.forEach((t,i)=>tb.appendChild(rowEl(t,i,false)));
+  const fEl=document.getElementById("procFilter"); const f=fEl?fEl.value:"";
+  let shown=0;
+  rows.forEach((t,i)=>{ if(!f||t.process===f){ tb.appendChild(rowEl(t,i,false)); shown++; } });
   adhoc.forEach((t,i)=>tb.appendChild(rowEl(t,i,true)));
+  const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" shown"):"";
   updateProg();
 }
 function rowEl(t,i,isAd){
