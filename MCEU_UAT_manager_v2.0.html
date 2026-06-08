@@ -173,6 +173,8 @@ const statusMeta = v => S.config.statuses.find(x=>x.value===v) || {value:v,color
 const entityMeta = c => S.config.entities.find(x=>x.code===c) || {code:c,label:c,color:"#64748b"};
 const tester = id => S.testers.find(x=>x.id===id);
 const testerName = id => { const t=tester(id); return t?t.name:"—"; };
+/* country a test counts toward: its own entity, else the tester's entity/country, else Other */
+const execCountry = e => e.entity || ((tester(e.testerId)||{}).country) || "Other";
 const libTesterIds = c => (c&&c.defaultTesterIds&&c.defaultTesterIds.length)?c.defaultTesterIds:(c&&c.defaultTesterId?[c.defaultTesterId]:[]);
 const testerNames = ids => (ids||[]).map(id=>{const t=tester(id);return t?t.name:null;}).filter(Boolean).join(", ");
 const activeIter = () => S.iterations.find(i=>i.id===S.activeIterationId) || S.iterations[0];
@@ -276,7 +278,7 @@ function execMatch(e,key){
 function openExecList(key){
   const titleMap={all:"All assigned",done:"Executed",todo:"To do",Passed:"Passed",Failed:"Failed",Blocked:"Blocked"};
   const ex=iterExecs().filter(e=>execMatch(e,key)).sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
-  const rows=ex.map(e=>{const sm=statusMeta(e.status);return `<tr><td><b>${esc(e.process)}</b>${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td><td>${esc(e.scenario)}</td><td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))}</td><td>${badge(e.status,sm.color)}</td></tr>`;}).join("")||'<tr><td colspan="5" class="muted">No test case in this category.</td></tr>';
+  const rows=ex.map(e=>{const sm=statusMeta(e.status);const cc=execCountry(e);return `<tr><td><b>${esc(e.process)}</b>${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td><td>${esc(e.scenario)}</td><td>${badge(cc,entityMeta(cc).color)}</td><td>${esc(testerName(e.testerId))}</td><td>${badge(e.status,sm.color)}</td></tr>`;}).join("")||'<tr><td colspan="5" class="muted">No test case in this category.</td></tr>';
   modal(`<h2>${titleMap[key]||key} — ${esc(activeIter().name)} <span class="muted" style="font-size:13px">(${ex.length})</span></h2>
     <div style="max-height:62vh;overflow:auto;margin-top:8px"><table><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th>Tester</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
@@ -285,7 +287,8 @@ function renderDashboard(){
   const iter=activeIter(); const ex=iterExecs(); const a=aggregate(ex);
   const pct=n=>a.total?Math.round(n/a.total*100):0;
   const kpi=(n,l,c,key)=>`<div class="kpi" ${key?`style="cursor:pointer" title="Click to list these test cases" onclick="openExecList('${key}')"`:''}><div class="n" style="color:${c||'inherit'}">${n}</div><div class="l">${l}</div></div>`;
-  const byEntity=S.config.entities.map(en=>({en,sub:ex.filter(e=>e.entity===en.code)}));
+  const byEntity=S.config.entities.map(en=>({en,sub:ex.filter(e=>execCountry(e)===en.code)}));
+  const otherSub=ex.filter(e=>!S.config.entities.some(en=>en.code===execCountry(e)));
   const byTester={}; ex.forEach(e=>{(byTester[e.testerId]=byTester[e.testerId]||[]).push(e);});
   const byDomain={}; ex.forEach(e=>{const d=e.domain||"(none)";(byDomain[d]=byDomain[d]||[]).push(e);});
 
@@ -304,6 +307,7 @@ function renderDashboard(){
       <div class="card"><b>By entity</b>
         <table><thead><tr><th>Entity</th><th>Assigned</th><th>Progress</th><th>P/F/B</th></tr></thead><tbody>
         ${byEntity.map(({en,sub})=>{const sa=aggregate(sub);return `<tr><td>${badge(en.code,en.color)} ${esc(en.label)}</td><td>${sub.length}</td><td style="min-width:140px">${progressBar(sub)}</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td></tr>`;}).join("")}
+        ${otherSub.length?(()=>{const sa=aggregate(otherSub);return `<tr><td>${badge('Other','#64748b')} <span class="muted">no entity / unmapped</span></td><td>${otherSub.length}</td><td style="min-width:140px">${progressBar(otherSub)}</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td></tr>`;})():''}
         </tbody></table>
       </div>
       <div class="card"><b>By tester</b>
@@ -529,28 +533,38 @@ function renderLoadPanel(){
   const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
   const procs=[...new Set(S.library.filter(c=>!loadSel.domain||c.domain===loadSel.domain).map(c=>c.process))].sort();
   const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
-  return `<p class="hint">Pick a full or partial set of the Library, choose target entities, then add to <b>${esc(activeIter().name)}</b>. By default each test case is dispatched to <b>its assigned testers × each entity</b>. Pick a single tester below to override and assign everything to that one tester. Duplicates are skipped.</p>
+  return `<p class="hint">Pick a full or partial set of the Library, optionally choose target entities, assign one or more testers with an execution date, then add to <b>${esc(activeIter().name)}</b>. Entities are optional (each tester carries their own country). Each test case becomes one execution per selected tester (× each chosen entity). The date is applied to all and stays editable per row. Duplicates are skipped.</p>
+    <div class="row" style="margin-bottom:8px">
+      <div class="field"><label>Load into iteration (phase)</label><select onchange="setActiveIteration(this.value)">${S.iterations.map(i=>`<option value="${i.id}" ${i.id===S.activeIterationId?'selected':''}>${esc(i.name)}</option>`).join("")}</select></div>
+      <div class="field" style="align-self:flex-end"><button class="sm" onclick="newIter()">+ New iteration</button></div>
+    </div>
     <div class="row">
       <div class="field"><label>Domain</label><select onchange="loadSel.domain=this.value;loadSel.process='';renderCampaign()"><option value="">— all —</option>${domains.map(d=>`<option ${loadSel.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select></div>
       <div class="field"><label>PRC</label><select onchange="loadSel.process=this.value;renderCampaign()"><option value="">— all (in domain) —</option>${procs.map(p=>`<option ${loadSel.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select></div>
-      <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
-      <div class="field"><label>Override tester (optional)</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— use assigned testers —',width:'200px'})}</div>
+      <div class="field"><label>Target entities (optional)</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
+      <div class="field"><label>Execution due date (applied to all)</label><input id="ldDate" placeholder="e.g. 2026-06-10 / W24 / TBD" style="width:200px"/></div>
       <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
-      <button class="primary" onclick="loadIntoIteration()">Add ${target.length} definition(s)</button>
-    </div>`;
+    </div>
+    <div class="field" style="margin-top:8px"><label>Assign to testers — pick one or several (leave empty to use each test case's assigned testers)</label>
+      <input id="ld_tsearch" placeholder="🔍 filter testers…" oninput="filterLdTesters()"/>
+      <div class="tlist" id="ldTesterList">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>`<label class="tpick" data-n="${esc((t.name+" "+(t.country||"")).toLowerCase())}"><input type="checkbox" class="ldtchk" value="${t.id}"/> ${esc(t.name)}${t.country?' <span class="muted">('+esc(t.country)+')</span>':''}</label>`).join("")||'<span class="muted">No tester yet — add testers above.</span>'}</div>
+    </div>
+    <div class="toolbar" style="margin-top:10px"><button class="primary" onclick="loadIntoIteration()">Add ${target.length} definition(s)</button></div>`;
 }
+function filterLdTesters(){ const q=($("#ld_tsearch").value||"").toLowerCase().trim();
+  document.querySelectorAll("#ldTesterList .tpick").forEach(el=>{ el.style.display=(!q||el.dataset.n.includes(q))?"flex":"none"; }); }
 function loadIntoIteration(){
-  const ents=[...document.querySelectorAll(".ldEnt:checked")].map(x=>x.value);
-  if(!ents.length){ alert("Select at least one target entity."); return; }
-  const formTester=$("#ldTester").value, rec=$("#ldRec").value, iterId=S.activeIterationId;
+  let ents=[...document.querySelectorAll(".ldEnt:checked")].map(x=>x.value); if(!ents.length) ents=[""];
+  const selTesters=[...document.querySelectorAll("#ldTesterList .ldtchk:checked")].map(x=>x.value);
+  const rec=$("#ldRec").value, date=(($("#ldDate")&&$("#ldDate").value)||"").trim(), iterId=S.activeIterationId;
   const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
   let created=0;
   target.forEach(c=>ents.forEach(ent=>{
-    const testerIds = formTester ? [formTester] : (libTesterIds(c).length?libTesterIds(c):[""]);
+    const testerIds = selTesters.length ? selTesters : (libTesterIds(c).length?libTesterIds(c):[""]);
     testerIds.forEach(testerId=>{
-      if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&e.entity===ent&&(e.testerId||"")===(testerId||""))) return;
+      if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&(e.entity||"")===(ent||"")&&(e.testerId||"")===(testerId||""))) return;
       S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
-        steps:(c.steps||[]).slice(),txnRef:!!c.txnRef,txnRefValue:"",entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
+        steps:(c.steps||[]).slice(),txnRef:!!c.txnRef,txnRefValue:"",entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:date,adhoc:false,updatedAt:new Date().toISOString()});
       created++;
     });
   }));
@@ -569,7 +583,7 @@ function renderTrackingTable(){
     ${ex.map(e=>{const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.comment;return `<tr>
       <td>${esc(e.process)}${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td>
       <td><textarea style="min-height:36px" title="Edit the scenario text — it is used as-is in the generated tester HTML" oninput="setExec('${e.id}','scenario',this.value)">${esc(e.scenario)}</textarea></td>
-      <td><select onchange="setExec('${e.id}','entity',this.value)">${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
+      <td><select onchange="setExec('${e.id}','entity',this.value)"><option value="" ${!e.entity?'selected':''}>—</option>${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
       <td>${tCombo('row_'+e.id,e.testerId,"setExec('"+e.id+"','testerId',v)",{emptyLabel:'—',width:'100%'})}</td>
       <td><select onchange="setExec('${e.id}','status',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
       <td><input type="text" value="${esc(e.testDate||'')}" placeholder="e.g. 2026-06-10 / W24 / TBD" title="Execution due date — free text, set by coordinator, read-only for the tester" onchange="setExec('${e.id}','testDate',this.value)"/></td>
@@ -749,7 +763,7 @@ th.sortable{cursor:pointer;user-select:none}
 <div class="bar"><button onclick="saveJSON()">⬇ Save results (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
 <script>
 const DATA=${dataJson};
-let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="", sortDir=0;
+let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="testDate", sortDir=1;
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function stepText(s){return (s&&typeof s==="object")?(s.text||""):String(s||"");}
 function stepStream(s){return (s&&typeof s==="object")?(s.stream||""):"";}
