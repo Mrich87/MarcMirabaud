@@ -84,6 +84,9 @@
   .steplist li{margin:2px 0}
   .steprow>td{background:var(--chip)}
   .reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+  .tpick{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer}
+  .tpick:hover{background:rgba(255,255,255,.04)}
+  .tlist{max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;margin-top:4px}
 </style>
 </head>
 <body>
@@ -138,6 +141,7 @@ function defaultState(){
         {value:"N/A",         color:"#475569", requiresComment:false},
       ],
       recurrences:["Often","Rarely","Exceptionally"],
+      links:[],
       columnMapping:{ process:"TitleLevel3", scenario:"TitleLevel4", domain:"TitleLevel2", tester:"TesterName" }
     },
     testers:[],
@@ -164,6 +168,8 @@ const statusMeta = v => S.config.statuses.find(x=>x.value===v) || {value:v,color
 const entityMeta = c => S.config.entities.find(x=>x.code===c) || {code:c,label:c,color:"#64748b"};
 const tester = id => S.testers.find(x=>x.id===id);
 const testerName = id => { const t=tester(id); return t?t.name:"—"; };
+const libTesterIds = c => (c&&c.defaultTesterIds&&c.defaultTesterIds.length)?c.defaultTesterIds:(c&&c.defaultTesterId?[c.defaultTesterId]:[]);
+const testerNames = ids => (ids||[]).map(id=>{const t=tester(id);return t?t.name:null;}).filter(Boolean).join(", ");
 const activeIter = () => S.iterations.find(i=>i.id===S.activeIterationId) || S.iterations[0];
 const libById = id => S.library.find(c=>String(c.id)===String(id));
 const naturalKey = s => String(s||"").toLowerCase().replace(/\d+/g, m=>m.padStart(10,"0"));
@@ -346,7 +352,7 @@ function renderLibrary(){
         <td><b>${esc(c.process)}</b></td>
         <td>${esc(c.scenario)}${c.txnRef?'<span class="reftag">txn ref</span>':''}${steps.length?` <span class="steptoggle" onclick="toggleLibSteps('${c.id}')">${open?'▾':'▸'} ${steps.length} step${steps.length>1?'s':''}</span>`:''}</td>
         <td>${esc(c.domain)}</td>
-        <td class="muted">${esc(testerName(c.defaultTesterId))}</td>
+        <td class="muted">${esc(testerNames(libTesterIds(c))||"—")}</td>
         <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button></td>
       </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(s)}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
       </tbody>
@@ -357,8 +363,8 @@ function setLibOrder(id,v){ const c=libById(id); if(c){c.order=parseInt(v)||0; p
 function moveLib(id,dir){ const ids=libDisplayedIds(); const idx=ids.indexOf(String(id)); const j=idx+dir;
   if(idx<0||j<0||j>=ids.length)return; const a=libById(ids[idx]),b=libById(ids[j]); const t=a.order;a.order=b.order;b.order=t; persist(); }
 function resetLibOrder(){ let n=0; sortedLib(S.library).forEach(c=>c.order=++n); persist(); }
-function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterId:"",notes:"",steps:[],txnRef:false}; S.library.push(c); save(); editLibItem(c.id); }
-function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)",steps:(o.steps||[]).slice()}; S.library.push(c); persist(); }
+function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterIds:[],notes:"",steps:[],txnRef:false}; S.library.push(c); save(); editLibItem(c.id); }
+function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)",steps:(o.steps||[]).slice(),defaultTesterIds:libTesterIds(o).slice()}; S.library.push(c); persist(); }
 function editLibItem(id){ const c=libById(id);
   modal(`<h2>Edit library definition</h2>
     <div class="row" style="margin-top:4px">
@@ -367,7 +373,10 @@ function editLibItem(id){ const c=libById(id);
     </div>
     <div class="field" style="margin-top:8px"><label>Scenario</label><input id="l_scen" value="${esc(c.scenario)}"/></div>
     <div class="row" style="margin-top:8px">
-      <div class="field" style="flex:1"><label>Default tester</label>${tCombo('libTester',c.defaultTesterId,"",{hidden:'l_tester',emptyLabel:'— none —',width:'100%'})}</div>
+      <div class="field" style="flex:1"><label>Default testers (you can pick several)</label>
+        <input id="l_tsearch" placeholder="🔍 filter testers…" oninput="filterTesterPicks()"/>
+        <div class="tlist" id="l_tlist">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>{const on=libTesterIds(c).includes(t.id);return `<label class="tpick" data-n="${esc((t.name+" "+(t.country||"")).toLowerCase())}"><input type="checkbox" class="ltchk" value="${t.id}" ${on?'checked':''}/> ${esc(t.name)}${t.country?' <span class="muted">('+esc(t.country)+')</span>':''}</label>`;}).join("")||'<span class="muted">No tester yet — add testers in Campaign.</span>'}</div>
+      </div>
       <div class="field"><label>Order</label><input type="number" id="l_order" value="${c.order||0}"/></div>
     </div>
     <div class="field" style="margin-top:8px"><label>Steps to follow (one per line)</label><textarea id="l_steps" style="min-height:96px" placeholder="Step 1&#10;Step 2&#10;…">${esc((c.steps||[]).join("\n"))}</textarea><div class="hint">Pre-filled by the coordinator; the tester can expand the test case to view them.</div></div>
@@ -375,9 +384,12 @@ function editLibItem(id){ const c=libById(id);
     <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="l_notes">${esc(c.notes||"")}</textarea></div>
     <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delLibItem('${c.id}')">Delete</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveLibItem('${c.id}')">Save</button></div>`);
 }
+function filterTesterPicks(){ const q=($("#l_tsearch").value||"").toLowerCase().trim();
+  document.querySelectorAll("#l_tlist .tpick").forEach(el=>{ el.style.display=(!q||el.dataset.n.includes(q))?"flex":"none"; }); }
 function saveLibItem(id){ const c=libById(id);
   c.process=$("#l_proc").value;c.domain=$("#l_dom").value;c.scenario=$("#l_scen").value;
-  c.defaultTesterId=$("#l_tester").value;c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;
+  c.defaultTesterIds=[...document.querySelectorAll("#l_tlist .ltchk:checked")].map(x=>x.value); delete c.defaultTesterId;
+  c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;
   c.steps=$("#l_steps").value.split("\n").map(x=>x.trim()).filter(Boolean);
   c.txnRef=$("#l_txn").checked;
   closeModal(); persist(); }
@@ -407,7 +419,7 @@ function importDevops(input){
       if(tname){ let t=S.testers.find(x=>x.name===tname); if(!t){t={id:uid(),name:tname,email:"",country:"",dept:""};S.testers.push(t);newTesters++;} testerId=t.id; }
       if(existing.has(key)) return;          // already in library
       existing.add(key);
-      S.library.push({id:uid(),order:++maxO,domain:(r[m.domain]||"").toString().trim(),process,scenario,defaultTesterId:testerId,notes:""});
+      S.library.push({id:uid(),order:++maxO,domain:(r[m.domain]||"").toString().trim(),process,scenario,defaultTesterIds:testerId?[testerId]:[],notes:"",steps:[],txnRef:false});
       added++;
     });
     // natural order for freshly added (and any without order)
@@ -488,12 +500,12 @@ function renderLoadPanel(){
   const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
   const procs=[...new Set(S.library.filter(c=>!loadSel.domain||c.domain===loadSel.domain).map(c=>c.process))].sort();
   const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
-  return `<p class="hint">Pick a full or partial set of the Library, choose target entities and tester, then add to <b>${esc(activeIter().name)}</b>. Each (definition × entity) becomes a "Not started" execution. Duplicates are skipped.</p>
+  return `<p class="hint">Pick a full or partial set of the Library, choose target entities, then add to <b>${esc(activeIter().name)}</b>. By default each test case is dispatched to <b>its assigned testers × each entity</b>. Pick a single tester below to override and assign everything to that one tester. Duplicates are skipped.</p>
     <div class="row">
       <div class="field"><label>Domain</label><select onchange="loadSel.domain=this.value;loadSel.process='';renderCampaign()"><option value="">— all —</option>${domains.map(d=>`<option ${loadSel.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select></div>
       <div class="field"><label>PRC</label><select onchange="loadSel.process=this.value;renderCampaign()"><option value="">— all (in domain) —</option>${procs.map(p=>`<option ${loadSel.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select></div>
       <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
-      <div class="field"><label>Tester</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— default tester —',width:'200px'})}</div>
+      <div class="field"><label>Override tester (optional)</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— use assigned testers —',width:'200px'})}</div>
       <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
       <button class="primary" onclick="loadIntoIteration()">Add ${target.length} definition(s)</button>
     </div>`;
@@ -505,11 +517,13 @@ function loadIntoIteration(){
   const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
   let created=0;
   target.forEach(c=>ents.forEach(ent=>{
-    if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&e.entity===ent)) return;
-    const testerId=formTester||c.defaultTesterId||"";
-    S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
-      steps:(c.steps||[]).slice(),txnRef:!!c.txnRef,txnRefValue:"",entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
-    created++;
+    const testerIds = formTester ? [formTester] : (libTesterIds(c).length?libTesterIds(c):[""]);
+    testerIds.forEach(testerId=>{
+      if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&e.entity===ent&&(e.testerId||"")===(testerId||""))) return;
+      S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
+        steps:(c.steps||[]).slice(),txnRef:!!c.txnRef,txnRefValue:"",entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
+      created++;
+    });
   }));
   persist(); alert(created+" execution(s) added to "+activeIter().name+".");
 }
@@ -529,10 +543,20 @@ function renderTrackingTable(){
       <td><select onchange="setExec('${e.id}','entity',this.value)">${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
       <td>${tCombo('row_'+e.id,e.testerId,"setExec('"+e.id+"','testerId',v)",{emptyLabel:'—',width:'100%'})}</td>
       <td><select onchange="setExec('${e.id}','status',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
-      <td><input type="date" value="${esc(e.testDate||'')}" title="Execution due date (set by coordinator, read-only for the tester)" onchange="setExec('${e.id}','testDate',this.value)"/></td>
+      <td><input type="text" value="${esc(e.testDate||'')}" placeholder="e.g. 2026-06-10 / W24 / TBD" title="Execution due date — free text, set by coordinator, read-only for the tester" onchange="setExec('${e.id}','testDate',this.value)"/></td>
       <td><textarea style="min-height:36px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setExec('${e.id}','comment',this.value)">${esc(e.comment)}</textarea>${need?'<div class="hint" style="color:#ef4444">required</div>':''}</td>
-      <td><button class="sm danger" onclick="delExec('${e.id}')">✕</button></td></tr>`;}).join("")}
+      <td>${((e.screens&&e.screens.length)||(e.failedSteps&&Object.keys(e.failedSteps).length))?`<button class="sm" title="View evidence" onclick="openEvidence('${e.id}')">📎${(e.screens&&e.screens.length)||''}</button> `:''}<button class="sm danger" onclick="delExec('${e.id}')">✕</button></td></tr>`;}).join("")}
     </tbody></table>`;
+}
+function openEvidence(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  const steps=e.steps||[]; const fs=e.failedSteps||{};
+  const flagged=Object.keys(fs).filter(k=>fs[k]).map(k=>steps[k]||("step "+(parseInt(k)+1))).filter(Boolean);
+  const shots=(e.screens||[]).map(sc=>`<a href="${sc.data}" target="_blank" title="${esc(sc.name||'')}"><img src="${sc.data}" style="max-height:160px;border:1px solid var(--line);border-radius:8px"/></a>`).join(" ");
+  modal(`<h2>Evidence — ${esc(e.process)}</h2>
+    <p class="hint">${esc(e.scenario)} · ${badge(e.entity,entityMeta(e.entity).color)} · ${esc(testerName(e.testerId))} · ${badge(e.status,statusMeta(e.status).color)}</p>
+    <div class="field"><label>Problematic step(s)</label>${flagged.length?`<ol class="steplist">${flagged.map(s=>`<li>${esc(s)}</li>`).join("")}</ol>`:'<span class="muted">none flagged</span>'}</div>
+    <div class="field" style="margin-top:8px"><label>Screenshots (${(e.screens||[]).length})</label><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">${shots||'<span class="muted">none</span>'}</div></div>
+    <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
 }
 function setExec(id,field,val){ const e=S.executions.find(x=>x.id===id); if(!e)return;
   e[field]=val; e.updatedAt=new Date().toISOString();
@@ -540,7 +564,7 @@ function setExec(id,field,val){ const e=S.executions.find(x=>x.id===id); if(!e)r
   persist(); }
 function delExec(id){ S.executions=S.executions.filter(x=>x.id!==id); persist(); }
 function delTester(i){ const t=S.testers[i];
-  if((S.executions.some(e=>e.testerId===t.id)||S.library.some(c=>c.defaultTesterId===t.id))&&!confirm("This tester is referenced. Remove anyway?"))return;
+  if((S.executions.some(e=>e.testerId===t.id)||S.library.some(c=>libTesterIds(c).includes(t.id)))&&!confirm("This tester is referenced. Remove anyway?"))return;
   S.testers.splice(i,1); persist(); }
 
 /* iterations */
@@ -555,7 +579,7 @@ function delIter(id){ if(!confirm("Delete this iteration and its executions?"))r
 function carryOver(){ const from=activeIter(); const name=prompt("New iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
   const it={id:uid(),name,startDate:"",endDate:""}; S.iterations.push(it);
   const src=S.executions.filter(e=>e.iterationId===from.id&&["Failed","Blocked","Not started"].includes(e.status));
-  src.forEach(e=>S.executions.push({...e,id:uid(),iterationId:it.id,status:"Not started",comment:"",testDate:"",updatedAt:new Date().toISOString()}));
+  src.forEach(e=>S.executions.push({...e,id:uid(),iterationId:it.id,status:"Not started",comment:"",testDate:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()}));
   S.activeIterationId=it.id; renderAll(); save(); alert(src.length+" test(s) carried over to "+name+"."); }
 
 /* =========================================================================
@@ -581,36 +605,47 @@ function copyFrom(id){ const el=$("#"+id); if(!el)return; el.focus(); el.select(
   try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(el.value); } else { document.execCommand("copy"); } }
   catch(e){ try{ document.execCommand("copy"); }catch(_){} } }
 function openGenTester(){
-  modal(`<h2>Generate tester page</h2>
-    <p class="hint">Creates a standalone HTML file with only this tester's tests for <b>${esc(activeIter().name)}</b>. The tester fills statuses/comments (can add ad-hoc tests), clicks <b>Save</b> and sends you back the JSON. Import it via "Import tester results".</p>
+  modal(`<h2>Generate tester sheet(s)</h2>
+    <p class="hint">Standalone HTML for <b>${esc(activeIter().name)}</b>. The tester fills statuses / comments / evidence and sends back the JSON (only their own selection). Import it via "Import tester results".</p>
     <div class="row">
-      <div class="field" style="flex:1"><label>Tester</label>${tCombo('gtTester',(S.testers[0]||{}).id||'',"",{hidden:'gtTester',allowEmpty:false,width:'100%'})}</div>
+      <div class="field" style="flex:1"><label>Single tester</label>${tCombo('gtTester',(S.testers[0]||{}).id||'',"",{hidden:'gtTester',allowEmpty:false,width:'100%'})}</div>
       <div class="field"><label>Entity filter (optional)</label><select id="gtEntity"><option value="">— all —</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select></div>
     </div>
-    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="genTesterPage()">Generate &amp; download</button></div>`);
+    <div class="toolbar" style="margin-top:14px"><button onclick="genAllTesterPages()" title="One combined file with every tester — each only sees and returns their own selection">⬇ Generate ALL testers (combined)</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="genTesterPage()">Generate this tester</button></div>`);
 }
+function slug(s){ return String(s||"").replace(/\W+/g,'_'); }
+function execToTest(e){ return {id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||"",
+  txnRef:(e.txnRef!=null?!!e.txnRef:!!((libById(e.libraryItemId)||{}).txnRef)),txnRefValue:e.txnRefValue||"",
+  failedSteps:e.failedSteps||{},screens:e.screens||[],
+  steps:(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[])).slice()}; }
+function basePayload(iter,testers){ return {campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,
+  entities:S.config.entities.map(x=>x.code),statuses:S.config.statuses,links:(S.config.links||[]).filter(l=>l&&(l.label||l.url)),testers}; }
 function genTesterPage(){
   const testerId=$("#gtTester").value, entFilter=$("#gtEntity").value, iter=activeIter();
-  const t=tester(testerId)||{name:"Tester",country:""};
-  const list=S.executions.filter(e=>e.iterationId===iter.id&&e.testerId===testerId&&(!entFilter||e.entity===entFilter))
-    .sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)))
-    .map(e=>({id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||"",
-              txnRef:(e.txnRef!=null?!!e.txnRef:!!((libById(e.libraryItemId)||{}).txnRef)),txnRefValue:e.txnRefValue||"",
-              steps:(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[])).slice()}));
-  if(!list.length){ alert("No test assigned to this tester for this iteration/entity."); return; }
-  const payload={campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,testerId,testerName:t.name,
-    entities:S.config.entities.map(x=>x.code),statuses:S.config.statuses,tests:list};
-  const html=buildTesterHTML(payload);
-  download(`UAT_${iter.name.replace(/\W+/g,'_')}_${t.name.replace(/\W+/g,'_')}.html`, html, "text/html");
+  const t=tester(testerId)||{name:"Tester"};
+  const tests=S.executions.filter(e=>e.iterationId===iter.id&&e.testerId===testerId&&(!entFilter||e.entity===entFilter))
+    .sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(execToTest);
+  if(!tests.length){ alert("No test assigned to this tester for this iteration/entity."); return; }
+  download(`UAT_${slug(iter.name)}_${slug(t.name)}.html`, buildTesterHTML(basePayload(iter,[{id:testerId,name:t.name,tests}])), "text/html");
+  closeModal();
+}
+function genAllTesterPages(){
+  const iter=activeIter();
+  const ids=[...new Set(S.executions.filter(e=>e.iterationId===iter.id&&e.testerId).map(e=>e.testerId))];
+  const testers=ids.map(id=>({id,name:(tester(id)||{}).name||"(unknown)",
+      tests:S.executions.filter(e=>e.iterationId===iter.id&&e.testerId===id).sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(execToTest)}))
+    .filter(x=>x.tests.length).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  if(!testers.length){ alert("No assignment in this iteration yet."); return; }
+  download(`UAT_${slug(iter.name)}_ALL_testers.html`, buildTesterHTML(basePayload(iter,testers)), "text/html");
   closeModal();
 }
 function buildTesterHTML(payload){
   const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>UAT — ${esc(payload.testerName)} — ${esc(payload.iteration)}</title>
+<title>UAT — ${esc(payload.testers.length===1?payload.testers[0].name:"All testers")} — ${esc(payload.iteration)}</title>
 <style>
 body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px}
-header{background:#16233b;padding:12px 18px;position:sticky;top:0;display:flex;gap:16px;align-items:center;border-bottom:1px solid #334155}
+header{background:#16233b;padding:12px 18px;position:sticky;top:0;display:flex;gap:16px;align-items:center;border-bottom:1px solid #334155;z-index:5}
 header h1{font-size:16px;margin:0}.muted{color:#94a3b8}
 main{padding:18px;max-width:1200px;margin:0 auto}
 table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
@@ -631,53 +666,77 @@ ol.steps li{margin:3px 0}
 .txnlbl{font-size:12px;color:#94a3b8;margin-top:4px;display:inline-block}
 input.txnin{margin-top:3px;width:260px;max-width:100%}
 input.txnin.req{border-color:#ef4444}
+.links{background:#0b1220;border:1px solid #334155;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+.links a{color:#38bdf8}
+.whoami{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.whoami select{min-width:260px}
+th.sortable{cursor:pointer;user-select:none}
+.issuebox{padding:2px 0}
+.tpick2{display:block;padding:2px 0;cursor:pointer}
+.dropz{border:1px dashed #475569;border-radius:8px;padding:14px;text-align:center;color:#94a3b8;cursor:pointer;background:#0b1220}
+.dropz.over{border-color:#38bdf8;color:#e2e8f0}
+.shots{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.shot{position:relative;display:inline-block}
+.shot img{max-height:74px;border:1px solid #334155;border-radius:6px;display:block}
+.rmshot{position:absolute;top:-8px;right:-8px;background:#ef4444;color:#fff;border:0;border-radius:50%;width:20px;height:20px;padding:0;font-weight:700;cursor:pointer}
 </style></head><body>
 <header><h1>UAT Test Sheet</h1><span class="muted" id="hdr"></span></header>
 <main>
-  <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test case (▸&nbsp;steps) to view the steps to follow; when a test requires it, enter the <b>transaction reference</b>. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
+  <div class="whoami" id="whoamiBar"><label class="muted" for="whoami">Select your name:</label><select id="whoami"></select></div>
+  <div class="links" id="links"></div>
+  <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test case (▸&nbsp;steps) to view the steps; when a test requires it, enter the <b>transaction reference</b>. For a <b>Failed/Blocked</b> test, tick the problematic step(s) and drag-and-drop screenshot(s) as evidence. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
   <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
     <label class="muted" for="procFilter">Process</label>
     <select id="procFilter" onchange="render()"><option value="">— All —</option></select>
     <span class="muted" id="shownCount"></span>
   </div>
-  <table id="tbl"><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th style="width:140px">Status</th><th style="width:160px;cursor:pointer;user-select:none" title="Click to sort by execution due date" onclick="toggleSort()">Execution due date <span id="sortArrow"></span></th><th>Comment</th></tr></thead><tbody id="tb"></tbody></table>
+  <table id="tbl"><thead><tr><th class="sortable" onclick="sortBy('process')">PRC <span id="arP"></span></th><th>Scenario</th><th>Entity</th><th style="width:140px">Status</th><th class="sortable" style="width:160px" onclick="sortBy('testDate')">Execution due date <span id="arD"></span></th><th>Comment</th></tr></thead><tbody id="tb"></tbody></table>
   <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Add ad-hoc test</button></p>
 </main>
 <div class="bar"><button onclick="saveJSON()">⬇ Save results (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
 <script>
 const DATA=${dataJson};
-const LSK="mceu_tester_"+DATA.iterationId+"_"+DATA.testerId;
-let rows=[], adhoc=[], sortDir=0, expanded=new Set(); /* 0=as-loaded, 1=date asc, -1=date desc */
-function toggleSort(){ sortDir = sortDir===1?-1:(sortDir===-1?0:1); render(); }
-function toggleSteps(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); render(); }
-function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow";
-  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ol></td>';
-  return tr; }
-function init(){
-  document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · "+DATA.testerName;
-  const saved=JSON.parse(localStorage.getItem(LSK)||"null");
-  rows=DATA.tests.map(t=>{const s=saved&&saved.results&&saved.results.find(r=>r.id===t.id);return {...t,status:s?s.status:t.status,comment:s?s.comment:t.comment,txnRefValue:(s&&s.txnRefValue)||t.txnRefValue||""};});
-  adhoc=(saved&&saved.adhoc)||[];
-  const procs=[...new Set(rows.map(t=>t.process).filter(Boolean))].sort();
-  if(procs.length>1){
-    document.getElementById("procFilter").innerHTML='<option value="">— All processes ('+procs.length+') —</option>'+procs.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join("");
-    document.getElementById("filterBar").style.display="flex";
-  }
-  render();
-}
+let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="", sortDir=0;
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function nat(s){return String(s||"").toLowerCase().replace(/\\d+/g,m=>m.padStart(10,"0"));}
+function lsk(id){return "mceu_tester_"+DATA.iterationId+"_"+id;}
 function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.requiresComment;}
+function buildLinks(){const L=(DATA.links||[]).filter(x=>x&&(x.label||x.url));const el=document.getElementById("links");
+  if(!L.length){el.style.display="none";return;}
+  el.innerHTML="<b>Useful links:</b> "+L.map(x=>x.url?('<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.label||x.url)+'</a>'):esc(x.label||"")).filter(Boolean).join(" &nbsp;·&nbsp; ");}
+function buildWho(){const sel=document.getElementById("whoami");
+  sel.innerHTML=(DATA.testers.length>1?'<option value="">— select your name —</option>':"")+DATA.testers.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.name)+' ('+t.tests.length+')</option>').join("");
+  sel.addEventListener("change",()=>loadTester(sel.value));
+  if(DATA.testers.length<=1) document.getElementById("whoamiBar").style.display="none";}
+function buildProcFilter(){const procs=[...new Set(rows.map(t=>t.process).filter(Boolean))].sort();
+  const fb=document.getElementById("filterBar"), pf=document.getElementById("procFilter");
+  if(procs.length>1){ pf.innerHTML='<option value="">— All processes ('+procs.length+') —</option>'+procs.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join(""); fb.style.display="flex"; }
+  else { pf.innerHTML='<option value="">— All —</option>'; fb.style.display="none"; }}
+function loadTester(id){ curId=id; const tt=DATA.testers.find(x=>x.id===id); const hdr=document.getElementById("hdr");
+  if(!tt){ rows=[];adhoc=[]; hdr.textContent=DATA.campaign+" · "+DATA.iteration; buildProcFilter(); render(); return; }
+  hdr.textContent=DATA.campaign+" · "+DATA.iteration+" · "+tt.name;
+  const saved=JSON.parse(localStorage.getItem(lsk(id))||"null");
+  rows=tt.tests.map(t=>{const s=saved&&saved.results&&saved.results.find(r=>r.id===t.id);
+    return Object.assign({},t,{status:s?s.status:t.status,comment:s?s.comment:t.comment,txnRefValue:(s&&s.txnRefValue)||t.txnRefValue||"",failedSteps:(s&&s.failedSteps)||t.failedSteps||{},screens:(s&&s.screens)||t.screens||[]});});
+  adhoc=(saved&&saved.adhoc)||[];
+  buildProcFilter(); render(); }
+function sk(t){ return sortField==="process"?nat((t.process||"")+" "+(t.scenario||"")):(t.testDate||""); }
+function sortBy(f){ if(sortField===f){ sortDir=sortDir===1?-1:0; if(!sortDir)sortField=""; } else { sortField=f; sortDir=1; } render(); }
+function toggleSteps(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); render(); }
 function render(){
   const tb=document.getElementById("tb"); tb.innerHTML="";
-  const fEl=document.getElementById("procFilter"); const f=fEl?fEl.value:"";
+  const pf=document.getElementById("procFilter"); const f=pf?pf.value:"";
   let shown=0; const list=[];
   rows.forEach((t,i)=>{ if(!f||t.process===f){ list.push({t,i,isAd:false}); shown++; } });
   adhoc.forEach((t,i)=>list.push({t,i,isAd:true}));
-  if(sortDir!==0){ list.sort((a,b)=>{ const da=a.t.testDate||"", db=b.t.testDate||"";
-    if(!da&&!db) return 0; if(!da) return 1; if(!db) return -1;   /* undated rows last */
-    return da<db ? -sortDir : (da>db ? sortDir : 0); }); }
+  if(sortField){ const df=sortField==="testDate"; list.sort((a,b)=>{ let ka=sk(a.t),kb=sk(b.t);
+    if(df){ if(!ka&&!kb)return 0; if(!ka)return 1; if(!kb)return -1; }
+    return ka<kb?-sortDir:ka>kb?sortDir:0; }); }
   list.forEach(it=>{ tb.appendChild(rowEl(it.t,it.i,it.isAd));
-    if(!it.isAd && it.t.steps && it.t.steps.length && expanded.has(it.t.id)) tb.appendChild(stepRowEl(it.t)); });
-  const ar=document.getElementById("sortArrow"); if(ar) ar.textContent=sortDir===1?"▲":sortDir===-1?"▼":"";
+    if(!it.isAd && it.t.steps && it.t.steps.length && expanded.has(it.t.id)) tb.appendChild(stepRowEl(it.t));
+    if(reqComment(it.t.status)) tb.appendChild(issueRowEl(it.t,it.isAd)); });
+  document.getElementById("arP").textContent=sortField==="process"?(sortDir===1?"▲":"▼"):"";
+  document.getElementById("arD").textContent=sortField==="testDate"?(sortDir===1?"▲":"▼"):"";
   const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" shown"):"";
   updateProg();
 }
@@ -686,35 +745,66 @@ function rowEl(t,i,isAd){
   const opts=DATA.statuses.map(s=>'<option '+(s.value===t.status?'selected':'')+'>'+s.value+'</option>').join("");
   const entOpts=DATA.entities.map(e=>'<option '+(e===t.entity?'selected':'')+'>'+e+'</option>').join("");
   const nSteps=(!isAd && t.steps)?t.steps.length:0;
-  const stepTog=nSteps?' <span class="stepToggle" onclick="toggleSteps(\\''+t.id+'\\')">'+(expanded.has(t.id)?'▾':'▸')+' steps ('+nSteps+')</span>':'';
+  const stepTog=nSteps?' <span class="stepToggle">'+(expanded.has(t.id)?'▾':'▸')+' steps ('+nSteps+')</span>':'';
   const needTxn=(!isAd && t.txnRef && t.status && t.status!=="Not started" && !((t.txnRefValue||"").trim()));
   const txnBlock=(!isAd && t.txnRef)?'<div class="txnlbl">Transaction reference <span class="reftag">required</span></div><input data-k="txnRefValue" class="txnin'+(needTxn?' req':'')+'" value="'+esc(t.txnRefValue||"")+'" placeholder="enter transaction reference…"/>':'';
-  tr.innerHTML='<td>'+(isAd?'<input value="'+(t.process||'')+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
-    '<td>'+(isAd?'<input value="'+(t.scenario||'')+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+stepTog+txnBlock))+'</td>'+
-    '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||'')+'</span>'))+'</td>'+
+  tr.innerHTML='<td>'+(isAd?'<input value="'+esc(t.process||"")+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
+    '<td>'+(isAd?'<input value="'+esc(t.scenario||"")+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+stepTog+txnBlock))+'</td>'+
+    '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||"")+'</span>'))+'</td>'+
     '<td><select data-k="status">'+opts+'</select></td>'+
     '<td class="duedate">'+(t.testDate?esc(t.testDate):'<span class="muted">—</span>')+'</td>'+
-    '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?'required…':'optional')+'">'+esc(t.comment||'')+'</textarea></td>';
+    '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?'required…':'optional')+'">'+esc(t.comment||"")+'</textarea></td>';
   const arr=isAd?adhoc:rows;
-  tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{arr[i][el.dataset.k]=el.value;
-    if(el.dataset.k==="status"){ el.closest("tr").querySelector('textarea').className=reqComment(el.value)&&!arr[i].comment?'req':''; }
-    autosave(); updateProg();}));
+  const tgl=tr.querySelector(".stepToggle"); if(tgl) tgl.addEventListener("click",()=>toggleSteps(t.id));
+  tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{ arr[i][el.dataset.k]=el.value;
+    if(el.dataset.k==="status"){ autosave(); render(); return; }
+    autosave(); updateProg(); }));
   return tr;
 }
-function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
-function addAdhoc(){adhoc.push({process:"",scenario:"",entity:DATA.entities[0]||"",status:DATA.statuses[0].value,comment:"",testDate:""});render();}
-function autosave(){localStorage.setItem(LSK,JSON.stringify(payloadOut()));document.getElementById("savedMsg").textContent="auto-saved ✓";setTimeout(()=>document.getElementById("savedMsg").textContent="",1500);}
-function updateProg(){const done=rows.filter(r=>r.status&&r.status!=="Not started").length;document.getElementById("prog").textContent=done+" / "+rows.length+" done";}
-function payloadOut(){return {_type:"MCEU_TESTER_RESULTS",iterationId:DATA.iterationId,testerId:DATA.testerId,testerName:DATA.testerName,
-  results:rows.map(r=>({id:r.id,status:r.status,comment:r.comment,testDate:r.testDate,txnRefValue:r.txnRefValue||""})),
-  adhoc:adhoc.filter(a=>a.process||a.scenario).map(a=>({process:a.process,scenario:a.scenario,entity:a.entity,status:a.status,comment:a.comment,testDate:a.testDate||""}))};}
-function saveJSON(){
+function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow";
+  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ol></td>';
+  return tr; }
+function issueRowEl(t,isAd){ const tr=document.createElement("tr"); tr.className="steprow";
+  t.failedSteps=t.failedSteps||{}; t.screens=t.screens||[];
+  const steps=(!isAd && t.steps)?t.steps:[];
+  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">Tick the problematic step(s):</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(s)+'</label>').join("")):'<div class="muted" style="font-size:12px">No predefined steps to flag.</div>';
+  const shots=t.screens.map((sc,si)=>'<span class="shot"><img src="'+sc.data+'" alt=""/><button class="rmshot" data-si="'+si+'" title="remove">✕</button></span>').join("");
+  tr.innerHTML='<td></td><td colspan="5"><div class="issuebox">'+stepsHtml+
+    '<div class="muted" style="font-size:12px;margin:8px 0 2px">Evidence — drag &amp; drop screenshot(s) here, or click to browse:</div>'+
+    '<div class="dropz">Drop screenshot here / click to browse</div>'+
+    '<input type="file" accept="image/*" multiple class="shotin" style="display:none"/>'+
+    '<div class="shots">'+shots+'</div></div></td>';
+  tr.querySelectorAll(".fchk").forEach(el=>el.addEventListener("change",()=>{ if(el.checked)t.failedSteps[el.dataset.si]=true; else delete t.failedSteps[el.dataset.si]; autosave(); }));
+  const dz=tr.querySelector(".dropz"), fin=tr.querySelector(".shotin");
+  dz.addEventListener("click",()=>fin.click());
+  dz.addEventListener("dragover",e=>{e.preventDefault();dz.classList.add("over");});
+  dz.addEventListener("dragleave",()=>dz.classList.remove("over"));
+  dz.addEventListener("drop",e=>{e.preventDefault();dz.classList.remove("over");addShots(t,e.dataTransfer.files);});
+  fin.addEventListener("change",()=>addShots(t,fin.files));
+  tr.querySelectorAll(".rmshot").forEach(el=>el.addEventListener("click",()=>{ t.screens.splice(parseInt(el.dataset.si),1); autosave(); render(); }));
+  return tr;
+}
+function addShots(t,files){ t.screens=t.screens||[];
+  [].slice.call(files).filter(f=>f.type&&f.type.indexOf("image/")===0).forEach(f=>{ const r=new FileReader(); r.onload=function(){ t.screens.push({name:f.name,data:r.result}); autosave(); render(); }; r.readAsDataURL(f); }); }
+function addAdhoc(){ if(!curId){alert("Select your name first.");return;} adhoc.push({process:"",scenario:"",entity:DATA.entities[0]||"",status:DATA.statuses[0].value,comment:"",testDate:""}); render(); }
+function updateProg(){ const done=rows.filter(r=>r.status&&r.status!=="Not started").length; document.getElementById("prog").textContent=curId?(done+" / "+rows.length+" done"):""; }
+function payloadOut(){ const tt=DATA.testers.find(x=>x.id===curId)||{};
+  return {_type:"MCEU_TESTER_RESULTS",iterationId:DATA.iterationId,testerId:curId,testerName:tt.name||"",
+    results:rows.map(r=>({id:r.id,status:r.status,comment:r.comment,testDate:r.testDate,txnRefValue:r.txnRefValue||"",failedSteps:r.failedSteps||{},screens:r.screens||[]})),
+    adhoc:adhoc.filter(a=>a.process||a.scenario).map(a=>({process:a.process,scenario:a.scenario,entity:a.entity,status:a.status,comment:a.comment,testDate:a.testDate||""}))};}
+function autosave(){ if(!curId)return; try{ localStorage.setItem(lsk(curId),JSON.stringify(payloadOut())); const m=document.getElementById("savedMsg"); m.textContent="auto-saved ✓"; setTimeout(()=>{m.textContent="";},1500);}catch(e){ const m=document.getElementById("savedMsg"); m.textContent="⚠ storage full (screenshots too large)"; } }
+function saveJSON(){ if(!curId){alert("Select your name first.");return;}
   const bad=rows.concat(adhoc).filter(r=>reqComment(r.status)&&!(r.comment||"").trim());
   if(bad.length && !confirm(bad.length+" test(s) are Failed/Blocked without a comment. Save anyway?"))return;
   const miss=rows.filter(r=>r.txnRef&&r.status&&r.status!=="Not started"&&!((r.txnRefValue||"").trim())).length;
   if(miss && !confirm(miss+" executed test(s) require a transaction reference that is still empty. Save anyway?"))return;
+  const tt=DATA.testers.find(x=>x.id===curId)||{name:"tester"};
   const b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="results_"+DATA.testerName.replace(/\\W+/g,'_')+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="results_"+(tt.name||"tester").replace(/\\W+/g,'_')+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();
+}
+function init(){ buildLinks(); buildWho();
+  if(DATA.testers.length===1){ document.getElementById("whoami").value=DATA.testers[0].id; loadTester(DATA.testers[0].id); }
+  else { render(); }
 }
 init();
 <\/script></body></html>`;
@@ -724,7 +814,7 @@ function importTesterResults(input){
   r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_TESTER_RESULTS"){alert("Not a tester results file.");return;}
     let upd=0,add=0;
     (p.results||[]).forEach(res=>{ const ex=S.executions.find(x=>x.id===res.id);
-      if(ex){ ex.status=res.status; ex.comment=res.comment||""; ex.testDate=res.testDate||ex.testDate; if(res.txnRefValue!=null)ex.txnRefValue=res.txnRefValue; ex.updatedAt=new Date().toISOString(); upd++; } });
+      if(ex){ ex.status=res.status; ex.comment=res.comment||""; ex.testDate=res.testDate||ex.testDate; if(res.txnRefValue!=null)ex.txnRefValue=res.txnRefValue; if(res.failedSteps)ex.failedSteps=res.failedSteps; if(res.screens)ex.screens=res.screens; ex.updatedAt=new Date().toISOString(); upd++; } });
     (p.adhoc||[]).forEach(a=>{ S.executions.push({id:uid(),iterationId:p.iterationId,libraryItemId:null,process:a.process||"(ad-hoc)",scenario:a.scenario||"",domain:"",
       entity:a.entity||"",testerId:p.testerId,status:a.status||"Not started",comment:a.comment||"",recurrence:"",testDate:a.testDate||"",adhoc:true,updatedAt:new Date().toISOString()}); add++; });
     renderAll(); save(); alert(`Results merged for ${esc(p.testerName||"tester")}: ${upd} updated, ${add} ad-hoc added.`);
@@ -763,6 +853,14 @@ function renderAdmin(){
       <div class="card"><b>Recurrences</b><div class="field" style="margin-top:8px"><textarea onchange="S.config.recurrences=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.recurrences.join("\n"))}</textarea><div class="hint">One per line.</div></div></div>
     </div>
 
+    <div class="card"><b>Useful links</b>
+      <p class="hint">Shown at the top of every generated tester sheet (application under test, documentation, contacts…).</p>
+      <table><thead><tr><th style="width:30%">Label</th><th>URL</th><th></th></tr></thead><tbody>
+      ${(S.config.links||[]).map((lk,i)=>`<tr><td><input value="${esc(lk.label||'')}" onchange="S.config.links[${i}].label=this.value;persist()"/></td><td><input value="${esc(lk.url||'')}" placeholder="https://…" onchange="S.config.links[${i}].url=this.value;persist()"/></td><td><button class="sm danger" onclick="S.config.links.splice(${i},1);persist()">✕</button></td></tr>`).join("")||'<tr><td colspan="3" class="muted">No link yet.</td></tr>'}
+      </tbody></table>
+      <button class="sm" onclick="(S.config.links=S.config.links||[]).push({label:'',url:''});persist()">+ Link</button>
+    </div>
+
     <div class="card"><b>DevOps import column mapping</b>
       <p class="hint">Library dedup is based on <code>process</code> (col H) × <code>scenario</code> (col I); <code>tester</code> reads col E.</p>
       <div class="grid" style="grid-template-columns:repeat(4,1fr)">
@@ -796,9 +894,11 @@ function importJSON(input){ const f=input.files[0]; if(!f)return; const r=new Fi
   r.onload=e=>{ try{ S=migrate(JSON.parse(e.target.result)); renderAll(); save(); alert("Backup restored."); }catch(err){ alert("Invalid file."); } }; r.readAsText(f); }
 function exportReport(){
   const data=S.executions.map(e=>{const it=S.iterations.find(i=>i.id===e.iterationId)||{};const t=tester(e.testerId)||{};
+    const fs=e.failedSteps||{};const steps=e.steps||[];
+    const failed=Object.keys(fs).filter(k=>fs[k]).map(k=>steps[k]||("step "+(parseInt(k)+1))).join(" ; ");
     return {Iteration:it.name||"",PRC:e.process||"",Scenario:e.scenario||"",Domain:e.domain||"",Entity:e.entity,
       Tester:t.name||"",TesterCountry:t.country||"",Status:e.status,Recurrence:e.recurrence||"",TestDate:e.testDate||"",
-      BusinessComment:e.comment||"",TransactionRef:e.txnRefValue||"",AdHoc:e.adhoc?"yes":""};});
+      BusinessComment:e.comment||"",TransactionRef:e.txnRefValue||"",FailedSteps:failed,Screenshots:(e.screens||[]).length||"",AdHoc:e.adhoc?"yes":""};});
   const ws=XLSX.utils.json_to_sheet(data.length?data:[{Info:"No execution"}]);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"UAT Report");
   XLSX.writeFile(wb,`MCEU_UAT_report_${new Date().toISOString().slice(0,10)}.xlsx`);
@@ -808,9 +908,9 @@ function exportReport(){
 function exportLibrary(){
   const m=S.config.columnMapping;
   const rows=S.library.slice().sort((a,b)=>(a.order||0)-(b.order||0)||naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(c=>{
-    const t=tester(c.defaultTesterId); const r={};
+    const r={};
     r[m.domain]=c.domain||""; r[m.process]=c.process||""; r[m.scenario]=c.scenario||"";
-    r[m.tester]=t?t.name:""; r.Order=c.order||0; r.Notes=c.notes||"";
+    r[m.tester]=testerNames(libTesterIds(c)); r.Order=c.order||0; r.Notes=c.notes||"";
     return r; });
   const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{[m.process]:"",[m.scenario]:""}]);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"LUX");
