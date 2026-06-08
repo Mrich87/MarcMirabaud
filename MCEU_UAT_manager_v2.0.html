@@ -354,7 +354,7 @@ function renderLibrary(){
         <td>${esc(c.domain)}</td>
         <td class="muted">${esc(testerNames(libTesterIds(c))||"—")}</td>
         <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button></td>
-      </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(s)}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
+      </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(stepText(s))}${stepStream(s)?` <span class="reftag">${esc(stepStream(s))}</span>`:""}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
       </tbody>
     </table>`}`;
 }
@@ -365,6 +365,14 @@ function moveLib(id,dir){ const ids=libDisplayedIds(); const idx=ids.indexOf(Str
 function resetLibOrder(){ let n=0; sortedLib(S.library).forEach(c=>c.order=++n); persist(); }
 function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterIds:[],notes:"",steps:[],txnRef:false}; S.library.push(c); save(); editLibItem(c.id); }
 function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)",steps:(o.steps||[]).slice(),defaultTesterIds:libTesterIds(o).slice()}; S.library.push(c); persist(); }
+/* steps may be a legacy plain string or {text,stream} */
+const stepText=s=>(s&&typeof s==="object")?(s.text||""):String(s||"");
+const stepStream=s=>(s&&typeof s==="object")?(s.stream||""):"";
+function streamList(){ const set=new Set(S.library.map(c=>c.domain).filter(Boolean)); (S.config.departments||[]).forEach(d=>d&&set.add(d)); return [...set].sort(); }
+function streamOptions(sel){ return '<option value="">— any / common —</option>'+streamList().map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join(""); }
+function stepRowHtml(text,stream){ return '<div class="row steprowedit" style="gap:6px;align-items:center;margin:0 0 5px 0;flex-wrap:nowrap"><input class="l_step_text" value="'+esc(text||"")+'" placeholder="Step description" style="flex:1"/><select class="l_step_stream" style="max-width:200px">'+streamOptions(stream||"")+'</select><button class="sm danger" type="button" onclick="this.closest(\'.steprowedit\').remove()">✕</button></div>'; }
+function renderStepRows(steps){ const w=document.getElementById("l_steps_wrap"); if(!w)return; w.innerHTML=(steps||[]).map(s=>stepRowHtml(stepText(s),stepStream(s))).join(""); }
+function addStepRow(){ const w=document.getElementById("l_steps_wrap"); if(!w)return; w.insertAdjacentHTML("beforeend",stepRowHtml("","")); }
 function editLibItem(id){ const c=libById(id);
   modal(`<h2>Edit library definition</h2>
     <div class="row" style="margin-top:4px">
@@ -379,10 +387,14 @@ function editLibItem(id){ const c=libById(id);
       </div>
       <div class="field"><label>Order</label><input type="number" id="l_order" value="${c.order||0}"/></div>
     </div>
-    <div class="field" style="margin-top:8px"><label>Steps to follow (one per line)</label><textarea id="l_steps" style="min-height:96px" placeholder="Step 1&#10;Step 2&#10;…">${esc((c.steps||[]).join("\n"))}</textarea><div class="hint">Pre-filled by the coordinator; the tester can expand the test case to view them.</div></div>
+    <div class="field" style="margin-top:8px"><label>Workflow steps — link each step to a business stream</label>
+      <div id="l_steps_wrap"></div>
+      <button class="sm" type="button" onclick="addStepRow()">+ Step</button>
+      <div class="hint">Steps tagged with a stream are <b>highlighted</b> in the tester page for testers of that stream; the whole workflow is always shown. Use “— any / common —” for steps shared by all streams.</div></div>
     <div class="field" style="margin-top:8px"><label class="pill" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;width:fit-content"><input type="checkbox" id="l_txn" ${c.txnRef?'checked':''}/> Require a <b>transaction reference</b> (opens a reference field for the tester)</label></div>
     <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="l_notes">${esc(c.notes||"")}</textarea></div>
     <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delLibItem('${c.id}')">Delete</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveLibItem('${c.id}')">Save</button></div>`);
+  renderStepRows(c.steps||[]);
 }
 function filterTesterPicks(){ const q=($("#l_tsearch").value||"").toLowerCase().trim();
   document.querySelectorAll("#l_tlist .tpick").forEach(el=>{ el.style.display=(!q||el.dataset.n.includes(q))?"flex":"none"; }); }
@@ -390,7 +402,7 @@ function saveLibItem(id){ const c=libById(id);
   c.process=$("#l_proc").value;c.domain=$("#l_dom").value;c.scenario=$("#l_scen").value;
   c.defaultTesterIds=[...document.querySelectorAll("#l_tlist .ltchk:checked")].map(x=>x.value); delete c.defaultTesterId;
   c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;
-  c.steps=$("#l_steps").value.split("\n").map(x=>x.trim()).filter(Boolean);
+  c.steps=[...document.querySelectorAll("#l_steps_wrap .steprowedit")].map(r=>{const text=(r.querySelector(".l_step_text").value||"").trim();const stream=r.querySelector(".l_step_stream").value||"";return text?(stream?{text,stream}:text):null;}).filter(Boolean);
   c.txnRef=$("#l_txn").checked;
   closeModal(); persist(); }
 function delLibItem(id){ if(!confirm("Delete this definition?"))return; S.library=S.library.filter(c=>String(c.id)!==String(id)); closeModal(); persist(); }
@@ -550,7 +562,7 @@ function renderTrackingTable(){
 }
 function openEvidence(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
   const steps=e.steps||[]; const fs=e.failedSteps||{};
-  const flagged=Object.keys(fs).filter(k=>fs[k]).map(k=>steps[k]||("step "+(parseInt(k)+1))).filter(Boolean);
+  const flagged=Object.keys(fs).filter(k=>fs[k]).map(k=>stepText(steps[k])||("step "+(parseInt(k)+1))).filter(Boolean);
   const shots=(e.screens||[]).map(sc=>`<a href="${sc.data}" target="_blank" title="${esc(sc.name||'')}"><img src="${sc.data}" style="max-height:160px;border:1px solid var(--line);border-radius:8px"/></a>`).join(" ");
   modal(`<h2>Evidence — ${esc(e.process)}</h2>
     <p class="hint">${esc(e.scenario)} · ${badge(e.entity,entityMeta(e.entity).color)} · ${esc(testerName(e.testerId))} · ${badge(e.status,statusMeta(e.status).color)}</p>
@@ -614,7 +626,7 @@ function openGenTester(){
     <div class="toolbar" style="margin-top:14px"><button onclick="genAllTesterPages()" title="One combined file with every tester — each only sees and returns their own selection">⬇ Generate ALL testers (combined)</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="genTesterPage()">Generate this tester</button></div>`);
 }
 function slug(s){ return String(s||"").replace(/\W+/g,'_'); }
-function execToTest(e){ return {id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||"",
+function execToTest(e){ return {id:e.id,process:e.process,scenario:e.scenario,domain:e.domain||"",entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||"",
   txnRef:(e.txnRef!=null?!!e.txnRef:!!((libById(e.libraryItemId)||{}).txnRef)),txnRefValue:e.txnRefValue||"",
   failedSteps:e.failedSteps||{},screens:e.screens||[],
   steps:(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[])).slice()}; }
@@ -661,6 +673,10 @@ button.sec{background:#273449;color:#e2e8f0;border:1px solid #334155;font-weight
 .steprow>td{background:#0b1220}
 ol.steps{margin:4px 0;padding-left:22px}
 ol.steps li{margin:3px 0}
+ol.steps li.hl{background:#38bdf81f;border-left:3px solid #38bdf8;padding-left:6px;border-radius:4px;margin-left:-9px}
+.streamtag{display:inline-block;background:#334155;color:#cbd5e1;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.streamtag.on{background:#38bdf833;color:#7dd3fc;border:1px solid #38bdf8}
+.tpick2.hl{background:#38bdf81f;border-radius:4px;padding-left:4px}
 .duedate{white-space:nowrap}
 .reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
 .txnlbl{font-size:12px;color:#94a3b8;margin-top:4px;display:inline-block}
@@ -686,7 +702,7 @@ th.sortable{cursor:pointer;user-select:none}
 <main>
   <div class="whoami" id="whoamiBar"><label class="muted" for="whoami">Select your name:</label><select id="whoami"></select></div>
   <div class="links" id="links"></div>
-  <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test case (▸&nbsp;steps) to view the steps; when a test requires it, enter the <b>CLMi ID / Temenos ID / Transaction ID</b>. For a <b>Failed/Blocked</b> test, tick the problematic step(s) and drag-and-drop screenshot(s) as evidence. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
+  <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test case (▸&nbsp;steps) to view the full workflow — the steps for your stream are <b>highlighted</b>; when a test requires it, enter the <b>CLMi ID / Temenos ID / Transaction ID</b>. For a <b>Failed/Blocked</b> test, tick the problematic step(s) and drag-and-drop screenshot(s) as evidence. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
   <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
     <label class="muted" for="procFilter">Process</label>
     <select id="procFilter" onchange="render()"><option value="">— All —</option></select>
@@ -700,6 +716,8 @@ th.sortable{cursor:pointer;user-select:none}
 const DATA=${dataJson};
 let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="", sortDir=0;
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function stepText(s){return (s&&typeof s==="object")?(s.text||""):String(s||"");}
+function stepStream(s){return (s&&typeof s==="object")?(s.stream||""):"";}
 function nat(s){return String(s||"").toLowerCase().replace(/\\d+/g,m=>m.padStart(10,"0"));}
 function lsk(id){return "mceu_tester_"+DATA.iterationId+"_"+id;}
 function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.requiresComment;}
@@ -764,13 +782,15 @@ function rowEl(t,i,isAd){
     autosave(); updateProg(); }));
   return tr;
 }
-function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow";
-  tr.innerHTML='<td></td><td colspan="6"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ol></td>';
+function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow"; const mine=t.domain||"";
+  const items=t.steps.map(s=>{const st=stepStream(s),hl=st&&mine&&st===mine;return '<li class="'+(hl?'hl':'')+'">'+esc(stepText(s))+(st?' <span class="streamtag'+(hl?' on':'')+'">'+esc(st)+'</span>':'')+'</li>';}).join("");
+  const note=mine?('Workflow — steps for <b>'+esc(mine)+'</b> are highlighted'):'Steps to follow';
+  tr.innerHTML='<td></td><td colspan="6"><div class="muted" style="font-size:12px;margin-bottom:2px">'+note+':</div><ol class="steps">'+items+'</ol></td>';
   return tr; }
 function issueRowEl(t,isAd){ const tr=document.createElement("tr"); tr.className="steprow";
   t.failedSteps=t.failedSteps||{}; t.screens=t.screens||[];
   const steps=(!isAd && t.steps)?t.steps:[];
-  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">Tick the problematic step(s):</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(s)+'</label>').join("")):'<div class="muted" style="font-size:12px">No predefined steps to flag.</div>';
+  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">Tick the problematic step(s):</div>'+steps.map((s,si)=>{const st=stepStream(s),hl=st&&t.domain&&st===t.domain;return '<label class="tpick2'+(hl?' hl':'')+'"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(stepText(s))+(st?' <span class="streamtag'+(hl?' on':'')+'">'+esc(st)+'</span>':'')+'</label>';}).join("")):'<div class="muted" style="font-size:12px">No predefined steps to flag.</div>';
   const shots=t.screens.map((sc,si)=>'<span class="shot"><img src="'+sc.data+'" alt=""/><button class="rmshot" data-si="'+si+'" title="remove">✕</button></span>').join("");
   tr.innerHTML='<td></td><td colspan="6"><div class="issuebox">'+stepsHtml+
     '<div class="muted" style="font-size:12px;margin:8px 0 2px">Evidence — drag &amp; drop screenshot(s) here, or click to browse:</div>'+
@@ -898,7 +918,7 @@ function importJSON(input){ const f=input.files[0]; if(!f)return; const r=new Fi
 function exportReport(){
   const data=S.executions.map(e=>{const it=S.iterations.find(i=>i.id===e.iterationId)||{};const t=tester(e.testerId)||{};
     const fs=e.failedSteps||{};const steps=e.steps||[];
-    const failed=Object.keys(fs).filter(k=>fs[k]).map(k=>steps[k]||("step "+(parseInt(k)+1))).join(" ; ");
+    const failed=Object.keys(fs).filter(k=>fs[k]).map(k=>stepText(steps[k])||("step "+(parseInt(k)+1))).join(" ; ");
     return {Iteration:it.name||"",PRC:e.process||"",Scenario:e.scenario||"",Domain:e.domain||"",Entity:e.entity,
       Tester:t.name||"",TesterCountry:t.country||"",Status:e.status,Recurrence:e.recurrence||"",TestDate:e.testDate||"",
       BusinessComment:e.comment||"",TransactionRef:e.txnRefValue||"",FailedSteps:failed,Screenshots:(e.screens||[]).length||"",AdHoc:e.adhoc?"yes":""};});
