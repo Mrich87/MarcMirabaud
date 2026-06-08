@@ -623,6 +623,8 @@ function openGenTester(){
       <div class="field" style="flex:1"><label>Single tester</label>${tCombo('gtTester',(S.testers[0]||{}).id||'',"",{hidden:'gtTester',allowEmpty:false,width:'100%'})}</div>
       <div class="field"><label>Entity filter (optional)</label><select id="gtEntity"><option value="">— all —</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select></div>
     </div>
+    <p class="hint" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px"><b>Business review (before assignment):</b> a tester-less file with <b>all Library test cases grouped by stream</b>. The business selects its stream, reviews the scenarios and adds missing ones via “+ Add ad-hoc test”. On import, proposed scenarios are added to the Library under that stream.</p>
+    <div class="toolbar" style="margin-top:6px"><button onclick="genReviewByStream()" title="One tester-less file: all Library test cases grouped by business stream, for review">⬇ Generate business review (by stream)</button></div>
     <div class="toolbar" style="margin-top:14px"><button onclick="genAllTesterPages()" title="One combined file with every tester — each only sees and returns their own selection">⬇ Generate ALL testers (combined)</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="genTesterPage()">Generate this tester</button></div>`);
 }
 function slug(s){ return String(s||"").replace(/\W+/g,'_'); }
@@ -649,6 +651,21 @@ function genAllTesterPages(){
     .filter(x=>x.tests.length).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
   if(!testers.length){ alert("No assignment in this iteration yet."); return; }
   download(`UAT_${slug(iter.name)}_ALL_testers.html`, buildTesterHTML(basePayload(iter,testers)), "text/html");
+  closeModal();
+}
+/* Business review: all Library test cases, grouped by stream, no tester. */
+function libToReviewTest(c){ return {id:"lib::"+c.id,process:c.process,scenario:c.scenario,domain:c.domain||"",entity:"",
+  status:(S.config.statuses[0]||{}).value||"Not started",comment:"",testDate:"",txnRef:!!c.txnRef,txnRefValue:"",
+  failedSteps:{},screens:[],steps:(c.steps||[]).slice()}; }
+function genReviewByStream(){
+  const iter=activeIter();
+  const byDom={}; S.library.forEach(c=>{ const d=c.domain||"(no stream)"; (byDom[d]=byDom[d]||[]).push(c); });
+  const doms=Object.keys(byDom).sort();
+  if(!doms.length){ alert("Library is empty — import or create definitions first."); return; }
+  const testers=doms.map(d=>({id:"stream::"+d,name:d,
+    tests:byDom[d].slice().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(libToReviewTest)}));
+  const payload=basePayload(iter,testers); payload.reviewMode=true;
+  download(`UAT_${slug(iter.name)}_BUSINESS_REVIEW_by_stream.html`, buildTesterHTML(payload), "text/html");
   closeModal();
 }
 function buildTesterHTML(payload){
@@ -700,9 +717,9 @@ th.sortable{cursor:pointer;user-select:none}
 </style></head><body>
 <header><h1>UAT Test Sheet</h1><span class="muted" id="hdr"></span><button onclick="saveJSON()" style="margin-left:auto">⬇ Save results (JSON)</button></header>
 <main>
-  <div class="whoami" id="whoamiBar"><label class="muted" for="whoami">Select your name:</label><select id="whoami"></select></div>
+  <div class="whoami" id="whoamiBar"><label class="muted" for="whoami" id="whoamiLbl">Select your name:</label><select id="whoami"></select></div>
   <div class="links" id="links"></div>
-  <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test case (▸&nbsp;steps) to view the full workflow — the steps for your stream are <b>highlighted</b>; when a test requires it, enter the <b>CLMi ID / Temenos ID / Transaction ID</b>. For a <b>Failed/Blocked</b> test, tick the problematic step(s) and drag-and-drop screenshot(s) as evidence. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
+  <p class="muted" id="introText">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test case (▸&nbsp;steps) to view the full workflow — the steps for your stream are <b>highlighted</b>; when a test requires it, enter the <b>CLMi ID / Temenos ID / Transaction ID</b>. For a <b>Failed/Blocked</b> test, tick the problematic step(s) and drag-and-drop screenshot(s) as evidence. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
   <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
     <label class="muted" for="procFilter">Process</label>
     <select id="procFilter" onchange="render()"><option value="">— All —</option></select>
@@ -826,6 +843,12 @@ function saveJSON(){ if(!curId){alert("Select your name first.");return;}
   const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="results_"+(tt.name||"tester").replace(/\\W+/g,'_')+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();
 }
 function init(){ buildLinks(); buildWho();
+  if(DATA.reviewMode){
+    document.querySelector("header h1").textContent="UAT — Business review";
+    const wl=document.getElementById("whoamiLbl"); if(wl) wl.textContent="Select your business stream:";
+    const intro=document.getElementById("introText");
+    if(intro) intro.innerHTML="<b>Business review</b> — select your <b>stream</b> to see all its test cases. Review the scenarios (expand ▸ steps to see the full workflow, your stream highlighted) and add any missing scenario via <b>+ Add ad-hoc test</b>. Click <b>Save results (JSON)</b> and send it back; your proposed scenarios will be added to the Library.";
+  }
   if(DATA.testers.length===1){ document.getElementById("whoami").value=DATA.testers[0].id; loadTester(DATA.testers[0].id); }
   else { render(); }
 }
@@ -835,6 +858,13 @@ init();
 function importTesterResults(input){
   const f=input.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_TESTER_RESULTS"){alert("Not a tester results file.");return;}
+    // Business review file: proposed ad-hoc scenarios go to the Library under the reviewed stream.
+    if((p.testerId||"").indexOf("stream::")===0){
+      const dom=p.testerId.slice(8); let added=0; let maxO=S.library.reduce((mm,c)=>Math.max(mm,c.order||0),0);
+      (p.adhoc||[]).forEach(a=>{ if(!a.process&&!a.scenario)return;
+        S.library.push({id:uid(),order:++maxO,domain:a.domain||dom,process:a.process||"(proposed)",scenario:a.scenario||"",defaultTesterIds:[],notes:"Proposed by business review",steps:[],txnRef:false}); added++; });
+      renderAll(); save(); alert(`Business review merged for stream "${esc(dom)}": ${added} proposed scenario(s) added to the Library.`); return;
+    }
     let upd=0,add=0;
     (p.results||[]).forEach(res=>{ const ex=S.executions.find(x=>x.id===res.id);
       if(ex){ ex.status=res.status; ex.comment=res.comment||""; ex.testDate=res.testDate||ex.testDate; if(res.txnRefValue!=null)ex.txnRefValue=res.txnRefValue; if(res.failedSteps)ex.failedSteps=res.failedSteps; if(res.screens)ex.screens=res.screens; ex.updatedAt=new Date().toISOString(); upd++; } });
