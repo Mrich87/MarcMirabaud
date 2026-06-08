@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Change Management — Suivi des activités</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
+    --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --accent2:#0ea5e9;
+    --ok:#22c55e; --fail:#ef4444; --block:#f59e0b; --na:#64748b; --prog:#a855f7;
+    --chip:#0b1220;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  header{background:linear-gradient(90deg,#0b1220,#16233b);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+  header .brand{color:var(--accent)}
+  header .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+  select,input,textarea{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit}
+  textarea{width:100%;min-height:70px;resize:vertical}
+  label.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+  label.fld input,label.fld select,label.fld textarea{font-size:13px}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:13px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent2);border-color:var(--accent2);color:#06283b;font-weight:600}
+  button.primary:hover{background:var(--accent)}
+  button.danger{border-color:var(--fail);color:#fca5a5}
+  button.sm{padding:3px 8px;font-size:12px}
+  nav{display:flex;gap:4px;background:#0b1220;padding:6px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  nav button{background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;padding:9px 18px;color:var(--muted);font-size:14px}
+  nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  main{padding:18px;max-width:1600px;margin:0 auto}
+  .view{display:none}
+  .view.active{display:block}
+  h2{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 16px;font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+  .cards{display:flex;gap:12px;flex-wrap:wrap}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:130px;flex:1}
+  .kpi .n{font-size:26px;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .kpi.alert .n{color:var(--fail)}
+  .kpi.warn .n{color:var(--block)}
+  .kpi.good .n{color:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel);z-index:1;cursor:pointer;white-space:nowrap}
+  th .arr{color:var(--accent)}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .toolbar .spacer{flex:1}
+  .muted{color:var(--muted)}
+  .pbar{height:9px;background:#0b1220;border-radius:6px;overflow:hidden;display:flex;min-width:90px;flex:1}
+  .pbar span{display:block;height:100%;background:var(--accent2)}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;max-width:720px;width:94%;max-height:90vh;overflow:auto}
+  .modal h3{margin:0 0 14px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .empty{padding:48px;text-align:center;color:var(--muted)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:4px;vertical-align:middle}
+  .kanban{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:start}
+  .kcol{background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:10px;min-height:120px}
+  .kcol h4{margin:0 0 10px;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+  .kcol h4 .cnt{background:var(--panel2);border-radius:20px;padding:1px 8px;font-size:11px;color:var(--muted)}
+  .kcard{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:9px 10px;margin-bottom:8px;cursor:pointer}
+  .kcard:hover{border-color:var(--accent)}
+  .kcard .t{font-weight:600;font-size:13px;margin-bottom:5px}
+  .kcard .m{font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .overdue{color:var(--fail);font-weight:600}
+  .soon{color:var(--block)}
+  .tag{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:11px;margin:1px}
+  .bar-row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:13px}
+  .bar-row .lab{width:140px;color:var(--muted)}
+  .bar-row .track{flex:1;height:18px;background:var(--chip);border-radius:5px;overflow:hidden}
+  .bar-row .fill{height:100%;display:flex;align-items:center;padding-left:6px;font-size:11px;font-weight:600;color:#06283b;white-space:nowrap}
+  .req{color:var(--fail)}
+  .hist{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding-left:10px;margin:6px 0}
+  a.link{color:var(--accent);cursor:pointer;text-decoration:none}
+  a.link:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="brand">Change Management</span> · Suivi des activités</h1>
+  <div class="right">
+    <span class="muted" style="font-size:12px" id="lastSaved"></span>
+  </div>
+</header>
+<nav id="nav"></nav>
+<main>
+  <div id="view-dashboard" class="view"></div>
+  <div id="view-activities" class="view"></div>
+  <div id="view-board" class="view"></div>
+  <div id="view-admin" class="view"></div>
+</main>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBox"></div></div>
+
+<script>
+/* =========================================================================
+   CHANGE MANAGEMENT — Suivi des activités · web app mono-fichier · 4 écrans
+   Tableau de bord · Activités (liste filtrable) · Board (kanban par statut)
+   · Admin (paramètres + import/export). Persistance : localStorage + JSON/CSV.
+   ========================================================================= */
+
+const LS_KEY = "cm_activity_state_v1";
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+const todayISO = () => new Date().toISOString().slice(0,10);
+
+/* ---- Référentiels (paramétrables dans Admin) -------------------------- */
+const DEFAULT_CONFIG = {
+  statuses: [
+    {id:"todo",     label:"À planifier", color:"#64748b"},
+    {id:"planned",  label:"Planifié",    color:"#38bdf8"},
+    {id:"progress", label:"En cours",    color:"#a855f7"},
+    {id:"blocked",  label:"Bloqué",      color:"#f59e0b"},
+    {id:"done",     label:"Terminé",     color:"#22c55e"},
+  ],
+  priorities: [
+    {id:"high",   label:"Haute",   color:"#ef4444"},
+    {id:"medium", label:"Moyenne", color:"#f59e0b"},
+    {id:"low",    label:"Basse",   color:"#22c55e"},
+  ],
+  types: ["Communication","Formation","Engagement parties prenantes","Analyse d'impact","Sponsorship","Résistance / Adoption","Reporting","Autre"],
+  owners: ["Marc","Sarah","Thomas","Julie"],
+  workstreams: ["Déploiement SI","Réorganisation","Nouveau process","Réglementaire","Transverse"],
+};
+
+const STARTER_ACTIVITIES = [
+  {title:"Plan de communication global", type:"Communication", ws:"Transverse", owner:"Marc", status:"progress", priority:"high", progress:60, start:"", due:addDays(7), stakeholders:"COMEX, Managers", notes:"Diffusion newsletter semaine prochaine."},
+  {title:"Sessions de formation key users", type:"Formation", ws:"Déploiement SI", owner:"Sarah", status:"planned", priority:"medium", progress:10, start:"", due:addDays(21), stakeholders:"Key users", notes:""},
+  {title:"Analyse d'impact organisationnel", type:"Analyse d'impact", ws:"Réorganisation", owner:"Thomas", status:"blocked", priority:"high", progress:30, start:"", due:addDays(-2), stakeholders:"RH, Direction", notes:"En attente validation périmètre."},
+  {title:"Cartographie des parties prenantes", type:"Engagement parties prenantes", ws:"Transverse", owner:"Julie", status:"done", priority:"medium", progress:100, start:"", due:addDays(-5), stakeholders:"Tous", notes:"Validée."},
+];
+
+function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
+
+/* ---- State ------------------------------------------------------------ */
+let state = load();
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){const s=JSON.parse(raw); s.config=Object.assign({},DEFAULT_CONFIG,s.config||{}); return s;}
+  }catch(e){console.warn("load failed",e);}
+  return {
+    config: structuredClone(DEFAULT_CONFIG),
+    activities: STARTER_ACTIVITIES.map(a=>({id:uid(),created:todayISO(),history:[{ts:nowTs(),txt:"Activité créée"}],...a})),
+  };
+}
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state));
+    document.getElementById("lastSaved").textContent = "Sauvegardé "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+  }catch(e){alert("Échec de la sauvegarde locale : "+e.message);}
+}
+function nowTs(){return new Date().toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
+
+/* ---- Helpers de référentiel ------------------------------------------ */
+const statusOf  = id => state.config.statuses.find(s=>s.id===id) || {label:id,color:"#64748b"};
+const prioOf    = id => state.config.priorities.find(p=>p.id===id) || {label:id,color:"#64748b"};
+function statusBadge(id){const s=statusOf(id);return `<span class="badge" style="background:${s.color}22;color:${s.color};border:1px solid ${s.color}">${s.label}</span>`;}
+function prioBadge(id){const p=prioOf(id);return `<span class="badge" style="background:${p.color}22;color:${p.color};border:1px solid ${p.color}">${p.label}</span>`;}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function dueInfo(a){
+  if(a.status==="done"||!a.due) return {cls:"",txt:a.due?fmtDate(a.due):"—"};
+  const days = Math.round((new Date(a.due)-new Date(todayISO()))/86400000);
+  if(days<0) return {cls:"overdue",txt:fmtDate(a.due)+" ("+Math.abs(days)+"j de retard)"};
+  if(days<=3) return {cls:"soon",txt:fmtDate(a.due)+" (J-"+days+")"};
+  return {cls:"",txt:fmtDate(a.due)};
+}
+function fmtDate(iso){if(!iso)return "—";const d=new Date(iso);return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"2-digit"});}
+
+/* ---- Navigation ------------------------------------------------------- */
+const VIEWS = [
+  {id:"dashboard",  label:"Tableau de bord", render:renderDashboard},
+  {id:"activities", label:"Activités",       render:renderActivities},
+  {id:"board",      label:"Board",           render:renderBoard},
+  {id:"admin",      label:"Admin",           render:renderAdmin},
+];
+let activeView = "dashboard";
+function buildNav(){
+  document.getElementById("nav").innerHTML = VIEWS.map(v=>
+    `<button class="${v.id===activeView?"active":""}" onclick="go('${v.id}')">${v.label}</button>`).join("");
+}
+function go(id){
+  activeView=id; buildNav();
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  const el=document.getElementById("view-"+id); el.classList.add("active");
+  VIEWS.find(v=>v.id===id).render(el);
+}
+
+/* ---- Filtres (vue Activités) ------------------------------------------ */
+let filters = {q:"", status:"", priority:"", owner:"", ws:""};
+let sortKey="due", sortDir=1;
+
+/* =======================================================================
+   DASHBOARD
+   ===================================================================== */
+function renderDashboard(el){
+  const A = state.activities;
+  const open = A.filter(a=>a.status!=="done");
+  const done = A.filter(a=>a.status==="done");
+  const overdue = open.filter(a=>a.due && new Date(a.due)<new Date(todayISO()));
+  const blocked = A.filter(a=>a.status==="blocked");
+  const soon = open.filter(a=>{if(!a.due)return false;const d=Math.round((new Date(a.due)-new Date(todayISO()))/86400000);return d>=0&&d<=7;});
+  const pct = A.length? Math.round(done.length/A.length*100):0;
+
+  el.innerHTML = `
+    <h2>Tableau de bord</h2>
+    <p class="sub">Vue d'ensemble du portefeuille d'activités de conduite du changement.</p>
+    <div class="cards">
+      <div class="kpi"><div class="n">${A.length}</div><div class="l">Activités</div></div>
+      <div class="kpi"><div class="n">${open.length}</div><div class="l">En cours / ouvertes</div></div>
+      <div class="kpi good"><div class="n">${pct}%</div><div class="l">Taux d'achèvement</div></div>
+      <div class="kpi warn"><div class="n">${soon.length}</div><div class="l">Échéance ≤ 7j</div></div>
+      <div class="kpi alert"><div class="n">${overdue.length}</div><div class="l">En retard</div></div>
+      <div class="kpi warn"><div class="n">${blocked.length}</div><div class="l">Bloquées</div></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 12px">Répartition par statut</h3>
+      ${barChart(state.config.statuses.map(s=>({label:s.label,color:s.color,n:A.filter(a=>a.status===s.id).length})), A.length)}
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin:0 0 12px">Par axe de travail</h3>
+        ${barChart(groupCount(A,"ws").map(g=>({label:g.k||"(non défini)",color:"#0ea5e9",n:g.n})), A.length)}
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 12px">Charge par responsable</h3>
+        ${barChart(groupCount(open,"owner").map(g=>({label:g.k||"(non assigné)",color:"#a855f7",n:g.n})), Math.max(1,open.length))}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 4px">Prochaines échéances & alertes</h3>
+      <p class="sub" style="margin:0 0 10px">Activités en retard ou à échéance proche.</p>
+      ${attentionTable([...overdue, ...soon.filter(a=>!overdue.includes(a))])}
+    </div>`;
+}
+
+function barChart(rows, total){
+  total = total||1;
+  if(!rows.some(r=>r.n>0)) return `<p class="muted">Aucune donnée.</p>`;
+  return rows.filter(r=>r.n>0).map(r=>{
+    const w = Math.round(r.n/total*100);
+    return `<div class="bar-row"><div class="lab">${esc(r.label)}</div>
+      <div class="track"><div class="fill" style="width:${Math.max(w,6)}%;background:${r.color}">${r.n}</div></div>
+      <div class="muted" style="width:42px;text-align:right">${w}%</div></div>`;
+  }).join("");
+}
+function groupCount(arr,key){
+  const m={}; arr.forEach(a=>{const k=a[key]||"";m[k]=(m[k]||0)+1;});
+  return Object.entries(m).map(([k,n])=>({k,n})).sort((a,b)=>b.n-a.n);
+}
+function attentionTable(list){
+  if(!list.length) return `<p class="muted">✅ Rien à signaler. Aucune activité en retard ou à échéance imminente.</p>`;
+  list = list.slice().sort((a,b)=>(a.due||"9999").localeCompare(b.due||"9999"));
+  return `<table><thead><tr><th>Activité</th><th>Responsable</th><th>Statut</th><th>Priorité</th><th>Échéance</th></tr></thead><tbody>
+    ${list.map(a=>{const d=dueInfo(a);return `<tr>
+      <td><a class="link" onclick="openActivity('${a.id}')">${esc(a.title)}</a></td>
+      <td>${esc(a.owner||"—")}</td><td>${statusBadge(a.status)}</td><td>${prioBadge(a.priority)}</td>
+      <td class="${d.cls}">${d.txt}</td></tr>`;}).join("")}
+  </tbody></table>`;
+}
+
+/* =======================================================================
+   ACTIVITÉS (liste filtrable)
+   ===================================================================== */
+function renderActivities(el){
+  const cfg=state.config;
+  el.innerHTML = `
+    <h2>Activités</h2>
+    <p class="sub">Liste complète. Cliquez sur une activité pour la modifier, ou ajoutez-en une nouvelle.</p>
+    <div class="toolbar">
+      <input id="fq" placeholder="🔎 Rechercher…" value="${esc(filters.q)}" oninput="filters.q=this.value;refreshList()" style="min-width:200px">
+      <select id="fstatus" onchange="filters.status=this.value;refreshList()">${optList("Tous statuts",cfg.statuses.map(s=>[s.id,s.label]),filters.status)}</select>
+      <select id="fprio" onchange="filters.priority=this.value;refreshList()">${optList("Toutes priorités",cfg.priorities.map(p=>[p.id,p.label]),filters.priority)}</select>
+      <select id="fowner" onchange="filters.owner=this.value;refreshList()">${optList("Tous responsables",cfg.owners.map(o=>[o,o]),filters.owner)}</select>
+      <select id="fws" onchange="filters.ws=this.value;refreshList()">${optList("Tous axes",cfg.workstreams.map(w=>[w,w]),filters.ws)}</select>
+      <span class="spacer"></span>
+      <button class="primary" onclick="openActivity()">+ Nouvelle activité</button>
+    </div>
+    <div class="card" style="padding:0;overflow:auto" id="listWrap"></div>`;
+  refreshList();
+}
+function optList(placeholder, pairs, sel){
+  return `<option value="">${placeholder}</option>`+pairs.map(([v,l])=>`<option value="${esc(v)}" ${v===sel?"selected":""}>${esc(l)}</option>`).join("");
+}
+function filteredActivities(){
+  const f=filters, q=f.q.toLowerCase();
+  let list = state.activities.filter(a=>
+    (!q || (a.title+ " "+(a.notes||"")+" "+(a.stakeholders||"")).toLowerCase().includes(q)) &&
+    (!f.status || a.status===f.status) &&
+    (!f.priority || a.priority===f.priority) &&
+    (!f.owner || a.owner===f.owner) &&
+    (!f.ws || a.ws===f.ws));
+  const prioRank={high:0,medium:1,low:2};
+  list.sort((a,b)=>{
+    let x,y;
+    if(sortKey==="priority"){x=prioRank[a.priority]??9;y=prioRank[b.priority]??9;}
+    else if(sortKey==="due"){x=a.due||"9999";y=b.due||"9999";}
+    else if(sortKey==="progress"){x=a.progress||0;y=b.progress||0;}
+    else {x=(a[sortKey]||"").toString().toLowerCase();y=(b[sortKey]||"").toString().toLowerCase();}
+    return x<y?-sortDir:x>y?sortDir:0;
+  });
+  return list;
+}
+function setSort(k){if(sortKey===k)sortDir*=-1;else{sortKey=k;sortDir=1;}refreshList();}
+function arr(k){return sortKey===k?`<span class="arr">${sortDir>0?"▲":"▼"}</span>`:"";}
+function refreshList(){
+  const wrap=document.getElementById("listWrap"); if(!wrap)return;
+  const list=filteredActivities();
+  if(!list.length){wrap.innerHTML=`<div class="empty">Aucune activité ne correspond aux filtres.</div>`;return;}
+  wrap.innerHTML = `<table><thead><tr>
+    <th onclick="setSort('title')">Activité ${arr("title")}</th>
+    <th onclick="setSort('type')">Type ${arr("type")}</th>
+    <th onclick="setSort('ws')">Axe ${arr("ws")}</th>
+    <th onclick="setSort('owner')">Responsable ${arr("owner")}</th>
+    <th onclick="setSort('status')">Statut ${arr("status")}</th>
+    <th onclick="setSort('priority')">Priorité ${arr("priority")}</th>
+    <th onclick="setSort('progress')">Avancement ${arr("progress")}</th>
+    <th onclick="setSort('due')">Échéance ${arr("due")}</th>
+  </tr></thead><tbody>
+  ${list.map(a=>{const d=dueInfo(a);return `<tr style="cursor:pointer" onclick="openActivity('${a.id}')">
+    <td><strong>${esc(a.title)}</strong>${a.stakeholders?`<br><span class="muted" style="font-size:11px">👥 ${esc(a.stakeholders)}</span>`:""}</td>
+    <td>${esc(a.type||"—")}</td>
+    <td>${esc(a.ws||"—")}</td>
+    <td>${esc(a.owner||"—")}</td>
+    <td>${statusBadge(a.status)}</td>
+    <td>${prioBadge(a.priority)}</td>
+    <td><div style="display:flex;align-items:center;gap:6px"><div class="pbar"><span style="width:${a.progress||0}%"></span></div><span class="muted" style="font-size:11px">${a.progress||0}%</span></div></td>
+    <td class="${d.cls}">${d.txt}</td>
+  </tr>`;}).join("")}
+  </tbody></table>`;
+}
+
+/* =======================================================================
+   BOARD (kanban par statut)
+   ===================================================================== */
+function renderBoard(el){
+  el.innerHTML = `
+    <h2>Board</h2>
+    <p class="sub">Vue kanban. Utilisez les flèches sur chaque carte pour faire avancer une activité.</p>
+    <div class="kanban" id="kanban"></div>`;
+  refreshBoard();
+}
+function refreshBoard(){
+  const k=document.getElementById("kanban"); if(!k)return;
+  k.innerHTML = state.config.statuses.map(s=>{
+    const items=state.activities.filter(a=>a.status===s.id);
+    return `<div class="kcol">
+      <h4><span style="color:${s.color}">${esc(s.label)}</span><span class="cnt">${items.length}</span></h4>
+      ${items.map(a=>kCard(a)).join("")||'<p class="muted" style="font-size:12px;text-align:center;padding:10px 0">—</p>'}
+    </div>`;
+  }).join("");
+}
+function kCard(a){
+  const d=dueInfo(a), p=prioOf(a.priority);
+  const idx=state.config.statuses.findIndex(s=>s.id===a.status);
+  const canPrev=idx>0, canNext=idx<state.config.statuses.length-1;
+  return `<div class="kcard" style="border-left-color:${p.color}">
+    <div class="t" onclick="openActivity('${a.id}')">${esc(a.title)}</div>
+    <div class="m">
+      <span><span class="dot" style="background:${p.color}"></span> ${esc(a.owner||"—")}</span>
+      ${a.due?`<span class="${d.cls}">📅 ${fmtDate(a.due)}</span>`:""}
+      <span>${a.progress||0}%</span>
+    </div>
+    <div class="m" style="margin-top:7px">
+      <button class="sm" ${canPrev?"":"disabled style=opacity:.3"} onclick="moveStatus('${a.id}',-1)">←</button>
+      <button class="sm" ${canNext?"":"disabled style=opacity:.3"} onclick="moveStatus('${a.id}',1)">→</button>
+    </div>
+  </div>`;
+}
+function moveStatus(id,dir){
+  const a=state.activities.find(x=>x.id===id); if(!a)return;
+  const ss=state.config.statuses, i=ss.findIndex(s=>s.id===a.status);
+  const ni=i+dir; if(ni<0||ni>=ss.length)return;
+  a.status=ss[ni].id;
+  if(a.status==="done") a.progress=100;
+  a.history=a.history||[]; a.history.unshift({ts:nowTs(),txt:"Statut → "+ss[ni].label});
+  save(); refreshBoard();
+}
+
+/* =======================================================================
+   MODALE ACTIVITÉ (créer / éditer)
+   ===================================================================== */
+function openActivity(id){
+  const cfg=state.config;
+  const a = id ? state.activities.find(x=>x.id===id) : {id:"",title:"",type:cfg.types[0],ws:"",owner:"",status:"todo",priority:"medium",progress:0,start:"",due:"",stakeholders:"",notes:"",history:[]};
+  const box=document.getElementById("modalBox");
+  box.innerHTML = `
+    <h3>${id?"Modifier l'activité":"Nouvelle activité"}</h3>
+    <div class="grid2">
+      <label class="fld" style="grid-column:1/3">Titre <span class="req">*</span>
+        <input id="m_title" value="${esc(a.title)}" placeholder="Ex : Plan de communication phase 2"></label>
+      <label class="fld">Type
+        <select id="m_type">${cfg.types.map(t=>`<option ${t===a.type?"selected":""}>${esc(t)}</option>`).join("")}</select></label>
+      <label class="fld">Axe de travail
+        <select id="m_ws"><option value="">—</option>${cfg.workstreams.map(w=>`<option ${w===a.ws?"selected":""}>${esc(w)}</option>`).join("")}</select></label>
+      <label class="fld">Responsable
+        <select id="m_owner"><option value="">—</option>${cfg.owners.map(o=>`<option ${o===a.owner?"selected":""}>${esc(o)}</option>`).join("")}</select></label>
+      <label class="fld">Priorité
+        <select id="m_priority">${cfg.priorities.map(p=>`<option value="${p.id}" ${p.id===a.priority?"selected":""}>${esc(p.label)}</option>`).join("")}</select></label>
+      <label class="fld">Statut
+        <select id="m_status">${cfg.statuses.map(s=>`<option value="${s.id}" ${s.id===a.status?"selected":""}>${esc(s.label)}</option>`).join("")}</select></label>
+      <label class="fld">Avancement (%)
+        <input id="m_progress" type="number" min="0" max="100" value="${a.progress||0}"></label>
+      <label class="fld">Date de début
+        <input id="m_start" type="date" value="${a.start||""}"></label>
+      <label class="fld">Échéance
+        <input id="m_due" type="date" value="${a.due||""}"></label>
+      <label class="fld" style="grid-column:1/3">Parties prenantes
+        <input id="m_stake" value="${esc(a.stakeholders)}" placeholder="Ex : COMEX, Managers de proximité"></label>
+      <label class="fld" style="grid-column:1/3">Notes / commentaires
+        <textarea id="m_notes">${esc(a.notes)}</textarea></label>
+    </div>
+    ${a.history&&a.history.length?`<div style="margin-top:14px"><strong style="font-size:13px">Historique</strong>
+      ${a.history.slice(0,6).map(h=>`<div class="hist">${esc(h.ts)} — ${esc(h.txt)}</div>`).join("")}</div>`:""}
+    <div class="toolbar" style="margin:18px 0 0">
+      ${id?`<button class="danger" onclick="deleteActivity('${id}')">Supprimer</button>`:""}
+      <span class="spacer"></span>
+      <button onclick="closeModal()">Annuler</button>
+      <button class="primary" onclick="saveActivity('${id}')">Enregistrer</button>
+    </div>`;
+  document.getElementById("modalBg").classList.add("open");
+  setTimeout(()=>document.getElementById("m_title").focus(),50);
+}
+function saveActivity(id){
+  const g=k=>document.getElementById("m_"+k);
+  const title=g("title").value.trim();
+  if(!title){alert("Le titre est obligatoire.");return;}
+  const data={
+    title, type:g("type").value, ws:g("ws").value, owner:g("owner").value,
+    status:g("status").value, priority:g("priority").value,
+    progress:Math.max(0,Math.min(100,parseInt(g("progress").value)||0)),
+    start:g("start").value, due:g("due").value,
+    stakeholders:g("stake").value.trim(), notes:g("notes").value.trim(),
+  };
+  if(data.status==="done"&&data.progress<100) data.progress=100;
+  if(id){
+    const a=state.activities.find(x=>x.id===id);
+    const changes=[];
+    if(a.status!==data.status)changes.push("statut → "+statusOf(data.status).label);
+    if(a.progress!==data.progress)changes.push("avancement → "+data.progress+"%");
+    Object.assign(a,data);
+    a.history=a.history||[]; a.history.unshift({ts:nowTs(),txt:changes.length?"Modifiée ("+changes.join(", ")+")":"Modifiée"});
+  }else{
+    state.activities.push({id:uid(),created:todayISO(),history:[{ts:nowTs(),txt:"Activité créée"}],...data});
+  }
+  save(); closeModal(); go(activeView);
+}
+function deleteActivity(id){
+  if(!confirm("Supprimer définitivement cette activité ?"))return;
+  state.activities=state.activities.filter(a=>a.id!==id);
+  save(); closeModal(); go(activeView);
+}
+function closeModal(){document.getElementById("modalBg").classList.remove("open");}
+document.getElementById("modalBg").addEventListener("click",e=>{if(e.target.id==="modalBg")closeModal();});
+
+/* =======================================================================
+   ADMIN (paramètres + import/export)
+   ===================================================================== */
+function renderAdmin(el){
+  const cfg=state.config;
+  el.innerHTML = `
+    <h2>Admin</h2>
+    <p class="sub">Référentiels, sauvegarde et import/export des données.</p>
+
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin:0 0 8px">Responsables</h3>
+        ${listEditor("owners")}
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 8px">Axes de travail</h3>
+        ${listEditor("workstreams")}
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 8px">Types d'activité</h3>
+        ${listEditor("types")}
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 8px">Statuts</h3>
+        <div class="legend">${cfg.statuses.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join("")}</div>
+        <p class="muted" style="font-size:12px;margin-top:10px">Les statuts définissent les colonnes du Board (ordre = flux de gauche à droite).</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 10px">Données</h3>
+      <div class="toolbar">
+        <button class="primary" onclick="exportJSON()">⬇ Exporter (JSON)</button>
+        <button onclick="exportCSV()">⬇ Exporter (CSV)</button>
+        <button onclick="document.getElementById('importFile').click()">⬆ Importer (JSON)</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(this)">
+        <span class="spacer"></span>
+        <button class="danger" onclick="resetAll()">Réinitialiser tout</button>
+      </div>
+      <p class="muted" style="font-size:12px">${state.activities.length} activité(s) stockée(s) localement dans ce navigateur. Pensez à exporter régulièrement pour partager ou sauvegarder.</p>
+    </div>`;
+}
+function listEditor(key){
+  const isStr = typeof state.config[key][0]==="string" || state.config[key].length===0;
+  const items = state.config[key];
+  const rows = items.map((it,i)=>{
+    const label = isStr? it : it.label;
+    return `<div class="toolbar" style="margin-bottom:6px">
+      <span class="tag" style="flex:1;text-align:left;padding:5px 8px">${esc(label)}</span>
+      <button class="sm danger" onclick="cfgRemove('${key}',${i})">✕</button></div>`;
+  }).join("");
+  return `${rows||'<p class="muted" style="font-size:12px">Vide.</p>'}
+    <div class="toolbar" style="margin-top:8px">
+      <input id="add_${key}" placeholder="Ajouter…" style="flex:1" onkeydown="if(event.key==='Enter')cfgAdd('${key}')">
+      <button class="sm" onclick="cfgAdd('${key}')">+ Ajouter</button>
+    </div>`;
+}
+function cfgAdd(key){
+  const inp=document.getElementById("add_"+key); const v=inp.value.trim(); if(!v)return;
+  state.config[key].push(v); save(); renderAdmin(document.getElementById("view-admin"));
+}
+function cfgRemove(key,i){
+  state.config[key].splice(i,1); save(); renderAdmin(document.getElementById("view-admin"));
+}
+
+/* ---- Export / Import -------------------------------------------------- */
+function download(name, content, type){
+  const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
+}
+function exportJSON(){
+  download("cm_activites_"+todayISO()+".json", JSON.stringify(state,null,2), "application/json");
+}
+function exportCSV(){
+  const cols=["title","type","ws","owner","status","priority","progress","start","due","stakeholders","notes"];
+  const head=["Titre","Type","Axe","Responsable","Statut","Priorité","Avancement","Début","Échéance","Parties prenantes","Notes"];
+  const lines=[head.join(";")];
+  state.activities.forEach(a=>{
+    lines.push(cols.map(c=>{
+      let v=a[c]; if(c==="status")v=statusOf(v).label; if(c==="priority")v=prioOf(v).label;
+      v=(v==null?"":String(v)).replace(/"/g,'""').replace(/\r?\n/g," ");
+      return /[";]/.test(v)?`"${v}"`:v;
+    }).join(";"));
+  });
+  download("cm_activites_"+todayISO()+".csv", "﻿"+lines.join("\r\n"), "text/csv");
+}
+function importJSON(input){
+  const file=input.files[0]; if(!file)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const data=JSON.parse(r.result);
+      if(!data.activities||!Array.isArray(data.activities)) throw new Error("Format invalide : 'activities' manquant.");
+      if(!confirm(`Importer ${data.activities.length} activité(s) ? Cela remplace les données actuelles.`))return;
+      state=data; state.config=Object.assign({},DEFAULT_CONFIG,state.config||{});
+      save(); go("dashboard");
+    }catch(e){alert("Import impossible : "+e.message);}
+  };
+  r.readAsText(file); input.value="";
+}
+function resetAll(){
+  if(!confirm("Réinitialiser TOUTES les données (config + activités) ? Cette action est irréversible."))return;
+  localStorage.removeItem(LS_KEY); state=load(); save(); go("dashboard");
+}
+
+/* ---- Boot ------------------------------------------------------------- */
+buildNav(); go("dashboard"); save();
+</script>
+</body>
+</html>
