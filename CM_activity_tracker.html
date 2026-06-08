@@ -83,6 +83,34 @@
   .hist{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding-left:10px;margin:6px 0}
   a.link{color:var(--accent);cursor:pointer;text-decoration:none}
   a.link:hover{text-decoration:underline}
+  /* ---- Timeline / Gantt ---- */
+  .gantt{min-width:760px}
+  .g-head{display:flex;align-items:stretch;border-bottom:1px solid var(--line);margin-bottom:6px}
+  .g-lab{width:230px;min-width:230px;padding:4px 10px 4px 0}
+  .g-track{position:relative;flex:1;height:22px}
+  .g-axis{position:relative;flex:1;display:flex;height:26px}
+  .g-month{border-left:1px solid var(--line);font-size:11px;color:var(--muted);padding:4px 0 0 5px;overflow:hidden;white-space:nowrap}
+  .g-group{display:flex;align-items:center;gap:8px;margin:14px 0 4px;font-weight:600;font-size:13px}
+  .g-group .meta{font-weight:400;font-size:11px;color:var(--muted)}
+  .g-row{display:flex;align-items:center;min-height:30px;border-bottom:1px solid #1e293b}
+  .g-row:hover{background:rgba(255,255,255,.02)}
+  .g-row .g-lab{font-size:12px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .g-row .g-lab .who{color:var(--muted);font-size:11px}
+  .g-bar{position:absolute;top:5px;height:14px;border-radius:5px;cursor:pointer;min-width:6px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);display:flex;align-items:center}
+  .g-bar .pct{position:absolute;right:-30px;font-size:10px;color:var(--muted)}
+  .g-bar.point{width:14px;border-radius:50%}
+  .tl-today{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);z-index:3;pointer-events:none}
+  .tl-today.lbl::after{content:"aujourd'hui";position:absolute;top:-2px;left:4px;font-size:10px;color:var(--accent);white-space:nowrap}
+  /* ---- Calendrier ---- */
+  .cal{width:100%;border-collapse:collapse;table-layout:fixed}
+  .cal th{text-align:center;color:var(--muted);font-weight:600;font-size:12px;padding:6px;background:transparent;position:static;cursor:default}
+  .cal td{height:96px;border:1px solid var(--line);vertical-align:top;padding:4px;background:var(--chip)}
+  .cal td.out{background:var(--bg);opacity:.45}
+  .cal td.today{outline:2px solid var(--accent);outline-offset:-2px}
+  .cal .dn{font-size:12px;color:var(--muted);margin-bottom:3px}
+  .cal td.today .dn{color:var(--accent);font-weight:700}
+  .cal .ev{font-size:11px;border-radius:4px;padding:2px 5px;margin:2px 0;cursor:pointer;border-left:3px solid;background:var(--panel);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cal .ev.start{opacity:.7;font-style:italic}
 </style>
 </head>
 <body>
@@ -178,7 +206,10 @@ function fmtDate(iso){if(!iso)return "—";const d=new Date(iso);return d.toLoca
 /* ---- Navigation ------------------------------------------------------- */
 const VIEWS = [
   {id:"dashboard",  label:"Tableau de bord", render:renderDashboard},
+  {id:"subjects",   label:"Sujets",          render:renderSubjects},
   {id:"activities", label:"Activités",       render:renderActivities},
+  {id:"timeline",   label:"Timeline",        render:renderTimeline},
+  {id:"calendar",   label:"Calendrier",      render:renderCalendar},
   {id:"board",      label:"Board",           render:renderBoard},
   {id:"admin",      label:"Admin",           render:renderAdmin},
 ];
@@ -229,7 +260,7 @@ function renderDashboard(el){
 
     <div class="grid2">
       <div class="card">
-        <h3 style="margin:0 0 12px">Par axe de travail</h3>
+        <h3 style="margin:0 0 12px">Par sujet</h3>
         ${barChart(groupCount(A,"ws").map(g=>({label:g.k||"(non défini)",color:"#0ea5e9",n:g.n})), A.length)}
       </div>
       <div class="card">
@@ -283,7 +314,7 @@ function renderActivities(el){
       <select id="fstatus" onchange="filters.status=this.value;refreshList()">${optList("Tous statuts",cfg.statuses.map(s=>[s.id,s.label]),filters.status)}</select>
       <select id="fprio" onchange="filters.priority=this.value;refreshList()">${optList("Toutes priorités",cfg.priorities.map(p=>[p.id,p.label]),filters.priority)}</select>
       <select id="fowner" onchange="filters.owner=this.value;refreshList()">${optList("Tous responsables",cfg.owners.map(o=>[o,o]),filters.owner)}</select>
-      <select id="fws" onchange="filters.ws=this.value;refreshList()">${optList("Tous axes",cfg.workstreams.map(w=>[w,w]),filters.ws)}</select>
+      <select id="fws" onchange="filters.ws=this.value;refreshList()">${optList("Tous sujets",cfg.workstreams.map(w=>[w,w]),filters.ws)}</select>
       <span class="spacer"></span>
       <button class="primary" onclick="openActivity()">+ Nouvelle activité</button>
     </div>
@@ -321,7 +352,7 @@ function refreshList(){
   wrap.innerHTML = `<table><thead><tr>
     <th onclick="setSort('title')">Activité ${arr("title")}</th>
     <th onclick="setSort('type')">Type ${arr("type")}</th>
-    <th onclick="setSort('ws')">Axe ${arr("ws")}</th>
+    <th onclick="setSort('ws')">Sujet ${arr("ws")}</th>
     <th onclick="setSort('owner')">Responsable ${arr("owner")}</th>
     <th onclick="setSort('status')">Statut ${arr("status")}</th>
     <th onclick="setSort('priority')">Priorité ${arr("priority")}</th>
@@ -389,6 +420,184 @@ function moveStatus(id,dir){
 }
 
 /* =======================================================================
+   SUJETS (synthèse par sujet)
+   ===================================================================== */
+function renderSubjects(el){
+  // Regroupe les activités par sujet (champ ws). Lecture seule : un sujet
+  // n'a pas de fiche propre, c'est une synthèse calculée.
+  const groups = {};
+  state.activities.forEach(a=>{const k=a.ws||"(sans sujet)";(groups[k]=groups[k]||[]).push(a);});
+  const keys = Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+  el.innerHTML = `
+    <h2>Sujets</h2>
+    <p class="sub">Synthèse par sujet : avancement global, responsables impliqués, période et alertes.</p>
+    ${keys.length? keys.map(k=>{
+      const items=groups[k];
+      const done=items.filter(a=>a.status==="done").length;
+      const avg=Math.round(items.reduce((s,a)=>s+(a.progress||0),0)/items.length);
+      const overdue=items.filter(a=>a.status!=="done"&&a.due&&new Date(a.due)<new Date(todayISO())).length;
+      const owners=[...new Set(items.map(a=>a.owner).filter(Boolean))];
+      const dates=items.flatMap(a=>[a.start,a.due]).filter(Boolean).sort();
+      const range=dates.length?`${fmtDate(dates[0])} → ${fmtDate(dates[dates.length-1])}`:"—";
+      return `<div class="card">
+        <div class="toolbar" style="margin-bottom:8px">
+          <h3 style="margin:0">${esc(k)}</h3>
+          <span class="spacer"></span>
+          ${overdue?`<span class="badge" style="background:#ef444422;color:#ef4444;border:1px solid #ef4444">${overdue} en retard</span>`:""}
+          <span class="tag">${done}/${items.length} terminées</span>
+          <span class="tag">📅 ${range}</span>
+        </div>
+        <div class="bar-row"><div class="lab">Avancement global</div>
+          <div class="track"><div class="fill" style="width:${Math.max(avg,6)}%;background:${avg>=100?'#22c55e':'#0ea5e9'}">${avg}%</div></div></div>
+        <div style="margin:6px 0 12px"><span class="muted" style="font-size:12px">Responsables : </span>${owners.length?owners.map(o=>`<span class="tag">${esc(o)}</span>`).join(""):'<span class="muted">—</span>'}</div>
+        <table><thead><tr><th>Activité</th><th>Responsable</th><th>Statut</th><th>Avancement</th><th>Échéance</th></tr></thead><tbody>
+          ${items.slice().sort((a,b)=>(a.due||"9999").localeCompare(b.due||"9999")).map(a=>{const d=dueInfo(a);return `<tr style="cursor:pointer" onclick="openActivity('${a.id}')">
+            <td>${esc(a.title)}</td><td>${esc(a.owner||"—")}</td><td>${statusBadge(a.status)}</td>
+            <td><div style="display:flex;align-items:center;gap:6px"><div class="pbar"><span style="width:${a.progress||0}%"></span></div><span class="muted" style="font-size:11px">${a.progress||0}%</span></div></td>
+            <td class="${d.cls}">${d.txt}</td></tr>`;}).join("")}
+        </tbody></table>
+      </div>`;
+    }).join("") : `<div class="empty">Aucune activité. Ajoutez-en depuis l'onglet « Activités ».</div>`}`;
+}
+
+/* =======================================================================
+   TIMELINE / GANTT (concomitance des activités dans le temps)
+   ===================================================================== */
+const MS_DAY=86400000;
+function effDates(a){
+  // Dates effectives pour positionner une barre. start→due ; si une seule
+  // date est connue on retombe sur un point ; sinon l'activité est "non planifiée".
+  const s=a.start||a.due, e=a.due||a.start;
+  if(!s&&!e) return null;
+  let ds=new Date(s), de=new Date(e);
+  if(ds>de){const t=ds;ds=de;de=t;}
+  return {s:ds,e:de,point:!a.start||!a.due};
+}
+function renderTimeline(el){
+  const planned=[], unplanned=[];
+  state.activities.forEach(a=>{const d=effDates(a); d?planned.push({a,d}):unplanned.push(a);});
+  if(!planned.length){
+    el.innerHTML=`<h2>Timeline</h2><p class="sub">Frise chronologique des activités, regroupées par sujet.</p>
+      <div class="empty">Aucune activité datée. Renseignez une date de début et/ou une échéance pour la voir sur la frise.</div>`;
+    return;
+  }
+  // Étendue : du 1er jour du mois min au dernier jour du mois max.
+  let min=planned[0].d.s, max=planned[0].d.e;
+  planned.forEach(p=>{if(p.d.s<min)min=p.d.s;if(p.d.e>max)max=p.d.e;});
+  const rs=new Date(min.getFullYear(),min.getMonth(),1);
+  const re=new Date(max.getFullYear(),max.getMonth()+1,0);
+  const span=(re-rs)+MS_DAY;
+  const pct=date=>((date-rs)/span)*100;
+  const todayP=pct(new Date(todayISO()));
+  const showToday=todayP>=0&&todayP<=100;
+
+  // Colonnes mensuelles (largeur proportionnelle au nb de jours).
+  const months=[]; let cur=new Date(rs);
+  while(cur<=re){const days=new Date(cur.getFullYear(),cur.getMonth()+1,0).getDate();
+    months.push({lab:cur.toLocaleDateString("fr-FR",{month:"short",year:"2-digit"}),w:days/(span/MS_DAY)*100});
+    cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);}
+
+  // Groupes par sujet.
+  const groups={}; planned.forEach(p=>{const k=p.a.ws||"(sans sujet)";(groups[k]=groups[k]||[]).push(p);});
+  const keys=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+  const todayLine=showToday?`<div class="tl-today" style="left:${todayP}%"></div>`:"";
+
+  el.innerHTML=`
+    <h2>Timeline</h2>
+    <p class="sub">Frise chronologique par sujet — les barres qui se chevauchent verticalement sont des activités <strong>concomitantes</strong>. Cliquez une barre pour ouvrir l'activité.</p>
+    ${ganttLegend()}
+    <div class="card" style="overflow-x:auto">
+      <div class="gantt">
+        <div class="g-head">
+          <div class="g-lab muted" style="font-size:12px">Activité</div>
+          <div class="g-axis">${months.map(m=>`<div class="g-month" style="width:${m.w}%">${m.lab}</div>`).join("")}${showToday?`<div class="tl-today lbl" style="left:${todayP}%"></div>`:""}</div>
+        </div>
+        ${keys.map(k=>{
+          const rows=groups[k].sort((a,b)=>a.d.s-b.d.s);
+          const owners=[...new Set(rows.map(r=>r.a.owner).filter(Boolean))];
+          return `<div class="g-group">📂 ${esc(k)} <span class="meta">· ${rows.length} activité(s)${owners.length?" · "+owners.map(esc).join(", "):""}</span></div>
+            ${rows.map(({a,d})=>{
+              const left=pct(d.s), width=Math.max(pct(d.e)+ (100/(span/MS_DAY)) - left, 0.8);
+              const col=statusOf(a.status).color;
+              const tip=`${a.title} — ${fmtDate(a.start||a.due)}${a.start&&a.due?" → "+fmtDate(a.due):""} (${statusOf(a.status).label})`;
+              return `<div class="g-row">
+                <div class="g-lab" onclick="openActivity('${a.id}')" title="${esc(a.title)}">${esc(a.title)} <span class="who">· ${esc(a.owner||"—")}</span></div>
+                <div class="g-track">${todayLine}
+                  <div class="g-bar ${d.point?'point':''}" onclick="openActivity('${a.id}')" title="${esc(tip)}"
+                       style="left:${left}%;${d.point?'':'width:'+width+'%;'}background:${col}"></div>
+                </div></div>`;
+            }).join("")}`;
+        }).join("")}
+      </div>
+    </div>
+    ${unplanned.length?`<div class="card"><h3 style="margin:0 0 8px">Non planifiées <span class="muted">(sans date)</span></h3>
+      ${unplanned.map(a=>`<span class="tag" style="cursor:pointer;padding:4px 8px" onclick="openActivity('${a.id}')">${esc(a.title)} · ${esc(a.owner||"—")}</span>`).join(" ")}</div>`:""}`;
+}
+function ganttLegend(){
+  return `<div class="legend">${state.config.statuses.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join("")}
+    <span style="margin-left:6px"><i style="background:var(--accent);width:2px;height:12px;border-radius:0"></i>aujourd'hui</span></div>`;
+}
+
+/* =======================================================================
+   CALENDRIER (vue mensuelle des échéances)
+   ===================================================================== */
+let calRef=new Date(todayISO().slice(0,8)+"01");
+function renderCalendar(el){
+  const y=calRef.getFullYear(), m=calRef.getMonth();
+  const first=new Date(y,m,1), last=new Date(y,m+1,0);
+  const startOffset=(first.getDay()+6)%7; // lundi = 0
+  const days=last.getDate();
+  const today=todayISO();
+
+  // Index des activités par jour (échéances + débuts) pour le mois affiché.
+  const byDay={};
+  state.activities.forEach(a=>{
+    [["due",a.due],["start",a.start]].forEach(([kind,iso])=>{
+      if(iso&&iso.slice(0,7)===`${y}-${String(m+1).padStart(2,"0")}`){
+        const day=parseInt(iso.slice(8,10));
+        (byDay[day]=byDay[day]||[]).push({a,kind});
+      }
+    });
+  });
+
+  const cells=[]; for(let i=0;i<startOffset;i++)cells.push(null);
+  for(let d=1;d<=days;d++)cells.push(d);
+  while(cells.length%7)cells.push(null);
+
+  const wd=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  let rows="";
+  for(let i=0;i<cells.length;i+=7){
+    rows+="<tr>"+cells.slice(i,i+7).map(d=>{
+      if(d===null) return `<td class="out"></td>`;
+      const iso=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      const evs=(byDay[d]||[]).sort((a,b)=>a.kind.localeCompare(b.kind));
+      return `<td class="${iso===today?"today":""}">
+        <div class="dn">${d}</div>
+        ${evs.map(({a,kind})=>{const c=statusOf(a.status).color;
+          return `<div class="ev ${kind==="start"?"start":""}" style="border-left-color:${c}" title="${esc(a.title)} — ${kind==="due"?"échéance":"début"}" onclick="openActivity('${a.id}')">${kind==="start"?"▶ ":"⚑ "}${esc(a.title)}</div>`;}).join("")}
+      </td>`;
+    }).join("")+"</tr>";
+  }
+
+  el.innerHTML=`
+    <h2>Calendrier</h2>
+    <p class="sub">Échéances (⚑) et démarrages (▶ en italique) du mois. Cliquez un élément pour ouvrir l'activité.</p>
+    <div class="toolbar">
+      <button onclick="calMove(-1)">← Mois précédent</button>
+      <button onclick="calToday()">Aujourd'hui</button>
+      <button onclick="calMove(1)">Mois suivant →</button>
+      <span class="spacer"></span>
+      <strong style="font-size:16px;text-transform:capitalize">${calRef.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</strong>
+    </div>
+    <div class="card">
+      <table class="cal"><thead><tr>${wd.map(w=>`<th>${w}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+      ${ganttLegend()}
+    </div>`;
+}
+function calMove(n){calRef=new Date(calRef.getFullYear(),calRef.getMonth()+n,1);renderCalendar(document.getElementById("view-calendar"));}
+function calToday(){calRef=new Date(todayISO().slice(0,8)+"01");renderCalendar(document.getElementById("view-calendar"));}
+
+/* =======================================================================
    MODALE ACTIVITÉ (créer / éditer)
    ===================================================================== */
 function openActivity(id){
@@ -402,7 +611,7 @@ function openActivity(id){
         <input id="m_title" value="${esc(a.title)}" placeholder="Ex : Plan de communication phase 2"></label>
       <label class="fld">Type
         <select id="m_type">${cfg.types.map(t=>`<option ${t===a.type?"selected":""}>${esc(t)}</option>`).join("")}</select></label>
-      <label class="fld">Axe de travail
+      <label class="fld">Sujet
         <select id="m_ws"><option value="">—</option>${cfg.workstreams.map(w=>`<option ${w===a.ws?"selected":""}>${esc(w)}</option>`).join("")}</select></label>
       <label class="fld">Responsable
         <select id="m_owner"><option value="">—</option>${cfg.owners.map(o=>`<option ${o===a.owner?"selected":""}>${esc(o)}</option>`).join("")}</select></label>
@@ -479,7 +688,7 @@ function renderAdmin(el){
         ${listEditor("owners")}
       </div>
       <div class="card">
-        <h3 style="margin:0 0 8px">Axes de travail</h3>
+        <h3 style="margin:0 0 8px">Sujets</h3>
         ${listEditor("workstreams")}
       </div>
       <div class="card">
