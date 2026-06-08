@@ -132,6 +132,7 @@ function defaultState(){
         {code:"UK", label:"United Kingdom",  color:"#22c55e"},
       ],
       departments:["Wealth Management","Operations","Compliance","Finance","Investment","Risk"],
+      streams:["Wealth Management","Operations","Compliance","Finance","Investment","Risk"],
       statuses:[
         {value:"Not started", color:"#64748b", requiresComment:false},
         {value:"In progress", color:"#a855f7", requiresComment:false},
@@ -157,6 +158,7 @@ function load(){ try{ const r=localStorage.getItem(LS_KEY); if(r) return migrate
 function migrate(s){ const d=defaultState();
   const cfg=Object.assign(d.config,s.config||{});
   cfg.columnMapping=Object.assign(d.config.columnMapping,(s.config||{}).columnMapping||{});
+  if(!(s.config&&s.config.streams)) cfg.streams=((s.config&&s.config.departments)||d.config.streams).slice();
   return Object.assign(d,s,{config:cfg}); }
 function save(){ localStorage.setItem(LS_KEY, JSON.stringify(S)); }
 function persist(){ save(); renderTab(currentTab); }
@@ -368,7 +370,12 @@ function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.
 /* steps may be a legacy plain string or {text,stream} */
 const stepText=s=>(s&&typeof s==="object")?(s.text||""):String(s||"");
 const stepStream=s=>(s&&typeof s==="object")?(s.stream||""):"";
-function streamList(){ const set=new Set(S.library.map(c=>c.domain).filter(Boolean)); (S.config.departments||[]).forEach(d=>d&&set.add(d)); return [...set].sort(); }
+function streamList(){ const set=new Set(S.library.map(c=>c.domain).filter(Boolean)); (S.config.streams||[]).forEach(d=>d&&set.add(d)); return [...set].sort(); }
+function domainSelectHtml(id,current){ const list=streamList(); if(current && !list.includes(current)) list.unshift(current);
+  return `<select id="${id}" onchange="onDomainPick(this)"><option value="">— none —</option>`+list.map(d=>`<option ${d===current?'selected':''}>${esc(d)}</option>`).join("")+`<option value="__add__">➕ Add new stream…</option></select>`; }
+function onDomainPick(sel){ if(sel.value!=="__add__")return; const n=(prompt("New business stream / domain:")||"").trim();
+  if(n){ S.config.streams=S.config.streams||[]; if(!S.config.streams.includes(n))S.config.streams.push(n); save(); sel.outerHTML=domainSelectHtml(sel.id,n); }
+  else sel.value=""; }
 function streamOptions(sel){ return '<option value="">— any / common —</option>'+streamList().map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join(""); }
 function stepRowHtml(text,stream){ return '<div class="row steprowedit" style="gap:6px;align-items:center;margin:0 0 5px 0;flex-wrap:nowrap"><input class="l_step_text" value="'+esc(text||"")+'" placeholder="Step description" style="flex:1"/><select class="l_step_stream" style="max-width:200px">'+streamOptions(stream||"")+'</select><button class="sm danger" type="button" onclick="this.closest(\'.steprowedit\').remove()">✕</button></div>'; }
 function renderStepRows(steps){ const w=document.getElementById("l_steps_wrap"); if(!w)return; w.innerHTML=(steps||[]).map(s=>stepRowHtml(stepText(s),stepStream(s))).join(""); }
@@ -377,7 +384,7 @@ function editLibItem(id){ const c=libById(id);
   modal(`<h2>Edit library definition</h2>
     <div class="row" style="margin-top:4px">
       <div class="field" style="flex:1"><label>PRC (process)</label><input id="l_proc" value="${esc(c.process)}"/></div>
-      <div class="field"><label>Domain</label><input id="l_dom" value="${esc(c.domain)}"/></div>
+      <div class="field"><label>Domain (stream)</label>${domainSelectHtml('l_dom',c.domain)}</div>
     </div>
     <div class="field" style="margin-top:8px"><label>Scenario</label><input id="l_scen" value="${esc(c.scenario)}"/></div>
     <div class="row" style="margin-top:8px">
@@ -399,7 +406,7 @@ function editLibItem(id){ const c=libById(id);
 function filterTesterPicks(){ const q=($("#l_tsearch").value||"").toLowerCase().trim();
   document.querySelectorAll("#l_tlist .tpick").forEach(el=>{ el.style.display=(!q||el.dataset.n.includes(q))?"flex":"none"; }); }
 function saveLibItem(id){ const c=libById(id);
-  c.process=$("#l_proc").value;c.domain=$("#l_dom").value;c.scenario=$("#l_scen").value;
+  c.process=$("#l_proc").value;{const dv=$("#l_dom").value;c.domain=(dv==="__add__"?(c.domain||""):dv);}c.scenario=$("#l_scen").value;
   c.defaultTesterIds=[...document.querySelectorAll("#l_tlist .ltchk:checked")].map(x=>x.value); delete c.defaultTesterId;
   c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;
   c.steps=[...document.querySelectorAll("#l_steps_wrap .steprowedit")].map(r=>{const text=(r.querySelector(".l_step_text").value||"").trim();const stream=r.querySelector(".l_step_stream").value||"";return text?(stream?{text,stream}:text):null;}).filter(Boolean);
@@ -901,8 +908,10 @@ function renderAdmin(){
       </div>
     </div>
 
+    <div class="card"><b>Business streams (domains)</b><div class="field" style="margin-top:8px"><textarea onchange="S.config.streams=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc((S.config.streams||[]).join("\n"))}</textarea><div class="hint">One per line. Feeds the <b>Domain</b> dropdown in the Library and the <b>stream</b> picker when tagging workflow steps. (You can also add one on the fly from the Library editor.)</div></div></div>
+
     <div class="split">
-      <div class="card"><b>Departments</b><div class="field" style="margin-top:8px"><textarea onchange="S.config.departments=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.departments.join("\n"))}</textarea><div class="hint">One per line.</div></div></div>
+      <div class="card"><b>Departments</b><div class="field" style="margin-top:8px"><textarea onchange="S.config.departments=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.departments.join("\n"))}</textarea><div class="hint">One per line. Used for the tester's department field.</div></div></div>
       <div class="card"><b>Recurrences</b><div class="field" style="margin-top:8px"><textarea onchange="S.config.recurrences=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.recurrences.join("\n"))}</textarea><div class="hint">One per line.</div></div></div>
     </div>
 
