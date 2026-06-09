@@ -579,7 +579,9 @@ function renderCampaign(){
           <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
           <div class="spacer"></div>
           <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
+          <label class="pill" style="cursor:pointer" title="Import a SPOC's assignment file (testers assigned for an entity)">↩ Import SPOC<input type="file" accept=".json" style="display:none" onchange="importSpocResults(this)"/></label>
           <button onclick="openTesterList()">📋 Tester list (Outlook)</button>
+          <button onclick="openGenSpoc()" title="Per-entity assignment file for the SPOC">👤 SPOC pack</button>
           <button onclick="openGenTester()">⬇ Generate tester HTML</button>
         </div>
         ${renderTrackingTable()}
@@ -992,6 +994,153 @@ function importTesterResults(input){
     renderAll(); save(); alert(`Results merged for ${esc(p.testerName||"tester")}: ${upd} updated, ${add} ad-hoc added.`);
   }catch(err){ alert("Invalid file."); } };
   r.readAsText(f);
+}
+
+/* =========================================================================
+   SPOC PACK — per-entity assignment file (assign-only round trip)
+   ========================================================================= */
+function spocPayload(entityCode){
+  const iter=activeIter(); const en=entityMeta(entityCode);
+  const pool=S.executions.filter(e=>e.iterationId===iter.id && (e.entity||"")===entityCode && !e.adhoc);
+  const testers=S.testers.filter(t=>(t.country||"")===entityCode).map(t=>({id:t.id,name:t.name,email:t.email||""}));
+  const tests=pool.slice().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)))
+    .map(e=>({id:e.id,process:e.process,scenario:e.scenario,domain:e.domain||"",
+      steps:(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[])).slice(),
+      testDate:e.testDate||"",status:e.status||"Not started",testerId:e.testerId||""}));
+  return {_type:"MCEU_SPOC_PACK",campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,
+    entity:entityCode,entityLabel:en.label||entityCode,statuses:S.config.statuses,testers,tests};
+}
+function openGenSpoc(){
+  modal(`<h2>Generate SPOC pack(s)</h2>
+    <p class="hint">A standalone file <b>per entity</b> for its SPOC: the entity's tests (dates read-only) to assign to its testers. The SPOC returns a JSON you import via <b>↩ Import SPOC</b>. Push tests to an entity first (Load panel → tick the entity).</p>
+    <div class="row"><div class="field" style="flex:1"><label>Entity</label><select id="spEntity">${S.config.entities.map(en=>`<option value="${esc(en.code)}">${esc(en.code)} — ${esc(en.label)}</option>`).join("")}</select></div></div>
+    <div class="toolbar" style="margin-top:14px"><button onclick="genAllSpocPacks()" title="One file per entity that has tests">⬇ Generate ALL entities</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="genSpocPack()">Generate this entity</button></div>`);
+}
+function genSpocPack(){ const ent=$("#spEntity").value; const p=spocPayload(ent);
+  if(!p.tests.length){ alert("No test assigned to entity "+ent+" in this iteration. Push tests to this entity first (Load panel → tick the entity)."); return; }
+  download(`SPOC_${slug(activeIter().name)}_${slug(ent)}.html`, buildSpocHTML(p), "text/html"); closeModal(); }
+function genAllSpocPacks(){ const iter=activeIter(); let any=0;
+  S.config.entities.forEach(en=>{ const p=spocPayload(en.code); if(p.tests.length){ download(`SPOC_${slug(iter.name)}_${slug(en.code)}.html`, buildSpocHTML(p), "text/html"); any++; } });
+  if(!any){ alert("No entity has tests in this iteration yet."); } else { closeModal(); } }
+function importSpocResults(input){
+  const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_SPOC_RESULTS"){alert("Not a SPOC assignments file.");return;}
+    (p.testers||[]).forEach(t=>{ let ex=S.testers.find(x=>x.id===t.id) || (t.email&&S.testers.find(x=>(x.email||"").toLowerCase()===t.email.toLowerCase()));
+      if(ex){ if(t.name)ex.name=t.name; if(t.email)ex.email=t.email; if(!ex.country)ex.country=p.entity; }
+      else { S.testers.push({id:t.id||uid(),name:t.name||"(tester)",email:t.email||"",country:p.entity,dept:""}); } });
+    let asg=0; (p.assignments||[]).forEach(a=>{ const ex=S.executions.find(x=>x.id===a.id); if(ex){ ex.testerId=a.testerId||""; ex.updatedAt=new Date().toISOString(); asg++; } });
+    let add=0; (p.adhoc||[]).forEach(a=>{ if(!a.process&&!a.scenario)return;
+      S.executions.push({id:uid(),iterationId:p.iterationId,libraryItemId:null,process:a.process||"(ad-hoc)",scenario:a.scenario||"",domain:"",steps:[],txnRef:false,txnRefValue:"",entity:p.entity,testerId:a.testerId||"",status:"Not started",comment:"",recurrence:"",testDate:a.testDate||"",adhoc:true,updatedAt:new Date().toISOString()}); add++; });
+    renderAll(); save(); alert(`SPOC pack merged for entity "${esc(p.entity)}": ${asg} assignment(s), ${add} ad-hoc added, testers synced.`);
+  }catch(err){ alert("Invalid file."); } };
+  r.readAsText(f);
+}
+function buildSpocHTML(payload){
+  const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c");
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SPOC — ${esc(payload.entityLabel||payload.entity)} — ${esc(payload.iteration)}</title>
+<style>
+body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px}
+header{background:#16233b;padding:12px 18px;position:sticky;top:0;display:flex;gap:16px;align-items:center;border-bottom:1px solid #334155;z-index:5}
+header h1{font-size:16px;margin:0}.muted{color:#94a3b8}
+main{padding:18px;max-width:1500px;margin:0 auto}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
+th{color:#94a3b8;position:sticky;top:56px;background:#0f172a}
+select,textarea,input{background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-family:inherit}
+button{background:#0ea5e9;color:#06283b;border:0;border-radius:6px;padding:9px 16px;font-weight:600;cursor:pointer}
+button.sec{background:#273449;color:#e2e8f0;border:1px solid #334155;font-weight:400}
+.badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#334155}
+.bar{position:sticky;bottom:0;background:#16233b;border-top:1px solid #334155;padding:10px 18px;display:flex;gap:10px;align-items:center}
+.saved{color:#22c55e;font-size:12px}
+.card{background:#16233b;border:1px solid #334155;border-radius:10px;padding:14px;margin-bottom:14px}
+.stepToggle{color:#38bdf8;cursor:pointer;font-size:12px;white-space:nowrap}
+.steprow>td{background:#0b1220}
+ol.steps{margin:4px 0;padding-left:22px}
+.streamtag{display:inline-block;background:#334155;color:#cbd5e1;border-radius:10px;padding:0 7px;font-size:10px;margin-left:6px}
+.apptag{display:inline-block;background:#f59e0b22;color:#fbbf24;border:1px solid #f59e0b55;border-radius:10px;padding:0 7px;font-size:10px;margin-left:6px}
+.unassigned{border-color:#ef4444!important}
+</style></head><body>
+<header><h1>SPOC — assign testers</h1><span class="muted" id="hdr"></span><button onclick="saveJSON()" style="margin-left:auto">⬇ Save assignments (JSON)</button></header>
+<main>
+  <p class="muted">Assign a <b>tester</b> to each test of your entity, then click <b>Save assignments (JSON)</b> and send the file back to the coordinator. Due dates are set by the coordinator (read-only). You can manage your testers and add ad-hoc tests below.</p>
+  <div class="card"><b>My testers</b> <span class="muted">(${esc(payload.entity)})</span>
+    <div id="testerWrap"></div>
+    <button class="sec" onclick="addTester()" style="margin-top:8px">+ Add tester</button>
+  </div>
+  <div class="card"><b>Progress</b> <span id="prog" class="muted"></span>
+    <div id="bar" style="height:10px;background:#0b1220;border-radius:6px;overflow:hidden;display:flex;margin-top:6px"></div>
+  </div>
+  <table id="tbl"><thead><tr><th>PRC</th><th>Scenario</th><th style="width:120px">Due date</th><th style="width:220px">Tester</th><th style="width:110px">Status</th></tr></thead><tbody id="tb"></tbody></table>
+  <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Add ad-hoc test</button></p>
+</main>
+<div class="bar"><button onclick="saveJSON()">⬇ Save assignments (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog2"></span></div>
+<script>
+const DATA=${dataJson};
+const LSK="mceu_spoc_"+DATA.iterationId+"_"+DATA.entity;
+let tests=[], adhoc=[], testers=[], expanded={};
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,function(c){return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c];});}
+function fmtDate(s){s=String(s==null?"":s).trim();var m=s.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);return m?(m[3]+"/"+m[2]+"/"+m[1]):s;}
+function stepText(s){return (s&&typeof s==="object")?(s.text||""):String(s||"");}
+function stepStream(s){return (s&&typeof s==="object")?(s.stream||""):"";}
+function stepApp(s){return (s&&typeof s==="object")?(s.app||""):"";}
+function init(){
+  document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · Entity "+DATA.entity;
+  var saved=null; try{ saved=JSON.parse(localStorage.getItem(LSK)||"null"); }catch(e){}
+  testers=(saved&&saved.testers)?saved.testers.slice():DATA.testers.slice();
+  tests=DATA.tests.map(function(t){ var a=saved&&saved.assignments&&saved.assignments.find(function(x){return x.id===t.id;}); return Object.assign({},t,{testerId:a?a.testerId:t.testerId}); });
+  adhoc=(saved&&saved.adhoc)?saved.adhoc.slice():[];
+  renderTesters(); render();
+}
+function testerOpts(sel){ var o='<option value="">— unassigned —</option>'; testers.forEach(function(t){ o+='<option value="'+esc(t.id)+'" '+(t.id===sel?'selected':'')+'>'+esc(t.name)+'</option>'; }); return o; }
+function renderTesters(){ var w=document.getElementById("testerWrap"); w.innerHTML="";
+  testers.forEach(function(t,i){ var d=document.createElement("div"); d.style.cssText="display:flex;gap:6px;margin:4px 0;align-items:center;flex-wrap:nowrap";
+    d.innerHTML='<input value="'+esc(t.name)+'" placeholder="Name" data-k="name" style="flex:1"/><input value="'+esc(t.email||"")+'" placeholder="Email" data-k="email" style="flex:1"/><button class="sec" data-rm="1">✕</button>';
+    d.querySelectorAll("[data-k]").forEach(function(el){ el.addEventListener("input",function(){ testers[i][el.dataset.k]=el.value; autosave(); }); });
+    d.querySelector("[data-rm]").addEventListener("click",function(){ testers.splice(i,1); renderTesters(); render(); autosave(); });
+    w.appendChild(d); });
+}
+function addTester(){ testers.push({id:"st_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:"New tester",email:""}); renderTesters(); render(); autosave(); }
+function toggle(id){ expanded[id]=!expanded[id]; render(); }
+function render(){ var tb=document.getElementById("tb"); tb.innerHTML="";
+  tests.forEach(function(t,i){ tb.appendChild(rowEl(t,i,false)); if(t.steps&&t.steps.length&&expanded[t.id]) tb.appendChild(stepRow(t)); });
+  adhoc.forEach(function(t,i){ tb.appendChild(rowEl(t,i,true)); });
+  updateProg();
+}
+function rowEl(t,i,isAd){ var tr=document.createElement("tr");
+  var nSteps=(!isAd&&t.steps)?t.steps.length:0;
+  var tog=nSteps?' <span class="stepToggle">'+(expanded[t.id]?'▾':'▸')+' steps ('+nSteps+')</span>':'';
+  var need=!t.testerId;
+  tr.innerHTML='<td>'+(isAd?'<input value="'+esc(t.process||"")+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
+    '<td>'+(isAd?'<input value="'+esc(t.scenario||"")+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+tog))+'</td>'+
+    '<td>'+(isAd?'<span class="muted">—</span>':(t.testDate?esc(fmtDate(t.testDate)):'<span class="muted">—</span>'))+'</td>'+
+    '<td><select data-k="testerId" class="'+(need?'unassigned':'')+'">'+testerOpts(t.testerId)+'</select></td>'+
+    '<td>'+(isAd?'<span class="badge">new</span>':'<span class="badge">'+esc(t.status||"Not started")+'</span>')+'</td>';
+  var arr=isAd?adhoc:tests;
+  var tg=tr.querySelector(".stepToggle"); if(tg) tg.addEventListener("click",function(){toggle(t.id);});
+  tr.querySelectorAll("[data-k]").forEach(function(el){ el.addEventListener("input",function(){ arr[i][el.dataset.k]=el.value; if(el.dataset.k==="testerId"){ el.className=el.value?'':'unassigned'; } autosave(); updateProg(); }); });
+  return tr;
+}
+function stepRow(t){ var tr=document.createElement("tr"); tr.className="steprow";
+  var items=t.steps.map(function(s){ var st=stepStream(s),ap=stepApp(s); return '<li>'+esc(stepText(s))+(st?' <span class="streamtag">'+esc(st)+'</span>':'')+(ap?' <span class="apptag">'+esc(ap)+'</span>':'')+'</li>'; }).join("");
+  tr.innerHTML='<td></td><td colspan="4"><div class="muted" style="font-size:12px">Workflow:</div><ol class="steps">'+items+'</ol></td>'; return tr;
+}
+function addAdhoc(){ adhoc.push({process:"",scenario:"",testerId:""}); render(); autosave(); }
+function updateProg(){ var done=tests.filter(function(t){return t.testerId;}).length, tot=tests.length;
+  var msg=done+" / "+tot+" assigned"; document.getElementById("prog").textContent=msg; document.getElementById("prog2").textContent=msg;
+  var pct=tot?Math.round(done/tot*100):0; document.getElementById("bar").innerHTML='<span style="width:'+pct+'%;background:#22c55e;display:block"></span>';
+}
+function payloadOut(){ return {_type:"MCEU_SPOC_RESULTS",iterationId:DATA.iterationId,entity:DATA.entity,
+  assignments:tests.map(function(t){return {id:t.id,testerId:t.testerId||""};}),
+  testers:testers.map(function(t){return {id:t.id,name:t.name,email:t.email||"",country:DATA.entity};}),
+  adhoc:adhoc.filter(function(a){return a.process||a.scenario;}).map(function(a){return {process:a.process,scenario:a.scenario,testerId:a.testerId||""};})}; }
+function autosave(){ try{ localStorage.setItem(LSK,JSON.stringify(payloadOut())); var m=document.getElementById("savedMsg"); m.textContent="auto-saved ✓"; setTimeout(function(){m.textContent="";},1200); }catch(e){} }
+function saveJSON(){ var un=tests.filter(function(t){return !t.testerId;}).length;
+  if(un && !confirm(un+" test(s) still unassigned. Save anyway?")) return;
+  var b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});
+  var a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="SPOC_assignments_"+DATA.entity+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json"; a.click();
+}
+init();
+<\/script></body></html>`;
 }
 
 /* =========================================================================
