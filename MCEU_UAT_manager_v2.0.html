@@ -362,6 +362,7 @@ function renderLibrary(){
       <select onchange="libFilter.domain=this.value;libFilter.process='';renderLibrary()"><option value="">All domains</option>${domains.map(d=>`<option ${libFilter.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
       <select onchange="libFilter.process=this.value;renderLibrary()"><option value="">All PRC</option>${procs.map(p=>`<option ${libFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
       <div class="spacer"></div><span class="muted">${rows.length} shown</span>
+      <button class="sm primary" onclick="openPushLib()" title="Push the current view (filter by a PRC to push a whole process) into an iteration">⤵ Push to iteration</button>
       <button class="sm" onclick="resetLibOrder()">↕ Reset order</button>
       <button class="sm" onclick="newLibItem()">+ New PRC</button>
       <button class="sm" onclick="exportLibrary()">⬇ Export .xlsx</button>
@@ -377,7 +378,7 @@ function renderLibrary(){
         <td>${esc(c.scenario)}${c.txnRef?'<span class="reftag">txn ref</span>':''}${steps.length?` <span class="steptoggle" onclick="toggleLibSteps('${c.id}')">${open?'▾':'▸'} ${steps.length} step${steps.length>1?'s':''}</span>`:''}</td>
         <td>${esc(c.domain)}</td>
         <td class="muted">${esc(testerNames(libTesterIds(c))||"—")}</td>
-        <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button></td>
+        <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button> <button class="sm" onclick="openPushLib('${c.id}')" title="Push this test case to an iteration">⤵</button></td>
       </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(stepText(s))}${stepStream(s)?` <span class="reftag">${esc(stepStream(s))}</span>`:""}${stepApp(s)?` <span class="apptag">${esc(stepApp(s))}</span>`:""}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
       </tbody>
     </table>`}`;
@@ -548,7 +549,7 @@ function renderLoadPanel(){
   const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
   const procs=[...new Set(S.library.filter(c=>!loadSel.domain||c.domain===loadSel.domain).map(c=>c.process))].sort();
   const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
-  return `<p class="hint">Pick a full or partial set of the Library, optionally choose target entities, assign one or more testers with an execution date, then add to <b>${esc(activeIter().name)}</b>. Entities are optional (each tester carries their own country). Each test case becomes one execution per selected tester (× each chosen entity). The date is applied to all and stays editable per row. Duplicates are skipped.</p>
+  return `<p class="hint">Pick a full or partial set of the Library, optionally choose target entities, assign one or more testers with an execution date, then add to <b>${esc(activeIter().name)}</b>. Entities are optional (each tester carries their own country). Each test case becomes one execution per selected tester (× each chosen entity). The date is applied to all and stays editable per row. Re-loading a definition already present <b>re-syncs it from the Library</b> (process, scenario, steps, transaction flag) while keeping each tester's status, comment and evidence.</p>
     <div class="row" style="margin-bottom:8px">
       <div class="field"><label>Load into iteration (phase)</label><select onchange="setActiveIteration(this.value)">${S.iterations.map(i=>`<option value="${i.id}" ${i.id===S.activeIterationId?'selected':''}>${esc(i.name)}</option>`).join("")}</select></div>
       <div class="field" style="align-self:flex-end"><button class="sm" onclick="newIter()">+ New iteration</button></div>
@@ -568,23 +569,50 @@ function renderLoadPanel(){
 }
 function filterLdTesters(){ const q=($("#ld_tsearch").value||"").toLowerCase().trim();
   document.querySelectorAll("#ldTesterList .tpick").forEach(el=>{ el.style.display=(!q||el.dataset.n.includes(q))?"flex":"none"; }); }
-function loadIntoIteration(){
-  let ents=[...document.querySelectorAll(".ldEnt:checked")].map(x=>x.value); if(!ents.length) ents=[""];
-  const selTesters=[...document.querySelectorAll("#ldTesterList .ldtchk:checked")].map(x=>x.value);
-  const rec=$("#ldRec").value, date=toISO((($("#ldDate")&&$("#ldDate").value)||"").trim()), iterId=S.activeIterationId;
-  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
-  let created=0;
+/* Create/sync executions for a set of definitions into an iteration.
+   Existing rows are re-synced from the Library (tester results kept). */
+function dispatchDefs(target,iterId,ents,selTesters,rec,date){ let created=0,synced=0;
   target.forEach(c=>ents.forEach(ent=>{
     const testerIds = selTesters.length ? selTesters : (libTesterIds(c).length?libTesterIds(c):[""]);
     testerIds.forEach(testerId=>{
-      if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&(e.entity||"")===(ent||"")&&(e.testerId||"")===(testerId||""))) return;
+      const ex=S.executions.find(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&(e.entity||"")===(ent||"")&&(e.testerId||"")===(testerId||""));
+      if(ex){ ex.process=c.process; ex.scenario=c.scenario; ex.domain=c.domain; ex.steps=(c.steps||[]).slice(); ex.txnRef=!!c.txnRef;
+        if(date) ex.testDate=date; if(rec) ex.recurrence=rec; ex.updatedAt=new Date().toISOString(); synced++; return; }
       S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
         steps:(c.steps||[]).slice(),txnRef:!!c.txnRef,txnRefValue:"",entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:date,adhoc:false,updatedAt:new Date().toISOString()});
       created++;
     });
   }));
-  persist(); alert(created+" execution(s) added to "+activeIter().name+".");
+  return {created,synced}; }
+function loadIntoIteration(){
+  let ents=[...document.querySelectorAll(".ldEnt:checked")].map(x=>x.value); if(!ents.length) ents=[""];
+  const selTesters=[...document.querySelectorAll("#ldTesterList .ldtchk:checked")].map(x=>x.value);
+  const rec=$("#ldRec").value, date=toISO((($("#ldDate")&&$("#ldDate").value)||"").trim()), iterId=S.activeIterationId;
+  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
+  const r=dispatchDefs(target,iterId,ents,selTesters,rec,date);
+  persist(); alert(r.created+" execution(s) added"+(r.synced?", "+r.synced+" re-synced from Library":"")+" in "+activeIter().name+".");
 }
+/* Push directly from the Library: the current filtered view, or one definition. */
+let _pushIds=null;
+function libFiltered(){ return sortedLib(S.library.filter(c=>(!libFilter.domain||c.domain===libFilter.domain)&&(!libFilter.process||c.process===libFilter.process)&&(!libFilter.q||((c.process||"")+" "+(c.scenario||"")).toLowerCase().includes(libFilter.q.toLowerCase())))); }
+function pushDefsSet(){ return _pushIds?_pushIds.map(id=>libById(id)).filter(Boolean):libFiltered(); }
+function openPushLib(singleId){ _pushIds=singleId?[singleId]:null; const defs=pushDefsSet();
+  if(!defs.length){ alert("Nothing to push in the current view."); return; }
+  const what=singleId?('“'+esc((libById(singleId)||{}).scenario||'')+'”'):(libFilter.process?('process <b>'+esc(libFilter.process)+'</b>'):(libFilter.domain?('domain <b>'+esc(libFilter.domain)+'</b>'):'the current view'));
+  modal(`<h2>Push to iteration</h2>
+    <p class="hint">Add <b>${defs.length}</b> test case(s) from ${what} to an iteration. Each goes to <b>its assigned testers</b> (no specific entity — testers carry their own). Re-pushing re-syncs existing rows from the Library while keeping tester results.</p>
+    <div class="row">
+      <div class="field" style="flex:1"><label>Target iteration (phase)</label><select id="pushIter">${S.iterations.map(i=>`<option value="${i.id}" ${i.id===S.activeIterationId?'selected':''}>${esc(i.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Execution due date (optional)</label><input id="pushDate" placeholder="JJ/MM/AAAA" style="width:140px"/></div>
+    </div>
+    <div class="toolbar" style="margin-top:14px"><button class="sm" onclick="newIterFromPush()">+ New iteration</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="doPushLib()">Push ${defs.length}</button></div>`);
+}
+function newIterFromPush(){ const name=prompt("New iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
+  const it={id:uid(),name,startDate:"",endDate:""}; S.iterations.push(it); save();
+  const sel=document.getElementById("pushIter"); if(sel) sel.innerHTML=S.iterations.map(i=>`<option value="${i.id}" ${i.id===it.id?'selected':''}>${esc(i.name)}</option>`).join(""); }
+function doPushLib(){ const defs=pushDefsSet(); const iterId=$("#pushIter").value; const date=toISO(($("#pushDate").value||"").trim());
+  const r=dispatchDefs(defs,iterId,[""],[],"",date); _pushIds=null; S.activeIterationId=iterId; closeModal(); renderAll(); save();
+  alert(r.created+" added"+(r.synced?", "+r.synced+" re-synced":"")+" in "+((S.iterations.find(i=>i.id===iterId)||{}).name||"")+"."); }
 function renderTrackingTable(){
   let ex=iterExecs().filter(e=>
     (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
