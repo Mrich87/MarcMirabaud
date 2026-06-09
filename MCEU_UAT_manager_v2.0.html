@@ -368,6 +368,8 @@ function renderLibrary(){
       <button class="sm" onclick="exportLibrary()">⬇ Export .xlsx</button>
       <label class="pill" style="cursor:pointer">⬆ Import .xlsx<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label>
       <label class="pill" style="cursor:pointer" title="Azure DevOps export: Test Case rows + their Step rows — imports scenarios WITH their steps and application">⬆ Import ADO cases (steps)<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAdoCases(this)"/></label>
+      <input id="adoPrc" placeholder="ADO → force PRC" title="Process applied to every imported ADO case (e.g. PRC-194 MIFID). Leave empty to read the PRC from each row." style="width:150px"/>
+      <input id="adoDomain" placeholder="ADO → force domain" title="Domain applied to every imported ADO case. Leave empty to use the file's Delivery Domain." style="width:150px"/>
       <input id="impSheet" value="LUX" title="sheet name" style="width:70px"/>
     </div>
     <table>
@@ -481,9 +483,13 @@ function importDevops(input){
 }
 /* Import an Azure DevOps "Test Case + Steps" export (parent/child rows).
    Each Test Case -> one definition; following Step rows -> its steps (carrying
-   the Product Application). Additive: dedup on process x scenario. */
+   the Product Application). Optional overrides: force the PRC (process) and the
+   domain for all rows. The "TCxx" reference is stripped from the scenario.
+   No dedup (variants can share a name) — import once. */
 function importAdoCases(input){
   const file=input.files[0]; if(!file)return;
+  const ovProc=(($("#adoPrc")&&$("#adoPrc").value)||"").trim();
+  const ovDom=(($("#adoDomain")&&$("#adoDomain").value)||"").trim();
   const reader=new FileReader();
   reader.onload=e=>{
     const wb=XLSX.read(e.target.result,{type:"array"});
@@ -492,22 +498,17 @@ function importAdoCases(input){
     if(rows.length<2){ alert("Empty sheet."); return; }
     const hdr=rows[0].map(h=>String(h||"").trim());
     const ix=n=>hdr.indexOf(n);
-    const iType=ix("Work Item Type"),iTitle=ix("Title"),iAct=ix("Step Action"),iExp=ix("Step Expected"),iDom=ix("Delivery Domain"),iApp=ix("Product Application"),iAss=ix("Assigned To");
+    const iType=ix("Work Item Type"),iTitle=ix("Title"),iAct=ix("Step Action"),iExp=ix("Step Expected"),iDom=ix("Delivery Domain"),iApp=ix("Product Application");
     const cell=(r,i)=> (i>=0 && r[i]!=null) ? String(r[i]).trim() : "";
     const prcOf=r=>{ for(const c of r){ const m=String(c==null?"":c).trim().match(/^(PRC-\d+.*)$/); if(m) return m[1].trim(); } return ""; };
-    const findTester=email=>{ if(!email)return ""; let t=S.testers.find(x=>(x.email||"").toLowerCase()===email.toLowerCase()||x.name===email);
-      if(!t){ const nm=email.indexOf("@")>0?email.slice(0,email.indexOf("@")):email; t={id:uid(),name:nm,email:email,country:"",dept:""}; S.testers.push(t); newTesters++; } return t.id; };
-    const existing=new Set(S.library.map(c=>(c.process+"||"+c.scenario)));
+    const stripRef=t=>String(t||"").replace(/^\s*TC\s*\d+\s*[:.\-]?\s*/i,"").trim();
     let maxO=S.library.reduce((mm,c)=>Math.max(mm,c.order||0),0);
-    let added=0,skipped=0,newTesters=0,curApp="",curDef=null;
+    let added=0,curApp="",curDef=null;
     for(let r=1;r<rows.length;r++){ const row=rows[r];
       if(cell(row,iType)==="Test Case"){
-        const scenario=cell(row,iTitle), process=prcOf(row), key=process+"||"+scenario;
-        curApp=cell(row,iApp); curDef=null;
+        const scenario=stripRef(cell(row,iTitle)); curApp=cell(row,iApp); curDef=null;
         if(!scenario) continue;
-        if(existing.has(key)){ skipped++; continue; }
-        existing.add(key);
-        curDef={id:uid(),order:++maxO,process,scenario,domain:cell(row,iDom),defaultTesterIds:(()=>{const id=findTester(cell(row,iAss));return id?[id]:[];})(),notes:"",steps:[],txnRef:false};
+        curDef={id:uid(),order:++maxO,process:ovProc||prcOf(row),scenario,domain:ovDom||cell(row,iDom),defaultTesterIds:[],notes:"",steps:[],txnRef:false};
         S.library.push(curDef); added++;
       } else if(curDef){
         const act=cell(row,iAct); if(act){ const exp=cell(row,iExp); const txt=act+(exp?"  ➜ ✔ "+exp:""); curDef.steps.push(curApp?{text:txt,app:curApp}:txt); }
@@ -515,7 +516,7 @@ function importAdoCases(input){
     }
     let n=0; sortedLib(S.library).forEach(c=>c.order=++n);
     save(); go("library");
-    alert("ADO import: "+added+" test case(s) added with steps, "+skipped+" skipped (already present), "+newTesters+" tester(s) created. Library total: "+S.library.length+".");
+    alert("ADO import: "+added+" test case(s) added with steps. Library total: "+S.library.length+".\n(No dedup — import this file only once to avoid duplicates.)");
   };
   reader.readAsArrayBuffer(file);
 }
