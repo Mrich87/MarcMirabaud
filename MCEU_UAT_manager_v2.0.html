@@ -1089,9 +1089,14 @@ function importSpocResults(input){
       if(ex){ if(t.name)ex.name=t.name; if(t.email)ex.email=t.email; if(!ex.country)ex.country=p.entity; }
       else { S.testers.push({id:t.id||uid(),name:t.name||"(tester)",email:t.email||"",country:p.entity,dept:""}); } });
     let asg=0; (p.assignments||[]).forEach(a=>{ const ex=S.executions.find(x=>x.id===a.id); if(ex){ ex.testerId=a.testerId||""; ex.updatedAt=new Date().toISOString(); asg++; } });
+    let extra=0; (p.extras||[]).forEach(x=>{ if(!x.testerId)return; const src=S.executions.find(e=>e.id===x.srcId);
+      const ent=p.entity;
+      const same=e=> (src&&e.libraryItemId&&src.libraryItemId)? e.libraryItemId===src.libraryItemId : (e.process===(x.process||(src&&src.process))&&e.scenario===(x.scenario||(src&&src.scenario)));
+      if(S.executions.some(e=>e.iterationId===p.iterationId&&(e.entity||"")===ent&&same(e)&&(e.testerId||"")===x.testerId)) return;
+      S.executions.push({id:uid(),iterationId:p.iterationId,libraryItemId:src?src.libraryItemId:null,process:x.process||(src&&src.process)||"",scenario:x.scenario||(src&&src.scenario)||"",domain:src?src.domain:"",steps:src?(src.steps||[]).slice():[],txnRef:src?!!src.txnRef:false,txnRefValue:"",entity:ent,testerId:x.testerId,status:"Not started",comment:"",recurrence:src?src.recurrence:"",testDate:x.testDate||(src&&src.testDate)||"",adhoc:false,updatedAt:new Date().toISOString()}); extra++; });
     let add=0; (p.adhoc||[]).forEach(a=>{ if(!a.process&&!a.scenario)return;
       S.executions.push({id:uid(),iterationId:p.iterationId,libraryItemId:null,process:a.process||"(ad-hoc)",scenario:a.scenario||"",domain:"",steps:[],txnRef:false,txnRefValue:"",entity:p.entity,testerId:a.testerId||"",status:"Not started",comment:"",recurrence:"",testDate:a.testDate||"",adhoc:true,updatedAt:new Date().toISOString()}); add++; });
-    renderAll(); save(); alert(`SPOC pack merged for entity "${esc(p.entity)}": ${asg} assignment(s), ${add} ad-hoc added, testers synced.`);
+    renderAll(); save(); alert(`SPOC pack merged for entity "${esc(p.entity)}": ${asg} assignment(s), ${extra} extra tester-row(s), ${add} ad-hoc added, testers synced.`);
   }catch(err){ alert("Invalid file."); } };
   r.readAsText(f);
 }
@@ -1130,14 +1135,22 @@ ol.steps{margin:4px 0;padding-left:22px}
   <div class="card"><b>Progress</b> <span id="prog" class="muted"></span>
     <div id="bar" style="height:10px;background:#0b1220;border-radius:6px;overflow:hidden;display:flex;margin-top:6px"></div>
   </div>
-  <table id="tbl"><thead><tr><th>PRC</th><th>Scenario</th><th style="width:120px">Due date</th><th style="width:220px">Tester</th><th style="width:110px">Status</th></tr></thead><tbody id="tb"></tbody></table>
+  <div id="bulkBar" class="card" style="display:none">
+    <b><span id="selN">0</span> selected</b> &nbsp;
+    <button class="sec" onclick="toggleBulkPanel()">👥 Assign testers…</button>
+    <button class="sec" onclick="bulkClear()">Clear</button>
+    <button class="sec" onclick="bulkDelete()">🗑 Remove extra/ad-hoc</button>
+    <div id="bulkPanel" style="display:none;margin-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">Tick testers — each selected test is ensured for every ticked tester (extra rows are created automatically):</div><div id="bulkTesters"></div><button onclick="bulkApply()" style="margin-top:8px">Apply to selected</button></div>
+  </div>
+  <table id="tbl"><thead><tr><th style="width:26px"><input type="checkbox" id="selAll" onchange="selectAll(this.checked)"/></th><th>PRC</th><th>Scenario</th><th style="width:120px">Due date</th><th style="width:220px">Tester</th><th style="width:110px">Status</th></tr></thead><tbody id="tb"></tbody></table>
   <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Add ad-hoc test</button></p>
 </main>
 <div class="bar"><button onclick="saveJSON()">⬇ Save assignments (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog2"></span></div>
 <script>
 const DATA=${dataJson};
 const LSK="mceu_spoc_"+DATA.iterationId+"_"+DATA.entity;
-let tests=[], adhoc=[], testers=[], expanded={};
+let tests=[], adhoc=[], testers=[], expanded={}, sel={};
+function uid(){return "r"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,function(c){return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c];});}
 function fmtDate(s){s=String(s==null?"":s).trim();var m=s.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);return m?(m[3]+"/"+m[2]+"/"+m[1]):s;}
 function stepText(s){return (s&&typeof s==="object")?(s.text||""):String(s||"");}
@@ -1147,8 +1160,9 @@ function init(){
   document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · Entity "+DATA.entity;
   var saved=null; try{ saved=JSON.parse(localStorage.getItem(LSK)||"null"); }catch(e){}
   testers=(saved&&saved.testers)?saved.testers.slice():DATA.testers.slice();
-  tests=DATA.tests.map(function(t){ var a=saved&&saved.assignments&&saved.assignments.find(function(x){return x.id===t.id;}); return Object.assign({},t,{testerId:a?a.testerId:t.testerId}); });
-  adhoc=(saved&&saved.adhoc)?saved.adhoc.slice():[];
+  tests=DATA.tests.map(function(t){ var a=saved&&saved.assignments&&saved.assignments.find(function(x){return x.id===t.id;}); return Object.assign({},t,{rid:t.id,orig:true,testerId:a?a.testerId:t.testerId}); });
+  if(saved&&saved.extras){ saved.extras.forEach(function(x){ var src=tests.filter(function(t){return t.orig&&t.id===x.srcId;})[0]; tests.push({rid:x.rid||uid(),orig:false,srcId:x.srcId,process:x.process||(src?src.process:""),scenario:x.scenario||(src?src.scenario:""),steps:src?src.steps:[],testDate:x.testDate||(src?src.testDate:""),status:"Not started",testerId:x.testerId||""}); }); }
+  adhoc=(saved&&saved.adhoc)?saved.adhoc.map(function(a){return Object.assign({rid:a.rid||uid()},a);}):[];
   renderTesters(); render();
 }
 function testerOpts(sel){ var o='<option value="">— unassigned —</option>'; testers.forEach(function(t){ o+='<option value="'+esc(t.id)+'" '+(t.id===sel?'selected':'')+'>'+esc(t.name)+'</option>'; }); return o; }
@@ -1159,38 +1173,70 @@ function renderTesters(){ var w=document.getElementById("testerWrap"); w.innerHT
     d.querySelector("[data-rm]").addEventListener("click",function(){ testers.splice(i,1); renderTesters(); render(); autosave(); });
     w.appendChild(d); });
 }
-function addTester(){ testers.push({id:"st_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:"New tester",email:""}); renderTesters(); render(); autosave(); }
-function toggle(id){ expanded[id]=!expanded[id]; render(); }
+function addTester(){ testers.push({id:"st_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:"New tester",email:""}); renderTesters(); render(); autosave(); if(document.getElementById("bulkPanel").style.display!=="none")renderBulkTesters(); }
+function toggle(rid){ expanded[rid]=!expanded[rid]; render(); }
 function render(){ var tb=document.getElementById("tb"); tb.innerHTML="";
-  tests.forEach(function(t,i){ tb.appendChild(rowEl(t,i,false)); if(t.steps&&t.steps.length&&expanded[t.id]) tb.appendChild(stepRow(t)); });
+  tests.forEach(function(t,i){ tb.appendChild(rowEl(t,i,false)); if(t.steps&&t.steps.length&&expanded[t.rid]) tb.appendChild(stepRow(t)); });
   adhoc.forEach(function(t,i){ tb.appendChild(rowEl(t,i,true)); });
-  updateProg();
+  updateSel(); updateProg();
 }
 function rowEl(t,i,isAd){ var tr=document.createElement("tr");
   var nSteps=(!isAd&&t.steps)?t.steps.length:0;
-  var tog=nSteps?' <span class="stepToggle">'+(expanded[t.id]?'▾':'▸')+' steps ('+nSteps+')</span>':'';
+  var tog=nSteps?' <span class="stepToggle">'+(expanded[t.rid]?'▾':'▸')+' steps ('+nSteps+')</span>':'';
   var need=!t.testerId;
-  tr.innerHTML='<td>'+(isAd?'<input value="'+esc(t.process||"")+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
+  var extra=(!isAd&&!t.orig)?' <span class="badge">+tester</span>':'';
+  tr.innerHTML='<td><input type="checkbox" class="rsel" '+(sel[t.rid]?'checked':'')+'/></td>'+
+    '<td>'+(isAd?'<input value="'+esc(t.process||"")+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':(esc(t.process)+extra))+'</td>'+
     '<td>'+(isAd?'<input value="'+esc(t.scenario||"")+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+tog))+'</td>'+
     '<td>'+(isAd?'<span class="muted">—</span>':(t.testDate?esc(fmtDate(t.testDate)):'<span class="muted">—</span>'))+'</td>'+
     '<td><select data-k="testerId" class="'+(need?'unassigned':'')+'">'+testerOpts(t.testerId)+'</select></td>'+
     '<td>'+(isAd?'<span class="badge">new</span>':'<span class="badge">'+esc(t.status||"Not started")+'</span>')+'</td>';
   var arr=isAd?adhoc:tests;
-  var tg=tr.querySelector(".stepToggle"); if(tg) tg.addEventListener("click",function(){toggle(t.id);});
+  var cb=tr.querySelector(".rsel"); cb.addEventListener("change",function(){ if(cb.checked)sel[t.rid]=true; else delete sel[t.rid]; updateSel(); });
+  var tg=tr.querySelector(".stepToggle"); if(tg) tg.addEventListener("click",function(){toggle(t.rid);});
   tr.querySelectorAll("[data-k]").forEach(function(el){ el.addEventListener("input",function(){ arr[i][el.dataset.k]=el.value; if(el.dataset.k==="testerId"){ el.className=el.value?'':'unassigned'; } autosave(); updateProg(); }); });
   return tr;
 }
 function stepRow(t){ var tr=document.createElement("tr"); tr.className="steprow";
   var items=t.steps.map(function(s){ var st=stepStream(s),ap=stepApp(s); return '<li>'+esc(stepText(s))+(st?' <span class="streamtag">'+esc(st)+'</span>':'')+(ap?' <span class="apptag">'+esc(ap)+'</span>':'')+'</li>'; }).join("");
-  tr.innerHTML='<td></td><td colspan="4"><div class="muted" style="font-size:12px">Workflow:</div><ol class="steps">'+items+'</ol></td>'; return tr;
+  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px">Workflow:</div><ol class="steps">'+items+'</ol></td>'; return tr;
 }
-function addAdhoc(){ adhoc.push({process:"",scenario:"",testerId:""}); render(); autosave(); }
+function addAdhoc(){ adhoc.push({rid:uid(),process:"",scenario:"",testerId:""}); render(); autosave(); }
+function updateSel(){ var n=Object.keys(sel).length; var c=document.getElementById("selN"); if(c)c.textContent=n;
+  var bb=document.getElementById("bulkBar"); if(bb)bb.style.display=n?'block':'none';
+  var sa=document.getElementById("selAll"); if(sa){ var all=tests.concat(adhoc); sa.checked=all.length>0&&all.every(function(t){return sel[t.rid];}); } }
+function selectAll(on){ var all=tests.concat(adhoc); all.forEach(function(t){ if(on)sel[t.rid]=true; else delete sel[t.rid]; }); render(); }
+function bulkClear(){ sel={}; render(); }
+function toggleBulkPanel(){ var p=document.getElementById("bulkPanel"); var show=p.style.display==="none"; p.style.display=show?'block':'none'; if(show)renderBulkTesters(); }
+function renderBulkTesters(){ var w=document.getElementById("bulkTesters"); w.innerHTML=testers.map(function(t){return '<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 10px 2px 0"><input type="checkbox" class="bchk" value="'+esc(t.id)+'"/> '+esc(t.name)+'</label>';}).join("")||'<span class="muted">Add testers first (above).</span>'; }
+function bulkApply(){
+  var tids=[].slice.call(document.querySelectorAll("#bulkTesters .bchk:checked")).map(function(c){return c.value;});
+  if(!tids.length){ alert("Tick at least one tester."); return; }
+  var selTests=tests.filter(function(t){return sel[t.rid];});
+  if(!selTests.length){ alert("Select test rows first."); return; }
+  var groups={}; selTests.forEach(function(t){ var base=t.srcId||t.id; if(!groups[base])groups[base]=t; });
+  Object.keys(groups).forEach(function(base){ var g=groups[base];
+    tids.forEach(function(tid){
+      if(tests.some(function(t){ return (t.srcId||t.id)===base && t.testerId===tid; })) return;
+      var empty=tests.filter(function(t){ return (t.srcId||t.id)===base && !t.testerId; })[0];
+      if(empty){ empty.testerId=tid; return; }
+      tests.push({rid:uid(),orig:false,srcId:base,process:g.process,scenario:g.scenario,steps:g.steps,testDate:g.testDate,status:"Not started",testerId:tid});
+    });
+  });
+  sel={}; document.getElementById("bulkPanel").style.display="none"; render(); autosave();
+}
+function bulkDelete(){ if(!Object.keys(sel).length)return;
+  tests=tests.filter(function(t){ return !(sel[t.rid] && !t.orig); });
+  adhoc=adhoc.filter(function(t){ return !sel[t.rid]; });
+  sel={}; render(); autosave();
+}
 function updateProg(){ var done=tests.filter(function(t){return t.testerId;}).length, tot=tests.length;
   var msg=done+" / "+tot+" assigned"; document.getElementById("prog").textContent=msg; document.getElementById("prog2").textContent=msg;
   var pct=tot?Math.round(done/tot*100):0; document.getElementById("bar").innerHTML='<span style="width:'+pct+'%;background:#22c55e;display:block"></span>';
 }
 function payloadOut(){ return {_type:"MCEU_SPOC_RESULTS",iterationId:DATA.iterationId,entity:DATA.entity,
-  assignments:tests.map(function(t){return {id:t.id,testerId:t.testerId||""};}),
+  assignments:tests.filter(function(t){return t.orig;}).map(function(t){return {id:t.id,testerId:t.testerId||""};}),
+  extras:tests.filter(function(t){return !t.orig;}).map(function(t){return {rid:t.rid,srcId:t.srcId,process:t.process,scenario:t.scenario,testDate:t.testDate||"",testerId:t.testerId||""};}),
   testers:testers.map(function(t){return {id:t.id,name:t.name,email:t.email||"",country:DATA.entity};}),
   adhoc:adhoc.filter(function(a){return a.process||a.scenario;}).map(function(a){return {process:a.process,scenario:a.scenario,testerId:a.testerId||""};})}; }
 function autosave(){ try{ localStorage.setItem(LSK,JSON.stringify(payloadOut())); var m=document.getElementById("savedMsg"); m.textContent="auto-saved ✓"; setTimeout(function(){m.textContent="";},1200); }catch(e){} }
