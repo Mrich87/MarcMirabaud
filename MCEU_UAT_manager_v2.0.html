@@ -526,6 +526,7 @@ function importAdoCases(input){
    ========================================================================= */
 let trkFilter={entity:"",tester:"",status:"",process:"",q:""};
 let trkSort={field:"process",dir:1};
+let trkSel=new Set();
 let loadSel={domain:"",process:""};
 let campSec={iter:true,testers:false,load:null,track:true}; /* remembered open/closed state per section */
 function setTrkSort(field){ if(trkSort.field===field) trkSort.dir=-trkSort.dir; else {trkSort.field=field;trkSort.dir=1;} renderCampaign(); }
@@ -657,17 +658,31 @@ function newIterFromPush(){ const name=prompt("New iteration name:","UAT "+(S.it
 function doPushLib(){ const defs=pushDefsSet(); const iterId=$("#pushIter").value; const date=toISO(($("#pushDate").value||"").trim());
   const r=dispatchDefs(defs,iterId,[""],[],"",date); _pushIds=null; S.activeIterationId=iterId; closeModal(); renderAll(); save();
   alert(r.created+" added"+(r.synced?", "+r.synced+" re-synced":"")+" in "+((S.iterations.find(i=>i.id===iterId)||{}).name||"")+"."); }
-function renderTrackingTable(){
+function trkFilteredExecs(){
   let ex=iterExecs().filter(e=>
     (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
     (!trkFilter.status||e.status===trkFilter.status)&&(!trkFilter.process||e.process===trkFilter.process)&&
     (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase())));
-  ex=ex.sort((a,b)=>{const ka=trkKey(a,trkSort.field),kb=trkKey(b,trkSort.field);return (ka<kb?-1:ka>kb?1:0)*trkSort.dir;});
+  return ex.sort((a,b)=>{const ka=trkKey(a,trkSort.field),kb=trkKey(b,trkSort.field);return (ka<kb?-1:ka>kb?1:0)*trkSort.dir;});
+}
+function renderTrackingTable(){
+  const ex=trkFilteredExecs();
   if(ex.length===0) return '<div class="empty">No execution in this iteration yet — load Library definitions above.</div>';
+  const allSel=ex.every(e=>trkSel.has(e.id));
   const sa=f=>trkSort.field===f?(trkSort.dir===1?' ▲':' ▼'):'';
   const sh=(label,field,extra)=>`<th style="cursor:pointer;user-select:none;${extra||''}" onclick="setTrkSort('${field}')">${label}${sa(field)}</th>`;
-  return `<table><thead><tr>${sh('PRC','process')}${sh('Scenario','scenario')}${sh('Entity','entity')}${sh('Tester','tester')}${sh('Status','status','width:130px')}${sh('Execution due date','testDate','width:150px')}<th>Business comment</th><th></th></tr></thead><tbody>
+  const bar=`<div id="bulkBar" class="toolbar" style="background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:8px;display:${trkSel.size?'flex':'none'}">
+      <b><span id="trkSelN">${trkSel.size}</span> selected</b>
+      <button class="sm primary" onclick="bulkAssignModal()" title="Assign the selected tests to one or several testers (one execution per tester)">👥 Assign testers…</button>
+      <input id="bulkDate" placeholder="JJ/MM/AAAA" style="width:120px"/><button class="sm" onclick="bulkSetDate()">📅 Set date</button>
+      <select id="bulkEntity"><option value="">— entity —</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select><button class="sm" onclick="bulkSetEntity()">Set entity</button>
+      <div class="spacer"></div>
+      <button class="sm danger" onclick="bulkDelete()">🗑 Delete</button>
+      <button class="sm" onclick="bulkClear()">Clear</button>
+    </div>`;
+  return bar+`<table><thead><tr><th style="width:28px"><input type="checkbox" ${allSel?'checked':''} title="Select all (filtered)" onchange="trkSelectAll(this.checked)"/></th>${sh('PRC','process')}${sh('Scenario','scenario')}${sh('Entity','entity')}${sh('Tester','tester')}${sh('Status','status','width:130px')}${sh('Execution due date','testDate','width:150px')}<th>Business comment</th><th></th></tr></thead><tbody>
     ${ex.map(e=>{const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.comment;return `<tr>
+      <td><input type="checkbox" class="trkchk" ${trkSel.has(e.id)?'checked':''} onchange="toggleTrkSel('${e.id}',this.checked)"/></td>
       <td>${esc(e.process)}${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td>
       <td><textarea style="min-height:36px" title="Edit the scenario text — it is used as-is in the generated tester HTML" oninput="setExec('${e.id}','scenario',this.value)">${esc(e.scenario)}</textarea></td>
       <td><select onchange="setExec('${e.id}','entity',this.value)"><option value="" ${!e.entity?'selected':''}>—</option>${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
@@ -677,6 +692,50 @@ function renderTrackingTable(){
       <td><textarea style="min-height:36px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setExec('${e.id}','comment',this.value)">${esc(e.comment)}</textarea>${need?'<div class="hint" style="color:#ef4444">required</div>':''}</td>
       <td>${((e.screens&&e.screens.length)||(e.failedSteps&&Object.keys(e.failedSteps).length))?`<button class="sm" title="View evidence" onclick="openEvidence('${e.id}')">📎${(e.screens&&e.screens.length)||''}</button> `:''}<button class="sm danger" onclick="delExec('${e.id}')">✕</button></td></tr>`;}).join("")}
     </tbody></table>`;
+}
+/* ---- bulk selection / group assignment in the tracking table ---- */
+function toggleTrkSel(id,on){ if(on)trkSel.add(id); else trkSel.delete(id);
+  const c=document.getElementById("trkSelN"); if(c)c.textContent=trkSel.size;
+  const bar=document.getElementById("bulkBar"); if(bar)bar.style.display=trkSel.size?'flex':'none'; }
+function trkSelectAll(on){ trkFilteredExecs().forEach(e=>{ on?trkSel.add(e.id):trkSel.delete(e.id); }); renderCampaign(); }
+function bulkClear(){ trkSel.clear(); renderCampaign(); }
+function bulkSetDate(){ if(!trkSel.size){alert("Select rows first.");return;} const d=toISO((($("#bulkDate")&&$("#bulkDate").value)||"").trim());
+  [...trkSel].forEach(id=>{const e=S.executions.find(x=>x.id===id); if(e){e.testDate=d; e.updatedAt=new Date().toISOString();}}); persist(); }
+function bulkSetEntity(){ if(!trkSel.size){alert("Select rows first.");return;} const v=(($("#bulkEntity")&&$("#bulkEntity").value)||"");
+  [...trkSel].forEach(id=>{const e=S.executions.find(x=>x.id===id); if(e){e.entity=v; e.updatedAt=new Date().toISOString();}}); persist(); }
+function bulkDelete(){ if(!trkSel.size)return; if(!confirm("Delete "+trkSel.size+" selected execution(s)?"))return;
+  S.executions=S.executions.filter(e=>!trkSel.has(e.id)); trkSel.clear(); persist(); }
+function bulkAssignModal(){ if(!trkSel.size){alert("Select rows first.");return;}
+  modal(`<h2>Assign ${trkSel.size} selected test(s) to testers</h2>
+    <p class="hint">Each selected test is ensured for <b>every</b> ticked tester — one execution per tester (created automatically, no manual duplication). Each tester runs it independently and the dashboard counts each. Empty (unassigned) rows are reused first.</p>
+    <input id="bk_tsearch" placeholder="🔍 filter testers…" oninput="filterBulkTesters()"/>
+    <div class="tlist" id="bulkTesterList">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>`<label class="tpick" data-n="${esc((t.name+" "+(t.country||"")).toLowerCase())}"><input type="checkbox" class="bulkChk" value="${t.id}"/> ${esc(t.name)}${t.country?' <span class="muted">('+esc(t.country)+')</span>':''}</label>`).join("")||'<span class="muted">No tester yet — add testers above.</span>'}</div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="bulkAssignApply()">Apply</button></div>`);
+}
+function filterBulkTesters(){ const q=($("#bk_tsearch").value||"").toLowerCase().trim();
+  document.querySelectorAll("#bulkTesterList .tpick").forEach(el=>{ el.style.display=(!q||el.dataset.n.includes(q))?"flex":"none"; }); }
+function bulkAssignApply(){
+  const testerIds=[...document.querySelectorAll("#bulkTesterList .bulkChk:checked")].map(x=>x.value);
+  if(!testerIds.length){ alert("Tick at least one tester."); return; }
+  const iterId=S.activeIterationId;
+  const sameTest=(a,b)=> (a.libraryItemId&&b.libraryItemId)? a.libraryItemId===b.libraryItemId : (a.process===b.process&&a.scenario===b.scenario);
+  const sel=[...trkSel].map(id=>S.executions.find(e=>e.id===id)).filter(Boolean);
+  const groups={};
+  sel.forEach(e=>{ const k=(e.libraryItemId||("p:"+e.process+"|"+e.scenario))+"@@"+(e.entity||""); if(!groups[k])groups[k]=e; });
+  let created=0,reused=0;
+  Object.values(groups).forEach(e0=>{ const ent=e0.entity||"";
+    testerIds.forEach(tid=>{
+      const has=S.executions.some(x=>x.iterationId===iterId&&(x.entity||"")===ent&&sameTest(x,e0)&&(x.testerId||"")===tid);
+      if(has) return;
+      const empty=S.executions.find(x=>x.iterationId===iterId&&(x.entity||"")===ent&&sameTest(x,e0)&&!(x.testerId||""));
+      if(empty){ empty.testerId=tid; empty.updatedAt=new Date().toISOString(); reused++; return; }
+      S.executions.push({id:uid(),iterationId:iterId,libraryItemId:e0.libraryItemId||null,process:e0.process,scenario:e0.scenario,domain:e0.domain||"",
+        steps:(e0.steps||[]).slice(),txnRef:!!e0.txnRef,txnRefValue:"",entity:ent,testerId:tid,status:"Not started",comment:"",recurrence:e0.recurrence||"",testDate:e0.testDate||"",adhoc:!!e0.adhoc,updatedAt:new Date().toISOString()});
+      created++;
+    });
+  });
+  trkSel.clear(); closeModal(); persist();
+  alert(created+" execution(s) created, "+reused+" empty row(s) assigned across "+Object.keys(groups).length+" test(s) × "+testerIds.length+" tester(s).");
 }
 function openEvidence(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
   const steps=e.steps||[]; const fs=e.failedSteps||{};
