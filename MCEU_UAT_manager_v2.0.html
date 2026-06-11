@@ -92,6 +92,7 @@
 <body>
 <header>
   <h1><span class="brand">MCEU</span> · UAT Campaign Manager</h1>
+  <span class="muted" id="saveStamp" style="font-size:11px;margin-left:6px"></span>
   <div class="iter-pill">
     <span class="muted" style="font-size:12px">Active&nbsp;iteration</span>
     <select id="iterSelect" onchange="setActiveIteration(this.value)"></select>
@@ -117,6 +118,7 @@
    ========================================================================= */
 
 const LS_KEY = "mceu_uat_state_v2";
+const APP_VERSION = "v2.0";
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
 function defaultState(){
@@ -158,7 +160,12 @@ function migrate(s){ const d=defaultState();
   const cfg=Object.assign(d.config,s.config||{});
   cfg.columnMapping=Object.assign(d.config.columnMapping,(s.config||{}).columnMapping||{});
   return Object.assign(d,s,{config:cfg}); }
-function save(){ localStorage.setItem(LS_KEY, JSON.stringify(S)); }
+function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); stampSaved(); }
+  catch(e){ const el=document.getElementById("saveStamp"); if(el){ el.style.color="#f59e0b"; el.textContent=APP_VERSION+" · ⚠ browser storage full — export a backup"; }
+    if(!save._warned){ save._warned=true; alert("Browser storage is full (screenshots/large data). Use Admin → “Full backup (JSON)” to avoid losing data, then consider trimming evidence."); } } }
+function stampSaved(){ const el=document.getElementById("saveStamp"); if(!el)return; el.style.color="";
+  const lb=(S.meta&&S.meta.lastBackup)?(" · last backup "+new Date(S.meta.lastBackup).toLocaleDateString()):" · ⚠ no backup yet";
+  el.textContent=APP_VERSION+" · saved "+new Date().toLocaleTimeString()+lb; }
 function persist(){ save(); renderTab(currentTab); }
 
 /* helpers */
@@ -445,6 +452,19 @@ function trkKey(e,field){ switch(field){
   case "status":   return (e.status||"");
   case "testDate": return (e.testDate||"");
   default:         return naturalKey((e.process||"")+" "+(e.scenario||"")); } }
+/* ---- bulk selection + pagination for the tracking table ---------------- */
+let trkSel=new Set(), trkPage=0, trkPageIds=[]; const TRK_PAGE=150;
+function trkGo(d){ trkPage=Math.max(0,trkPage+d); renderCampaign(); }
+function toggleTrkSel(id,on){ if(on)trkSel.add(id); else trkSel.delete(id);
+  const bb=document.getElementById("bulkBar"); if(bb){ bb.style.display=trkSel.size?"flex":"none"; const c=document.getElementById("bulkCount"); if(c)c.textContent=trkSel.size; } }
+function trkSelAllPage(on){ trkPageIds.forEach(id=> on?trkSel.add(id):trkSel.delete(id)); renderCampaign(); }
+function bulkClear(){ trkSel.clear(); renderCampaign(); }
+function bulkAssign(){ if(!trkSel.size)return; const v=($("#bulkTester")||{}).value||"";
+  S.executions.forEach(e=>{ if(trkSel.has(e.id)){ e.testerId=v; e.updatedAt=new Date().toISOString(); } }); persist(); }
+function bulkSetDate(){ if(!trkSel.size)return; const v=($("#bulkDate")||{}).value||"";
+  S.executions.forEach(e=>{ if(trkSel.has(e.id)){ e.testDate=v; e.updatedAt=new Date().toISOString(); } }); persist(); }
+function bulkDelSel(){ if(!trkSel.size)return; if(!confirm("Delete "+trkSel.size+" selected execution(s)?"))return;
+  S.executions=S.executions.filter(e=>!trkSel.has(e.id)); trkSel.clear(); persist(); }
 function renderCampaign(){
   const iter=activeIter(); const ex=iterExecs();
   $("#view-campaign").innerHTML=`
@@ -534,10 +554,23 @@ function renderTrackingTable(){
     (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase())));
   ex=ex.sort((a,b)=>{const ka=trkKey(a,trkSort.field),kb=trkKey(b,trkSort.field);return (ka<kb?-1:ka>kb?1:0)*trkSort.dir;});
   if(ex.length===0) return '<div class="empty">No execution in this iteration yet — load Library definitions above.</div>';
+  const total=ex.length, pages=Math.ceil(total/TRK_PAGE);
+  if(trkPage>=pages) trkPage=0;
+  const pageEx=ex.slice(trkPage*TRK_PAGE,(trkPage+1)*TRK_PAGE);
+  trkPageIds=pageEx.map(e=>e.id);
+  const a0=trkPage*TRK_PAGE+1, b0=Math.min(total,(trkPage+1)*TRK_PAGE);
+  const allOnPage=trkPageIds.length&&trkPageIds.every(id=>trkSel.has(id));
   const sa=f=>trkSort.field===f?(trkSort.dir===1?' ▲':' ▼'):'';
   const sh=(label,field,extra)=>`<th style="cursor:pointer;user-select:none;${extra||''}" onclick="setTrkSort('${field}')">${label}${sa(field)}</th>`;
-  return `<table><thead><tr>${sh('PRC','process')}${sh('Scenario','scenario')}${sh('Entity','entity')}${sh('Tester','tester')}${sh('Status','status','width:130px')}${sh('Execution due date','testDate','width:150px')}<th>Business comment</th><th></th></tr></thead><tbody>
-    ${ex.map(e=>{const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.comment;return `<tr>
+  const bulk=`<div id="bulkBar" class="card" style="display:${trkSel.size?'flex':'none'};gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:10px 12px">
+    <b><span id="bulkCount">${trkSel.size}</span> selected</b>
+    <span class="muted">Tester:</span>${tCombo('bulkTester','',"",{hidden:'bulkTester',emptyLabel:'— choose —',width:'180px'})}<button class="sm" onclick="bulkAssign()">Assign</button>
+    <span class="muted" style="margin-left:8px">Due date:</span><input id="bulkDate" placeholder="e.g. 2026-06-20 / W25" style="width:150px"/><button class="sm" onclick="bulkSetDate()">Apply</button>
+    <div class="spacer"></div><button class="sm danger" onclick="bulkDelSel()">Delete</button><button class="sm" onclick="bulkClear()">Clear</button></div>`;
+  const pager=`<div class="toolbar" style="margin-bottom:8px"><span class="muted">${total} execution(s)${pages>1?` · page ${trkPage+1}/${pages} (${a0}–${b0})`:''}</span><div class="spacer"></div>${pages>1?`<button class="sm" onclick="trkGo(-1)">◀ Prev</button><button class="sm" onclick="trkGo(1)">Next ▶</button>`:''}</div>`;
+  return bulk+pager+`<table><thead><tr><th style="width:26px"><input type="checkbox" ${allOnPage?'checked':''} title="Select page" onchange="trkSelAllPage(this.checked)"></th>${sh('PRC','process')}${sh('Scenario','scenario')}${sh('Entity','entity')}${sh('Tester','tester')}${sh('Status','status','width:130px')}${sh('Execution due date','testDate','width:150px')}<th>Business comment</th><th></th></tr></thead><tbody>
+    ${pageEx.map(e=>{const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.comment;return `<tr>
+      <td><input type="checkbox" class="trkchk" ${trkSel.has(e.id)?'checked':''} onchange="toggleTrkSel('${e.id}',this.checked)"></td>
       <td>${esc(e.process)}${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td>
       <td><textarea style="min-height:36px" title="Edit the scenario text — it is used as-is in the generated tester HTML" oninput="setExec('${e.id}','scenario',this.value)">${esc(e.scenario)}</textarea></td>
       <td><select onchange="setExec('${e.id}','entity',this.value)">${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
@@ -679,21 +712,26 @@ th.sortable{cursor:pointer;user-select:none}
 .shot{position:relative;display:inline-block}
 .shot img{max-height:74px;border:1px solid #334155;border-radius:6px;display:block}
 .rmshot{position:absolute;top:-8px;right:-8px;background:#ef4444;color:#fff;border:0;border-radius:50%;width:20px;height:20px;padding:0;font-weight:700;cursor:pointer}
+.wcombo{position:relative;display:inline-block}
+.wcombo input{min-width:280px}
+.wlist{position:absolute;z-index:20;left:0;right:0;top:100%;margin-top:2px;background:#1e293b;border:1px solid #334155;border-radius:6px;max-height:260px;overflow:auto;display:none;box-shadow:0 10px 26px rgba(0,0,0,.5)}
+.wopt{padding:7px 10px;cursor:pointer;white-space:nowrap}
+.wopt:hover{background:#0ea5e9;color:#06283b}
 </style></head><body>
-<header><h1>UAT Test Sheet</h1><span class="muted" id="hdr"></span></header>
+<header><h1>Feuille de test UAT</h1><span class="muted" id="hdr"></span></header>
 <main>
-  <div class="whoami" id="whoamiBar"><label class="muted" for="whoami">Select your name:</label><select id="whoami"></select></div>
+  <div class="whoami" id="whoamiBar"><label class="muted" for="whoami">Sélectionne ton nom :</label><div class="wcombo"><input id="whoami" autocomplete="off" placeholder="tape ton nom…"/><div class="wlist" id="whoamiList"></div></div></div>
   <div class="links" id="links"></div>
-  <p class="muted">Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test case (▸&nbsp;steps) to view the steps; when a test requires it, enter the <b>transaction reference</b>. For a <b>Failed/Blocked</b> test, tick the problematic step(s) and drag-and-drop screenshot(s) as evidence. Your work is auto-saved in this browser; click <b>Save results (JSON)</b> to send the file back to the coordinator.</p>
+  <p class="muted">Renseigne un <b>Statut</b> pour chaque test. Un commentaire est <b>obligatoire</b> pour Failed/Blocked. Déplie un test (▸&nbsp;étapes) pour voir les étapes à suivre ; saisis la <b>référence de transaction</b> quand c'est demandé. Pour un test <b>Failed/Blocked</b>, coche l'étape qui pose problème et glisse-dépose une ou des <b>captures d'écran</b> comme preuve. Ton travail est enregistré automatiquement dans ce navigateur ; clique <b>Enregistrer mes résultats (JSON)</b> puis renvoie le fichier au coordinateur.</p>
   <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-    <label class="muted" for="procFilter">Process</label>
-    <select id="procFilter" onchange="render()"><option value="">— All —</option></select>
+    <label class="muted" for="procFilter">Processus</label>
+    <select id="procFilter" onchange="render()"><option value="">— Tous —</option></select>
     <span class="muted" id="shownCount"></span>
   </div>
-  <table id="tbl"><thead><tr><th class="sortable" onclick="sortBy('process')">PRC <span id="arP"></span></th><th>Scenario</th><th>Entity</th><th style="width:140px">Status</th><th class="sortable" style="width:160px" onclick="sortBy('testDate')">Execution due date <span id="arD"></span></th><th>Comment</th></tr></thead><tbody id="tb"></tbody></table>
-  <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Add ad-hoc test</button></p>
+  <table id="tbl"><thead><tr><th class="sortable" onclick="sortBy('process')">PRC <span id="arP"></span></th><th>Scénario</th><th>Entité</th><th style="width:140px">Statut</th><th class="sortable" style="width:160px" onclick="sortBy('testDate')">Date d'échéance <span id="arD"></span></th><th>Commentaire</th></tr></thead><tbody id="tb"></tbody></table>
+  <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Ajouter un test ad-hoc</button></p>
 </main>
-<div class="bar"><button onclick="saveJSON()">⬇ Save results (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
+<div class="bar"><button onclick="saveJSON()">⬇ Enregistrer mes résultats (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
 <script>
 const DATA=${dataJson};
 let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="", sortDir=0;
@@ -703,15 +741,22 @@ function lsk(id){return "mceu_tester_"+DATA.iterationId+"_"+id;}
 function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.requiresComment;}
 function buildLinks(){const L=(DATA.links||[]).filter(x=>x&&(x.label||x.url));const el=document.getElementById("links");
   if(!L.length){el.style.display="none";return;}
-  el.innerHTML="<b>Useful links:</b> "+L.map(x=>x.url?('<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.label||x.url)+'</a>'):esc(x.label||"")).filter(Boolean).join(" &nbsp;·&nbsp; ");}
-function buildWho(){const sel=document.getElementById("whoami");
-  sel.innerHTML=(DATA.testers.length>1?'<option value="">— select your name —</option>':"")+DATA.testers.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.name)+' ('+t.tests.length+')</option>').join("");
-  sel.addEventListener("change",()=>loadTester(sel.value));
-  if(DATA.testers.length<=1) document.getElementById("whoamiBar").style.display="none";}
+  el.innerHTML="<b>Liens utiles :</b> "+L.map(x=>x.url?('<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.label||x.url)+'</a>'):esc(x.label||"")).filter(Boolean).join(" &nbsp;·&nbsp; ");}
+function buildWho(){ if(DATA.testers.length<=1){ document.getElementById("whoamiBar").style.display="none"; return; }
+  const inp=document.getElementById("whoami");
+  inp.addEventListener("focus",()=>paintWho(""));
+  inp.addEventListener("input",()=>paintWho(inp.value));
+  inp.addEventListener("blur",()=>setTimeout(()=>{document.getElementById("whoamiList").style.display="none";},150));}
+function paintWho(q){ q=(q||"").toLowerCase().trim();
+  const box=document.getElementById("whoamiList");
+  const list=DATA.testers.filter(t=>!q||t.name.toLowerCase().includes(q));
+  box.innerHTML=list.map(t=>'<div class="wopt" data-id="'+esc(t.id)+'">'+esc(t.name)+' <span class="muted">('+t.tests.length+')</span></div>').join("")||'<div class="wopt muted">aucun résultat</div>';
+  box.style.display="block";
+  box.querySelectorAll(".wopt[data-id]").forEach(el=>el.addEventListener("mousedown",()=>{ const id=el.dataset.id; const t=DATA.testers.find(x=>x.id===id); document.getElementById("whoami").value=t?t.name:""; box.style.display="none"; loadTester(id); }));}
 function buildProcFilter(){const procs=[...new Set(rows.map(t=>t.process).filter(Boolean))].sort();
   const fb=document.getElementById("filterBar"), pf=document.getElementById("procFilter");
-  if(procs.length>1){ pf.innerHTML='<option value="">— All processes ('+procs.length+') —</option>'+procs.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join(""); fb.style.display="flex"; }
-  else { pf.innerHTML='<option value="">— All —</option>'; fb.style.display="none"; }}
+  if(procs.length>1){ pf.innerHTML='<option value="">— Tous les processus ('+procs.length+') —</option>'+procs.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join(""); fb.style.display="flex"; }
+  else { pf.innerHTML='<option value="">— Tous —</option>'; fb.style.display="none"; }}
 function loadTester(id){ curId=id; const tt=DATA.testers.find(x=>x.id===id); const hdr=document.getElementById("hdr");
   if(!tt){ rows=[];adhoc=[]; hdr.textContent=DATA.campaign+" · "+DATA.iteration; buildProcFilter(); render(); return; }
   hdr.textContent=DATA.campaign+" · "+DATA.iteration+" · "+tt.name;
@@ -737,7 +782,7 @@ function render(){
     if(reqComment(it.t.status)) tb.appendChild(issueRowEl(it.t,it.isAd)); });
   document.getElementById("arP").textContent=sortField==="process"?(sortDir===1?"▲":"▼"):"";
   document.getElementById("arD").textContent=sortField==="testDate"?(sortDir===1?"▲":"▼"):"";
-  const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" shown"):"";
+  const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" affichés"):"";
   updateProg();
 }
 function rowEl(t,i,isAd){
@@ -745,15 +790,15 @@ function rowEl(t,i,isAd){
   const opts=DATA.statuses.map(s=>'<option '+(s.value===t.status?'selected':'')+'>'+s.value+'</option>').join("");
   const entOpts=DATA.entities.map(e=>'<option '+(e===t.entity?'selected':'')+'>'+e+'</option>').join("");
   const nSteps=(!isAd && t.steps)?t.steps.length:0;
-  const stepTog=nSteps?' <span class="stepToggle">'+(expanded.has(t.id)?'▾':'▸')+' steps ('+nSteps+')</span>':'';
+  const stepTog=nSteps?' <span class="stepToggle">'+(expanded.has(t.id)?'▾':'▸')+' étapes ('+nSteps+')</span>':'';
   const needTxn=(!isAd && t.txnRef && t.status && t.status!=="Not started" && !((t.txnRefValue||"").trim()));
-  const txnBlock=(!isAd && t.txnRef)?'<div class="txnlbl">Transaction reference <span class="reftag">required</span></div><input data-k="txnRefValue" class="txnin'+(needTxn?' req':'')+'" value="'+esc(t.txnRefValue||"")+'" placeholder="enter transaction reference…"/>':'';
+  const txnBlock=(!isAd && t.txnRef)?'<div class="txnlbl">Référence de transaction <span class="reftag">obligatoire</span></div><input data-k="txnRefValue" class="txnin'+(needTxn?' req':'')+'" value="'+esc(t.txnRefValue||"")+'" placeholder="saisir la référence de transaction…"/>':'';
   tr.innerHTML='<td>'+(isAd?'<input value="'+esc(t.process||"")+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
     '<td>'+(isAd?'<input value="'+esc(t.scenario||"")+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+stepTog+txnBlock))+'</td>'+
     '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||"")+'</span>'))+'</td>'+
     '<td><select data-k="status">'+opts+'</select></td>'+
     '<td class="duedate">'+(t.testDate?esc(t.testDate):'<span class="muted">—</span>')+'</td>'+
-    '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?'required…':'optional')+'">'+esc(t.comment||"")+'</textarea></td>';
+    '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?'obligatoire…':'optionnel')+'">'+esc(t.comment||"")+'</textarea></td>';
   const arr=isAd?adhoc:rows;
   const tgl=tr.querySelector(".stepToggle"); if(tgl) tgl.addEventListener("click",()=>toggleSteps(t.id));
   tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{ arr[i][el.dataset.k]=el.value;
@@ -762,16 +807,16 @@ function rowEl(t,i,isAd){
   return tr;
 }
 function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow";
-  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ol></td>';
+  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Étapes à suivre :</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ol></td>';
   return tr; }
 function issueRowEl(t,isAd){ const tr=document.createElement("tr"); tr.className="steprow";
   t.failedSteps=t.failedSteps||{}; t.screens=t.screens||[];
   const steps=(!isAd && t.steps)?t.steps:[];
-  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">Tick the problematic step(s):</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(s)+'</label>').join("")):'<div class="muted" style="font-size:12px">No predefined steps to flag.</div>';
-  const shots=t.screens.map((sc,si)=>'<span class="shot"><img src="'+sc.data+'" alt=""/><button class="rmshot" data-si="'+si+'" title="remove">✕</button></span>').join("");
+  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">Coche la/les étape(s) en échec :</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(s)+'</label>').join("")):'<div class="muted" style="font-size:12px">Aucune étape prédéfinie à signaler.</div>';
+  const shots=t.screens.map((sc,si)=>'<span class="shot"><img src="'+sc.data+'" alt=""/><button class="rmshot" data-si="'+si+'" title="retirer">✕</button></span>').join("");
   tr.innerHTML='<td></td><td colspan="5"><div class="issuebox">'+stepsHtml+
-    '<div class="muted" style="font-size:12px;margin:8px 0 2px">Evidence — drag &amp; drop screenshot(s) here, or click to browse:</div>'+
-    '<div class="dropz">Drop screenshot here / click to browse</div>'+
+    '<div class="muted" style="font-size:12px;margin:8px 0 2px">Preuve — glisse-dépose une ou des captures ici, ou clique pour parcourir :</div>'+
+    '<div class="dropz">Dépose une capture ici / clique pour parcourir</div>'+
     '<input type="file" accept="image/*" multiple class="shotin" style="display:none"/>'+
     '<div class="shots">'+shots+'</div></div></td>';
   tr.querySelectorAll(".fchk").forEach(el=>el.addEventListener("change",()=>{ if(el.checked)t.failedSteps[el.dataset.si]=true; else delete t.failedSteps[el.dataset.si]; autosave(); }));
@@ -785,25 +830,33 @@ function issueRowEl(t,isAd){ const tr=document.createElement("tr"); tr.className
   return tr;
 }
 function addShots(t,files){ t.screens=t.screens||[];
-  [].slice.call(files).filter(f=>f.type&&f.type.indexOf("image/")===0).forEach(f=>{ const r=new FileReader(); r.onload=function(){ t.screens.push({name:f.name,data:r.result}); autosave(); render(); }; r.readAsDataURL(f); }); }
-function addAdhoc(){ if(!curId){alert("Select your name first.");return;} adhoc.push({process:"",scenario:"",entity:DATA.entities[0]||"",status:DATA.statuses[0].value,comment:"",testDate:""}); render(); }
-function updateProg(){ const done=rows.filter(r=>r.status&&r.status!=="Not started").length; document.getElementById("prog").textContent=curId?(done+" / "+rows.length+" done"):""; }
+  [].slice.call(files).filter(f=>f.type&&f.type.indexOf("image/")===0).forEach(f=>{ const r=new FileReader();
+    r.onload=function(){ const img=new Image();
+      img.onload=function(){ const max=1280; let w=img.width,h=img.height;
+        if(w>max||h>max){ const k=Math.min(max/w,max/h); w=Math.round(w*k); h=Math.round(h*k); }
+        let data; try{ const cv=document.createElement("canvas"); cv.width=w; cv.height=h; cv.getContext("2d").drawImage(img,0,0,w,h); data=cv.toDataURL("image/jpeg",0.7); }catch(e){ data=r.result; }
+        t.screens.push({name:f.name,data:data}); autosave(); render(); };
+      img.onerror=function(){ t.screens.push({name:f.name,data:r.result}); autosave(); render(); };
+      img.src=r.result; };
+    r.readAsDataURL(f); }); }
+function addAdhoc(){ if(!curId){alert("Sélectionne d'abord ton nom.");return;} adhoc.push({process:"",scenario:"",entity:DATA.entities[0]||"",status:DATA.statuses[0].value,comment:"",testDate:""}); render(); }
+function updateProg(){ const done=rows.filter(r=>r.status&&r.status!=="Not started").length; document.getElementById("prog").textContent=curId?(done+" / "+rows.length+" faits"):""; }
 function payloadOut(){ const tt=DATA.testers.find(x=>x.id===curId)||{};
   return {_type:"MCEU_TESTER_RESULTS",iterationId:DATA.iterationId,testerId:curId,testerName:tt.name||"",
     results:rows.map(r=>({id:r.id,status:r.status,comment:r.comment,testDate:r.testDate,txnRefValue:r.txnRefValue||"",failedSteps:r.failedSteps||{},screens:r.screens||[]})),
     adhoc:adhoc.filter(a=>a.process||a.scenario).map(a=>({process:a.process,scenario:a.scenario,entity:a.entity,status:a.status,comment:a.comment,testDate:a.testDate||""}))};}
-function autosave(){ if(!curId)return; try{ localStorage.setItem(lsk(curId),JSON.stringify(payloadOut())); const m=document.getElementById("savedMsg"); m.textContent="auto-saved ✓"; setTimeout(()=>{m.textContent="";},1500);}catch(e){ const m=document.getElementById("savedMsg"); m.textContent="⚠ storage full (screenshots too large)"; } }
-function saveJSON(){ if(!curId){alert("Select your name first.");return;}
+function autosave(){ if(!curId)return; try{ localStorage.setItem(lsk(curId),JSON.stringify(payloadOut())); const m=document.getElementById("savedMsg"); m.textContent="enregistré ✓"; setTimeout(()=>{m.textContent="";},1500);}catch(e){ const m=document.getElementById("savedMsg"); m.textContent="⚠ stockage plein (captures trop lourdes) — enregistre le JSON"; } }
+function saveJSON(){ if(!curId){alert("Sélectionne d'abord ton nom.");return;}
   const bad=rows.concat(adhoc).filter(r=>reqComment(r.status)&&!(r.comment||"").trim());
-  if(bad.length && !confirm(bad.length+" test(s) are Failed/Blocked without a comment. Save anyway?"))return;
+  if(bad.length && !confirm(bad.length+" test(s) Failed/Blocked sans commentaire. Enregistrer quand même ?"))return;
   const miss=rows.filter(r=>r.txnRef&&r.status&&r.status!=="Not started"&&!((r.txnRefValue||"").trim())).length;
-  if(miss && !confirm(miss+" executed test(s) require a transaction reference that is still empty. Save anyway?"))return;
+  if(miss && !confirm(miss+" test(s) exécuté(s) sans référence de transaction. Enregistrer quand même ?"))return;
   const tt=DATA.testers.find(x=>x.id===curId)||{name:"tester"};
   const b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="results_"+(tt.name||"tester").replace(/\\W+/g,'_')+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();
 }
 function init(){ buildLinks(); buildWho();
-  if(DATA.testers.length===1){ document.getElementById("whoami").value=DATA.testers[0].id; loadTester(DATA.testers[0].id); }
+  if(DATA.testers.length===1){ const inp=document.getElementById("whoami"); if(inp)inp.value=DATA.testers[0].name; loadTester(DATA.testers[0].id); }
   else { render(); }
 }
 init();
@@ -889,7 +942,8 @@ function renderAdmin(){
    ========================================================================= */
 function download(name,content,type){ const b=new Blob([content],{type:type||"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
-function exportJSON(){ download(`MCEU_UAT_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(S,null,2)); }
+function exportJSON(){ S.meta=S.meta||{}; S.meta.lastBackup=new Date().toISOString(); save();
+  download(`MCEU_UAT_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(S,null,2)); }
 function importJSON(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ try{ S=migrate(JSON.parse(e.target.result)); renderAll(); save(); alert("Backup restored."); }catch(err){ alert("Invalid file."); } }; r.readAsText(f); }
 function exportReport(){
@@ -919,6 +973,7 @@ function exportLibrary(){
 
 /* startup */
 renderAll(); go("dashboard");
+{ const el=document.getElementById("saveStamp"); if(el) el.textContent=APP_VERSION; }
 </script>
 </body>
 </html>
