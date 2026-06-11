@@ -718,30 +718,71 @@ th.sortable{cursor:pointer;user-select:none}
 .wopt{padding:7px 10px;cursor:pointer;white-space:nowrap}
 .wopt:hover{background:#0ea5e9;color:#06283b}
 </style></head><body>
-<header><h1>Feuille de test UAT</h1><span class="muted" id="hdr"></span></header>
+<header><h1 id="sheetTitle">UAT Test Sheet</h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option></select></header>
 <main>
-  <div class="whoami" id="whoamiBar"><label class="muted" for="whoami">Sélectionne ton nom :</label><div class="wcombo"><input id="whoami" autocomplete="off" placeholder="tape ton nom…"/><div class="wlist" id="whoamiList"></div></div></div>
+  <div class="whoami" id="whoamiBar"><label class="muted" id="lblWho" for="whoami"></label><div class="wcombo"><input id="whoami" autocomplete="off"/><div class="wlist" id="whoamiList"></div></div></div>
   <div class="links" id="links"></div>
-  <p class="muted">Renseigne un <b>Statut</b> pour chaque test. Un commentaire est <b>obligatoire</b> pour Failed/Blocked. Déplie un test (▸&nbsp;étapes) pour voir les étapes à suivre ; saisis la <b>référence de transaction</b> quand c'est demandé. Pour un test <b>Failed/Blocked</b>, coche l'étape qui pose problème et glisse-dépose une ou des <b>captures d'écran</b> comme preuve. Ton travail est enregistré automatiquement dans ce navigateur ; clique <b>Enregistrer mes résultats (JSON)</b> puis renvoie le fichier au coordinateur.</p>
+  <p class="muted" id="intro"></p>
   <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-    <label class="muted" for="procFilter">Processus</label>
-    <select id="procFilter" onchange="render()"><option value="">— Tous —</option></select>
+    <label class="muted" id="lblProc" for="procFilter"></label>
+    <select id="procFilter" onchange="render()"></select>
     <span class="muted" id="shownCount"></span>
   </div>
-  <table id="tbl"><thead><tr><th class="sortable" onclick="sortBy('process')">PRC <span id="arP"></span></th><th>Scénario</th><th>Entité</th><th style="width:140px">Statut</th><th class="sortable" style="width:160px" onclick="sortBy('testDate')">Date d'échéance <span id="arD"></span></th><th>Commentaire</th></tr></thead><tbody id="tb"></tbody></table>
-  <p style="margin-top:14px"><button class="sec" onclick="addAdhoc()">+ Ajouter un test ad-hoc</button></p>
+  <table id="tbl"><thead><tr><th id="thPRC" class="sortable" onclick="sortBy('process')"></th><th id="thScn"></th><th id="thEnt"></th><th id="thSt" style="width:140px"></th><th id="thDue" class="sortable" style="width:160px" onclick="sortBy('testDate')"></th><th id="thCom"></th></tr></thead><tbody id="tb"></tbody></table>
+  <p style="margin-top:14px"><button class="sec" id="btnAdhoc" onclick="addAdhoc()"></button></p>
 </main>
-<div class="bar"><button onclick="saveJSON()">⬇ Enregistrer mes résultats (JSON)</button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
+<div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
 <script>
 const DATA=${dataJson};
 let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="", sortDir=0;
+const I18N={
+ fr:{title:"Feuille de test UAT",selectName:"Sélectionne ton nom :",namePh:"tape ton nom…",
+   intro:"Renseigne un <b>Statut</b> pour chaque test. Un commentaire est <b>obligatoire</b> pour Failed/Blocked. Déplie un test (▸&nbsp;étapes) pour voir les étapes à suivre ; saisis la <b>référence de transaction</b> quand c'est demandé. Pour un test <b>Failed/Blocked</b>, coche l'étape qui pose problème et glisse-dépose une ou des <b>captures d'écran</b> comme preuve. Ton travail est enregistré automatiquement ; clique <b>Enregistrer mes résultats (JSON)</b> puis renvoie le fichier au coordinateur.",
+   proc:"Processus",allShort:"— Tous —",allProc:"— Tous les processus ({n}) —",shown:"affichés",
+   hPRC:"PRC",hScn:"Scénario",hEnt:"Entité",hSt:"Statut",hDue:"Date d'échéance",hCom:"Commentaire",
+   addAdhoc:"+ Ajouter un test ad-hoc",save:"⬇ Enregistrer mes résultats (JSON)",links:"Liens utiles :",
+   stepsN:"étapes ({n})",stepsFollow:"Étapes à suivre :",tickSteps:"Coche la/les étape(s) en échec :",noSteps:"Aucune étape prédéfinie à signaler.",
+   evidence:"Preuve — glisse-dépose une ou des captures ici, ou clique pour parcourir :",dropHere:"Dépose une capture ici / clique pour parcourir",
+   txnRef:"Référence de transaction",required:"obligatoire",txnPh:"saisir la référence de transaction…",cReq:"obligatoire…",cOpt:"optionnel",
+   done:"faits",saved:"enregistré ✓",full:"⚠ stockage plein (captures trop lourdes) — enregistre le JSON",pickFirst:"Sélectionne d'abord ton nom.",noRes:"aucun résultat",remove:"retirer",
+   cNoCom:"{n} test(s) Failed/Blocked sans commentaire. Enregistrer quand même ?",cNoTxn:"{n} test(s) exécuté(s) sans référence de transaction. Enregistrer quand même ?"},
+ en:{title:"UAT Test Sheet",selectName:"Select your name:",namePh:"type your name…",
+   intro:"Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test (▸&nbsp;steps) to view the steps to follow; enter the <b>transaction reference</b> when required. For a <b>Failed/Blocked</b> test, tick the problematic step and drag-and-drop <b>screenshot(s)</b> as evidence. Your work is auto-saved; click <b>Save results (JSON)</b> and send the file back to the coordinator.",
+   proc:"Process",allShort:"— All —",allProc:"— All processes ({n}) —",shown:"shown",
+   hPRC:"PRC",hScn:"Scenario",hEnt:"Entity",hSt:"Status",hDue:"Execution due date",hCom:"Comment",
+   addAdhoc:"+ Add ad-hoc test",save:"⬇ Save results (JSON)",links:"Useful links:",
+   stepsN:"steps ({n})",stepsFollow:"Steps to follow:",tickSteps:"Tick the problematic step(s):",noSteps:"No predefined steps to flag.",
+   evidence:"Evidence — drag & drop screenshot(s) here, or click to browse:",dropHere:"Drop screenshot here / click to browse",
+   txnRef:"Transaction reference",required:"required",txnPh:"enter transaction reference…",cReq:"required…",cOpt:"optional",
+   done:"done",saved:"saved ✓",full:"⚠ storage full (screenshots too large) — save the JSON",pickFirst:"Select your name first.",noRes:"no match",remove:"remove",
+   cNoCom:"{n} test(s) Failed/Blocked without a comment. Save anyway?",cNoTxn:"{n} executed test(s) require a transaction reference that is still empty. Save anyway?"}
+};
+let lang=(function(){try{return localStorage.getItem("mceu_tester_lang")||"fr";}catch(e){return "fr";}})();
+function T(k,n){let v=(I18N[lang]||I18N.fr)[k]||k; return n==null?v:v.replace("{n}",n);}
+function setLang(l){ lang=l; try{localStorage.setItem("mceu_tester_lang",l);}catch(e){} applyLang(); buildLinks(); buildProcFilter(); render(); }
+function applyLang(){
+  document.getElementById("sheetTitle").textContent=T("title");
+  document.getElementById("lblWho").textContent=T("selectName");
+  const wi=document.getElementById("whoami"); if(wi) wi.placeholder=T("namePh");
+  document.getElementById("intro").innerHTML=T("intro");
+  document.getElementById("lblProc").textContent=T("proc");
+  document.getElementById("btnAdhoc").textContent=T("addAdhoc");
+  document.getElementById("btnSave").textContent=T("save");
+  document.getElementById("thPRC").innerHTML=T("hPRC")+' <span id="arP"></span>';
+  document.getElementById("thScn").textContent=T("hScn");
+  document.getElementById("thEnt").textContent=T("hEnt");
+  document.getElementById("thSt").textContent=T("hSt");
+  document.getElementById("thDue").innerHTML=T("hDue")+' <span id="arD"></span>';
+  document.getElementById("thCom").textContent=T("hCom");
+  const ls=document.getElementById("langSel"); if(ls) ls.value=lang;
+}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function nat(s){return String(s||"").toLowerCase().replace(/\\d+/g,m=>m.padStart(10,"0"));}
 function lsk(id){return "mceu_tester_"+DATA.iterationId+"_"+id;}
 function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.requiresComment;}
 function buildLinks(){const L=(DATA.links||[]).filter(x=>x&&(x.label||x.url));const el=document.getElementById("links");
   if(!L.length){el.style.display="none";return;}
-  el.innerHTML="<b>Liens utiles :</b> "+L.map(x=>x.url?('<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.label||x.url)+'</a>'):esc(x.label||"")).filter(Boolean).join(" &nbsp;·&nbsp; ");}
+  el.innerHTML="<b>"+esc(T("links"))+"</b> "+L.map(x=>x.url?('<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.label||x.url)+'</a>'):esc(x.label||"")).filter(Boolean).join(" &nbsp;·&nbsp; ");}
 function buildWho(){ if(DATA.testers.length<=1){ document.getElementById("whoamiBar").style.display="none"; return; }
   const inp=document.getElementById("whoami");
   inp.addEventListener("focus",()=>paintWho(""));
@@ -750,13 +791,13 @@ function buildWho(){ if(DATA.testers.length<=1){ document.getElementById("whoami
 function paintWho(q){ q=(q||"").toLowerCase().trim();
   const box=document.getElementById("whoamiList");
   const list=DATA.testers.filter(t=>!q||t.name.toLowerCase().includes(q));
-  box.innerHTML=list.map(t=>'<div class="wopt" data-id="'+esc(t.id)+'">'+esc(t.name)+' <span class="muted">('+t.tests.length+')</span></div>').join("")||'<div class="wopt muted">aucun résultat</div>';
+  box.innerHTML=list.map(x=>'<div class="wopt" data-id="'+esc(x.id)+'">'+esc(x.name)+' <span class="muted">('+x.tests.length+')</span></div>').join("")||'<div class="wopt muted">'+esc(T("noRes"))+'</div>';
   box.style.display="block";
   box.querySelectorAll(".wopt[data-id]").forEach(el=>el.addEventListener("mousedown",()=>{ const id=el.dataset.id; const t=DATA.testers.find(x=>x.id===id); document.getElementById("whoami").value=t?t.name:""; box.style.display="none"; loadTester(id); }));}
 function buildProcFilter(){const procs=[...new Set(rows.map(t=>t.process).filter(Boolean))].sort();
   const fb=document.getElementById("filterBar"), pf=document.getElementById("procFilter");
-  if(procs.length>1){ pf.innerHTML='<option value="">— Tous les processus ('+procs.length+') —</option>'+procs.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join(""); fb.style.display="flex"; }
-  else { pf.innerHTML='<option value="">— Tous —</option>'; fb.style.display="none"; }}
+  if(procs.length>1){ pf.innerHTML='<option value="">'+esc(T("allProc",procs.length))+'</option>'+procs.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join(""); fb.style.display="flex"; }
+  else { pf.innerHTML='<option value="">'+esc(T("allShort"))+'</option>'; fb.style.display="none"; }}
 function loadTester(id){ curId=id; const tt=DATA.testers.find(x=>x.id===id); const hdr=document.getElementById("hdr");
   if(!tt){ rows=[];adhoc=[]; hdr.textContent=DATA.campaign+" · "+DATA.iteration; buildProcFilter(); render(); return; }
   hdr.textContent=DATA.campaign+" · "+DATA.iteration+" · "+tt.name;
@@ -782,7 +823,7 @@ function render(){
     if(reqComment(it.t.status)) tb.appendChild(issueRowEl(it.t,it.isAd)); });
   document.getElementById("arP").textContent=sortField==="process"?(sortDir===1?"▲":"▼"):"";
   document.getElementById("arD").textContent=sortField==="testDate"?(sortDir===1?"▲":"▼"):"";
-  const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" affichés"):"";
+  const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" "+T("shown")):"";
   updateProg();
 }
 function rowEl(t,i,isAd){
@@ -790,15 +831,15 @@ function rowEl(t,i,isAd){
   const opts=DATA.statuses.map(s=>'<option '+(s.value===t.status?'selected':'')+'>'+s.value+'</option>').join("");
   const entOpts=DATA.entities.map(e=>'<option '+(e===t.entity?'selected':'')+'>'+e+'</option>').join("");
   const nSteps=(!isAd && t.steps)?t.steps.length:0;
-  const stepTog=nSteps?' <span class="stepToggle">'+(expanded.has(t.id)?'▾':'▸')+' étapes ('+nSteps+')</span>':'';
+  const stepTog=nSteps?' <span class="stepToggle">'+(expanded.has(t.id)?'▾':'▸')+' '+T("stepsN",nSteps)+'</span>':'';
   const needTxn=(!isAd && t.txnRef && t.status && t.status!=="Not started" && !((t.txnRefValue||"").trim()));
-  const txnBlock=(!isAd && t.txnRef)?'<div class="txnlbl">Référence de transaction <span class="reftag">obligatoire</span></div><input data-k="txnRefValue" class="txnin'+(needTxn?' req':'')+'" value="'+esc(t.txnRefValue||"")+'" placeholder="saisir la référence de transaction…"/>':'';
+  const txnBlock=(!isAd && t.txnRef)?'<div class="txnlbl">'+esc(T("txnRef"))+' <span class="reftag">'+esc(T("required"))+'</span></div><input data-k="txnRefValue" class="txnin'+(needTxn?' req':'')+'" value="'+esc(t.txnRefValue||"")+'" placeholder="'+esc(T("txnPh"))+'"/>':'';
   tr.innerHTML='<td>'+(isAd?'<input value="'+esc(t.process||"")+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
     '<td>'+(isAd?'<input value="'+esc(t.scenario||"")+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+stepTog+txnBlock))+'</td>'+
     '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||"")+'</span>'))+'</td>'+
     '<td><select data-k="status">'+opts+'</select></td>'+
     '<td class="duedate">'+(t.testDate?esc(t.testDate):'<span class="muted">—</span>')+'</td>'+
-    '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?'obligatoire…':'optionnel')+'">'+esc(t.comment||"")+'</textarea></td>';
+    '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?esc(T("cReq")):esc(T("cOpt")))+'">'+esc(t.comment||"")+'</textarea></td>';
   const arr=isAd?adhoc:rows;
   const tgl=tr.querySelector(".stepToggle"); if(tgl) tgl.addEventListener("click",()=>toggleSteps(t.id));
   tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{ arr[i][el.dataset.k]=el.value;
@@ -807,16 +848,16 @@ function rowEl(t,i,isAd){
   return tr;
 }
 function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow";
-  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Étapes à suivre :</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ol></td>';
+  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ol></td>';
   return tr; }
 function issueRowEl(t,isAd){ const tr=document.createElement("tr"); tr.className="steprow";
   t.failedSteps=t.failedSteps||{}; t.screens=t.screens||[];
   const steps=(!isAd && t.steps)?t.steps:[];
-  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">Coche la/les étape(s) en échec :</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(s)+'</label>').join("")):'<div class="muted" style="font-size:12px">Aucune étape prédéfinie à signaler.</div>';
-  const shots=t.screens.map((sc,si)=>'<span class="shot"><img src="'+sc.data+'" alt=""/><button class="rmshot" data-si="'+si+'" title="retirer">✕</button></span>').join("");
+  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">'+esc(T("tickSteps"))+'</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(s)+'</label>').join("")):'<div class="muted" style="font-size:12px">'+esc(T("noSteps"))+'</div>';
+  const shots=t.screens.map((sc,si)=>'<span class="shot"><img src="'+sc.data+'" alt=""/><button class="rmshot" data-si="'+si+'" title="'+esc(T("remove"))+'">✕</button></span>').join("");
   tr.innerHTML='<td></td><td colspan="5"><div class="issuebox">'+stepsHtml+
-    '<div class="muted" style="font-size:12px;margin:8px 0 2px">Preuve — glisse-dépose une ou des captures ici, ou clique pour parcourir :</div>'+
-    '<div class="dropz">Dépose une capture ici / clique pour parcourir</div>'+
+    '<div class="muted" style="font-size:12px;margin:8px 0 2px">'+esc(T("evidence"))+'</div>'+
+    '<div class="dropz">'+esc(T("dropHere"))+'</div>'+
     '<input type="file" accept="image/*" multiple class="shotin" style="display:none"/>'+
     '<div class="shots">'+shots+'</div></div></td>';
   tr.querySelectorAll(".fchk").forEach(el=>el.addEventListener("change",()=>{ if(el.checked)t.failedSteps[el.dataset.si]=true; else delete t.failedSteps[el.dataset.si]; autosave(); }));
@@ -845,17 +886,17 @@ function payloadOut(){ const tt=DATA.testers.find(x=>x.id===curId)||{};
   return {_type:"MCEU_TESTER_RESULTS",iterationId:DATA.iterationId,testerId:curId,testerName:tt.name||"",
     results:rows.map(r=>({id:r.id,status:r.status,comment:r.comment,testDate:r.testDate,txnRefValue:r.txnRefValue||"",failedSteps:r.failedSteps||{},screens:r.screens||[]})),
     adhoc:adhoc.filter(a=>a.process||a.scenario).map(a=>({process:a.process,scenario:a.scenario,entity:a.entity,status:a.status,comment:a.comment,testDate:a.testDate||""}))};}
-function autosave(){ if(!curId)return; try{ localStorage.setItem(lsk(curId),JSON.stringify(payloadOut())); const m=document.getElementById("savedMsg"); m.textContent="enregistré ✓"; setTimeout(()=>{m.textContent="";},1500);}catch(e){ const m=document.getElementById("savedMsg"); m.textContent="⚠ stockage plein (captures trop lourdes) — enregistre le JSON"; } }
-function saveJSON(){ if(!curId){alert("Sélectionne d'abord ton nom.");return;}
+function autosave(){ if(!curId)return; try{ localStorage.setItem(lsk(curId),JSON.stringify(payloadOut())); const m=document.getElementById("savedMsg"); m.textContent=T("saved"); setTimeout(()=>{m.textContent="";},1500);}catch(e){ const m=document.getElementById("savedMsg"); m.textContent=T("full"); } }
+function saveJSON(){ if(!curId){alert(T("pickFirst"));return;}
   const bad=rows.concat(adhoc).filter(r=>reqComment(r.status)&&!(r.comment||"").trim());
-  if(bad.length && !confirm(bad.length+" test(s) Failed/Blocked sans commentaire. Enregistrer quand même ?"))return;
+  if(bad.length && !confirm(T("cNoCom",bad.length)))return;
   const miss=rows.filter(r=>r.txnRef&&r.status&&r.status!=="Not started"&&!((r.txnRefValue||"").trim())).length;
-  if(miss && !confirm(miss+" test(s) exécuté(s) sans référence de transaction. Enregistrer quand même ?"))return;
+  if(miss && !confirm(T("cNoTxn",miss)))return;
   const tt=DATA.testers.find(x=>x.id===curId)||{name:"tester"};
   const b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="results_"+(tt.name||"tester").replace(/\\W+/g,'_')+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();
 }
-function init(){ buildLinks(); buildWho();
+function init(){ applyLang(); buildLinks(); buildWho();
   if(DATA.testers.length===1){ const inp=document.getElementById("whoami"); if(inp)inp.value=DATA.testers[0].name; loadTester(DATA.testers[0].id); }
   else { render(); }
 }
