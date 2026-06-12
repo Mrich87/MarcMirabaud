@@ -402,7 +402,7 @@ function saveLibItem(id){ const c=libById(id);
   closeModal(); persist(); }
 function delLibItem(id){ if(!confirm("Delete this definition?"))return; S.library=S.library.filter(c=>String(c.id)!==String(id)); closeModal(); persist(); }
 
-/* import DevOps xlsx -> dedup (process,scenario) */
+/* import xlsx -> upsert library on (process,scenario); reads optional Steps / TxnRef columns */
 function importDevops(input){
   const file=input.files[0]; if(!file)return;
   const sheetName=($("#impSheet")&&$("#impSheet").value)||"LUX";
@@ -412,27 +412,36 @@ function importDevops(input){
     const sn=wb.SheetNames.includes(sheetName)?sheetName:wb.SheetNames[0];
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""});
     const m=S.config.columnMapping;
-    const existing=new Set(S.library.map(c=>(c.process+"||"+c.scenario)));
+    const hasSteps=rows.length&&("Steps" in rows[0]);
+    const hasTxn=rows.length&&("TxnRef" in rows[0]);
+    const byKey=new Map(S.library.map(c=>[c.process+"||"+c.scenario,c]));
     let maxO=S.library.reduce((mm,c)=>Math.max(mm,c.order||0),0);
-    let added=0,newTesters=0; const seen=new Set();
+    let added=0,updated=0,newTesters=0,stepsSet=0; const seen=new Set();
     rows.forEach(r=>{
       const process=(r[m.process]||"").toString().trim();
       const scenario=(r[m.scenario]||"").toString().trim();
       if(!process&&!scenario) return;
       const key=process+"||"+scenario;
-      if(seen.has(key)) return; seen.add(key);
-      // tester from col E
-      let testerId=""; const tname=(r[m.tester]||"").toString().trim();
-      if(tname){ let t=S.testers.find(x=>x.name===tname); if(!t){t={id:uid(),name:tname,email:"",country:"",dept:""};S.testers.push(t);newTesters++;} testerId=t.id; }
-      if(existing.has(key)) return;          // already in library
-      existing.add(key);
-      S.library.push({id:uid(),order:++maxO,domain:(r[m.domain]||"").toString().trim(),process,scenario,defaultTesterIds:testerId?[testerId]:[],notes:"",steps:[],txnRef:false});
-      added++;
+      const tnames=String(r[m.tester]||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+      const tIds=tnames.map(nm=>{ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newTesters++;} return t.id; });
+      const steps=hasSteps?String(r.Steps||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean):null;
+      const txn=hasTxn?/^(y|yes|true|1|x|oui)$/i.test(String(r.TxnRef||"").trim()):null;
+      const domain=(r[m.domain]||"").toString().trim();
+      let c=byKey.get(key);
+      if(c){
+        if(!seen.has(key)){ updated++; seen.add(key); }
+        if(domain) c.domain=domain;
+        c.defaultTesterIds=c.defaultTesterIds||[]; tIds.forEach(id=>{ if(!c.defaultTesterIds.includes(id)) c.defaultTesterIds.push(id); });
+        if(steps!==null){ c.steps=steps; if(steps.length)stepsSet++; }
+        if(txn!==null) c.txnRef=txn;
+      } else {
+        c={id:uid(),order:++maxO,domain,process,scenario,defaultTesterIds:tIds,notes:"",steps:steps||[],txnRef:txn||false};
+        S.library.push(c); byKey.set(key,c); seen.add(key); added++; if(steps&&steps.length)stepsSet++;
+      }
     });
-    // natural order for freshly added (and any without order)
     let n=0; sortedLib(S.library).forEach(c=>c.order=++n);
     save(); go("library");
-    alert(`Import done (sheet "${sn}"): ${added} new definitions, ${newTesters} tester(s) created. Library total: ${S.library.length}.`);
+    alert(`Import (sheet "${sn}"): ${added} new, ${updated} updated`+(hasSteps?`, steps set on ${stepsSet}`:``)+`, ${newTesters} tester(s) created. Library total: ${S.library.length}.`);
   };
   reader.readAsArrayBuffer(file);
 }
@@ -956,7 +965,7 @@ function renderAdmin(){
     </div>
 
     <div class="card"><b>DevOps import column mapping</b>
-      <p class="hint">Library dedup is based on <code>process</code> (col H) × <code>scenario</code> (col I); <code>tester</code> reads col E.</p>
+      <p class="hint">Library upsert is keyed on <code>process</code> × <code>scenario</code>; <code>tester</code> accepts several names separated by <code>;</code>. An optional <code>Steps</code> column (one step per line in the cell) and a <code>TxnRef</code> column (yes/no) are read on import and written by “Export .xlsx”, so you can edit steps in Excel and re-import.</p>
       <div class="grid" style="grid-template-columns:repeat(4,1fr)">
       ${Object.keys(m).map(k=>`<div class="field"><label>${esc(k)}</label><input value="${esc(m[k])}" onchange="S.config.columnMapping['${k}']=this.value;persist()"/></div>`).join("")}
       </div>
@@ -1005,7 +1014,8 @@ function exportLibrary(){
   const rows=S.library.slice().sort((a,b)=>(a.order||0)-(b.order||0)||naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(c=>{
     const r={};
     r[m.domain]=c.domain||""; r[m.process]=c.process||""; r[m.scenario]=c.scenario||"";
-    r[m.tester]=testerNames(libTesterIds(c)); r.Order=c.order||0; r.Notes=c.notes||"";
+    r[m.tester]=libTesterIds(c).map(id=>{const t=tester(id);return t?t.name:null;}).filter(Boolean).join("; ");
+    r.Steps=(c.steps||[]).join("\n"); r.TxnRef=c.txnRef?"yes":""; r.Order=c.order||0; r.Notes=c.notes||"";
     return r; });
   const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{[m.process]:"",[m.scenario]:""}]);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"LUX");
