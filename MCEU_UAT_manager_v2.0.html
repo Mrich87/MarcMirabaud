@@ -300,31 +300,118 @@ function exportAssignments(){
   const scope=trkFilter.entity||"all";
   XLSX.writeFile(wb,`MCEU_assignments_${slug(iter.name)}_${scope}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
-function importAssignments(input){
-  const f=input.files[0]; if(!f)return; const reader=new FileReader();
-  reader.onload=ev=>{ const wb=XLSX.read(ev.target.result,{type:"array"}); let upd=0,newT=0,miss=0,cloned=0;
-    const findTester=nm=>{ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newT++;} return t.id; };
-    wb.SheetNames.forEach(sn=>{ XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""}).forEach(r=>{
-      const id=String(r.ExecId||"").trim(); if(!id)return;
-      const e=S.executions.find(x=>x.id===id); if(!e){ miss++; return; }
-      const due=("DueDate" in r)?String(r.DueDate||"").trim():null;
-      if("Tester" in r){
-        const ids=String(r.Tester||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(findTester);
-        if(!ids.length){ e.testerId=""; }
-        else { e.testerId=ids[0];
-          for(let i=1;i<ids.length;i++){ const tid2=ids[i];
-            if(S.executions.some(x=>x.iterationId===e.iterationId&&x.entity===e.entity&&x.process===e.process&&x.scenario===e.scenario&&x.testerId===tid2)) continue;
-            const c=Object.assign({},e,{id:uid(),testerId:tid2,status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()});
-            if(due!=null) c.testDate=due;
-            S.executions.push(c); cloned++;
-          }
+function genSpocPage(){
+  const iter=activeIter();
+  const ex=trkFiltered().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
+  if(!ex.length){ alert("No execution to export (check the tracking filters)."); return; }
+  const scope=trkFilter.entity||"all";
+  const payload={campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,scope,
+    testerNames:S.testers.map(t=>t.name).filter(Boolean).sort((a,b)=>a.localeCompare(b)),
+    rows:ex.map(e=>({id:e.id,process:e.process||"",scenario:e.scenario||"",entity:e.entity||"",domain:e.domain||"",tester:(tester(e.testerId)||{}).name||"",due:e.testDate||""}))};
+  download(`MCEU_SPOC_${slug(iter.name)}_${scope}.html`, buildSpocHTML(payload), "text/html");
+}
+function buildSpocHTML(payload){
+  const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c");
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SPOC — ${esc(payload.scope)} — ${esc(payload.iteration)}</title>
+<style>
+body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px}
+header{background:#16233b;padding:12px 18px;position:sticky;top:0;display:flex;gap:16px;align-items:center;border-bottom:1px solid #334155;z-index:5}
+header h1{font-size:16px;margin:0}.muted{color:#94a3b8}
+main{padding:18px;max-width:1100px;margin:0 auto}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
+th{color:#94a3b8;position:sticky;top:56px;background:#0f172a}
+input{background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-family:inherit;width:100%}
+button{background:#0ea5e9;color:#06283b;border:0;border-radius:6px;padding:9px 16px;font-weight:600;cursor:pointer}
+.bar{position:sticky;bottom:0;background:#16233b;border-top:1px solid #334155;padding:10px 18px;display:flex;gap:10px;align-items:center}
+.saved{color:#22c55e;font-size:12px}.badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#334155}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+</style></head><body>
+<header><h1 id="ttl"></h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option></select></header>
+<main>
+  <p class="muted" id="intro"></p>
+  <div class="toolbar"><input id="q" placeholder="🔍" style="max-width:280px" oninput="render()"/><span class="muted" id="cnt"></span></div>
+  <table><thead><tr><th id="hP"></th><th id="hS"></th><th id="hE"></th><th style="width:280px" id="hT"></th><th style="width:160px" id="hD"></th></tr></thead><tbody id="tb"></tbody></table>
+  <datalist id="dl"></datalist>
+</main>
+<div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
+<script>
+const DATA=${dataJson};
+const LSK="mceu_spoc_"+DATA.iterationId+"_"+DATA.scope;
+let lang=(function(){try{return localStorage.getItem("mceu_spoc_lang")||"fr";}catch(e){return "fr";}})();
+const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Affecte un ou plusieurs testeurs (séparés par ;) à chaque test, plus une date d'échéance si besoin. Tu peux taper un nouveau nom. Clique Enregistrer puis renvoie le fichier .json au coordinateur.",hP:"PRC",hS:"Scénario",hE:"Entité",hT:"Testeur(s)",hD:"Date d'échéance",testerPh:"nom(s), séparés par ;",duePh:"ex. 2026-07-01",save:"⬇ Enregistrer (JSON)",saved:"enregistré ✓",assigned:"assignés"},en:{title:"SPOC assignment sheet",intro:"Assign one or more testers (separated by ;) to each test, plus a due date if needed. You can type a new name. Click Save and send the .json file back to the coordinator.",hP:"PRC",hS:"Scenario",hE:"Entity",hT:"Tester(s)",hD:"Due date",testerPh:"name(s), separated by ;",duePh:"e.g. 2026-07-01",save:"⬇ Save (JSON)",saved:"saved ✓",assigned:"assigned"}};
+function T(k){return (I18N[lang]||I18N.fr)[k]||k;}
+function setLang(l){lang=l;try{localStorage.setItem("mceu_spoc_lang",l);}catch(e){}applyLang();render();}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+let rows=[];
+function applyLang(){["ttl|title","intro|intro","hP|hP","hS|hS","hE|hE","hT|hT","hD|hD","btnSave|save"].forEach(function(p){var a=p.split("|");document.getElementById(a[0]).textContent=T(a[1]);});document.getElementById("langSel").value=lang;}
+function render(){
+  const tb=document.getElementById("tb"); tb.innerHTML="";
+  const q=(document.getElementById("q").value||"").toLowerCase().trim(); let shown=0;
+  rows.forEach(function(r,i){ if(q&&!((r.process+" "+r.scenario+" "+r.entity).toLowerCase().indexOf(q)>=0)) return; shown++;
+    const tr=document.createElement("tr");
+    tr.innerHTML='<td><b>'+esc(r.process)+'</b></td><td>'+esc(r.scenario)+'</td><td><span class="badge">'+esc(r.entity)+'</span></td>'+
+      '<td><input class="tin" list="dl" value="'+esc(r.tester)+'" placeholder="'+esc(T("testerPh"))+'"/></td>'+
+      '<td><input class="din" value="'+esc(r.due)+'" placeholder="'+esc(T("duePh"))+'"/></td>';
+    tr.querySelector(".tin").addEventListener("input",function(){rows[i].tester=this.value;autosave();updateProg();});
+    tr.querySelector(".din").addEventListener("input",function(){rows[i].due=this.value;autosave();});
+    tb.appendChild(tr);
+  });
+  document.getElementById("cnt").textContent=q?(shown+" / "+rows.length):""; updateProg();
+}
+function updateProg(){const done=rows.filter(function(r){return (r.tester||"").trim();}).length;document.getElementById("prog").textContent=done+" / "+rows.length+" "+T("assigned");}
+function payloadOut(){return {_type:"MCEU_SPOC_ASSIGNMENTS",iterationId:DATA.iterationId,scope:DATA.scope,rows:rows.map(function(r){return {ExecId:r.id,Tester:r.tester||"",DueDate:r.due||""};})};}
+function autosave(){try{localStorage.setItem(LSK,JSON.stringify(payloadOut()));var m=document.getElementById("savedMsg");m.textContent=T("saved");setTimeout(function(){m.textContent="";},1200);}catch(e){}}
+function saveJSON(){var b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="assignments_"+DATA.scope+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();}
+function init(){
+  var saved=(function(){try{return JSON.parse(localStorage.getItem(LSK)||"null");}catch(e){return null;}})();
+  rows=DATA.rows.map(function(r){var s=saved&&saved.rows&&saved.rows.find(function(x){return x.ExecId===r.id;});return Object.assign({},r,{tester:s?s.Tester:r.tester,due:s?s.DueDate:r.due});});
+  document.getElementById("dl").innerHTML=DATA.testerNames.map(function(n){return '<option value="'+esc(n)+'"></option>';}).join("");
+  document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · "+DATA.scope;
+  applyLang(); render();
+}
+init();
+<\/script></body></html>`;
+}
+function applyAssignments(rows){
+  let upd=0,newT=0,miss=0,cloned=0;
+  const findTester=nm=>{ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newT++;} return t.id; };
+  rows.forEach(r=>{
+    const id=String(r.ExecId||"").trim(); if(!id)return;
+    const e=S.executions.find(x=>x.id===id); if(!e){ miss++; return; }
+    const due=("DueDate" in r)?String(r.DueDate||"").trim():null;
+    if("Tester" in r){
+      const ids=String(r.Tester||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(findTester);
+      if(!ids.length){ e.testerId=""; }
+      else { e.testerId=ids[0];
+        for(let i=1;i<ids.length;i++){ const tid2=ids[i];
+          if(S.executions.some(x=>x.iterationId===e.iterationId&&x.entity===e.entity&&x.process===e.process&&x.scenario===e.scenario&&x.testerId===tid2)) continue;
+          const c=Object.assign({},e,{id:uid(),testerId:tid2,status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()});
+          if(due!=null) c.testDate=due; S.executions.push(c); cloned++;
         }
       }
-      if(due!=null) e.testDate=due;
-      e.updatedAt=new Date().toISOString(); upd++; }); });
-    renderAll(); save(); alert(`Assignments imported: ${upd} updated, ${cloned} extra execution(s) created (multi-tester), ${newT} new tester(s)`+(miss?`, ${miss} skipped (unknown ExecId)`:``)+`.`);
+    }
+    if(due!=null) e.testDate=due; e.updatedAt=new Date().toISOString(); upd++;
+  });
+  return {upd,newT,miss,cloned};
+}
+function importAssignmentsAny(input){ const f=input.files[0]; if(!f)return; if(/\.json$/i.test(f.name)) importSpocJSON(input); else importAssignments(input); }
+function importAssignments(input){
+  const f=input.files[0]; if(!f)return; const reader=new FileReader();
+  reader.onload=ev=>{ const wb=XLSX.read(ev.target.result,{type:"array"}); const rows=[];
+    wb.SheetNames.forEach(sn=>{ XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""}).forEach(r=>rows.push(r)); });
+    const res=applyAssignments(rows); renderAll(); save();
+    alert(`Assignments imported: ${res.upd} updated, ${res.cloned} extra execution(s) created (multi-tester), ${res.newT} new tester(s)`+(res.miss?`, ${res.miss} skipped (unknown ExecId)`:``)+`.`);
   };
   reader.readAsArrayBuffer(f);
+}
+function importSpocJSON(input){
+  const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_SPOC_ASSIGNMENTS"){ alert("Not a SPOC assignment file."); return; }
+    const res=applyAssignments(p.rows||[]); renderAll(); save();
+    alert(`SPOC assignments imported: ${res.upd} updated, ${res.cloned} extra execution(s) created (multi-tester), ${res.newT} new tester(s)`+(res.miss?`, ${res.miss} skipped (unknown ExecId)`:``)+`.`);
+  }catch(err){ alert("Invalid file."); } };
+  r.readAsText(f);
 }
 function renderDashboard(){
   const iter=activeIter(); const ex=iterExecs(); const a=aggregate(ex);
@@ -565,8 +652,9 @@ function renderCampaign(){
           ${tCombo('trkTester',trkFilter.tester,"trkFilter.tester=v;renderCampaign()",{emptyLabel:'All testers',placeholder:'🔍 all testers…',width:'180px'})}
           <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
           <div class="spacer"></div>
-          <button onclick="exportAssignments()" title="Export a (blank) assignment sheet for the current filter — a SPOC fills the Tester column">⬇ Assignment sheet (SPOC)</button>
-          <label class="pill" style="cursor:pointer" title="Re-import a SPOC's filled assignment sheet — creates missing testers; several names separated by ; on a row create one execution per tester">⬆ Import assignments<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAssignments(this)"/></label>
+          <button onclick="genSpocPage()" title="Generate a standalone HTML page for the current filter so a SPOC can assign testers (then sends back the JSON)">⬇ SPOC page (HTML)</button>
+          <button onclick="exportAssignments()" title="Export the same as an Excel sheet (SPOC fills the Tester column)">⬇ …or Excel</button>
+          <label class="pill" style="cursor:pointer" title="Re-import a SPOC's filled assignment file (.json from the SPOC page, or .xlsx) — creates missing testers; several names separated by ; create one execution per tester">⬆ Import assignments<input type="file" accept=".xlsx,.xls,.json" style="display:none" onchange="importAssignmentsAny(this)"/></label>
           <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
           <button onclick="openTesterList()">📋 Tester list (Outlook)</button>
           <button onclick="openGenTester()">⬇ Generate tester HTML</button>
