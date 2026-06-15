@@ -275,13 +275,45 @@ function execMatch(e,key){
   if(key==="todo") return !DONE_STATUSES.includes(e.status);
   return e.status===key;
 }
-function openExecList(key){
-  const titleMap={all:"All assigned",done:"Executed",todo:"To do",Passed:"Passed",Failed:"Failed",Blocked:"Blocked"};
-  const ex=iterExecs().filter(e=>execMatch(e,key)).sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
-  const rows=ex.map(e=>{const sm=statusMeta(e.status);return `<tr><td><b>${esc(e.process)}</b>${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td><td>${esc(e.scenario)}</td><td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))}</td><td>${badge(e.status,sm.color)}</td></tr>`;}).join("")||'<tr><td colspan="5" class="muted">No test case in this category.</td></tr>';
-  modal(`<h2>${titleMap[key]||key} — ${esc(activeIter().name)} <span class="muted" style="font-size:13px">(${ex.length})</span></h2>
+function showExecModal(title,ex){
+  ex=ex.slice().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
+  const rows=ex.map(e=>{const sm=statusMeta(e.status);return `<tr><td><b>${esc(e.process)}</b>${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td><td>${esc(e.scenario)}</td><td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))}</td><td>${badge(e.status,sm.color)}</td></tr>`;}).join("")||'<tr><td colspan="5" class="muted">No test case.</td></tr>';
+  modal(`<h2>${title} <span class="muted" style="font-size:13px">(${ex.length})</span></h2>
     <div style="max-height:62vh;overflow:auto;margin-top:8px"><table><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th>Tester</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
+}
+function openExecList(key){ const titleMap={all:"All assigned",done:"Executed",todo:"To do",Passed:"Passed",Failed:"Failed",Blocked:"Blocked"};
+  showExecModal((titleMap[key]||key)+" — "+esc(activeIter().name), iterExecs().filter(e=>execMatch(e,key))); }
+function openProcList(proc){ showExecModal(esc(proc)+" — "+esc(activeIter().name), iterExecs().filter(e=>(e.process||"(none)")===proc)); }
+/* ---- SPOC assignment sheets: export a (blank) list, re-import their tester assignments ---- */
+function trkFiltered(){ return iterExecs().filter(e=>
+  (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
+  (!trkFilter.status||e.status===trkFilter.status)&&(!trkFilter.process||e.process===trkFilter.process)&&
+  (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase()))); }
+function exportAssignments(){
+  const iter=activeIter();
+  const ex=trkFiltered().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
+  if(!ex.length){ alert("No execution to export (check the tracking filters)."); return; }
+  const data=ex.map(e=>({ExecId:e.id,Entity:e.entity,PRC:e.process||"",Scenario:e.scenario||"",Domain:e.domain||"",Tester:(tester(e.testerId)||{}).name||"",DueDate:e.testDate||""}));
+  const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Assignments");
+  const scope=trkFilter.entity||"all";
+  XLSX.writeFile(wb,`MCEU_assignments_${slug(iter.name)}_${scope}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+function importAssignments(input){
+  const f=input.files[0]; if(!f)return; const reader=new FileReader();
+  reader.onload=ev=>{ const wb=XLSX.read(ev.target.result,{type:"array"}); let upd=0,newT=0,miss=0;
+    wb.SheetNames.forEach(sn=>{ XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""}).forEach(r=>{
+      const id=String(r.ExecId||"").trim(); if(!id)return;
+      const e=S.executions.find(x=>x.id===id); if(!e){ miss++; return; }
+      if("Tester" in r){ const nm=String(r.Tester||"").trim();
+        if(nm){ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newT++;} e.testerId=t.id; }
+        else e.testerId=""; }
+      if("DueDate" in r) e.testDate=String(r.DueDate||"").trim();
+      e.updatedAt=new Date().toISOString(); upd++; }); });
+    renderAll(); save(); alert(`Assignments imported: ${upd} execution(s) updated, ${newT} new tester(s) created`+(miss?`, ${miss} row(s) skipped (unknown ExecId)`:``)+`.`);
+  };
+  reader.readAsArrayBuffer(f);
 }
 function renderDashboard(){
   const iter=activeIter(); const ex=iterExecs(); const a=aggregate(ex);
@@ -290,6 +322,7 @@ function renderDashboard(){
   const byEntity=S.config.entities.map(en=>({en,sub:ex.filter(e=>e.entity===en.code)}));
   const byTester={}; ex.forEach(e=>{(byTester[e.testerId]=byTester[e.testerId]||[]).push(e);});
   const byDomain={}; ex.forEach(e=>{const d=e.domain||"(none)";(byDomain[d]=byDomain[d]||[]).push(e);});
+  const byProc={}; ex.forEach(e=>{const p=e.process||"(none)";(byProc[p]=byProc[p]||[]).push(e);});
 
   $("#view-dashboard").innerHTML=`
     <h2>Dashboard — ${esc(iter?iter.name:"—")}</h2>
@@ -317,6 +350,11 @@ function renderDashboard(){
     <div class="card"><b>By business domain</b>
       <table><thead><tr><th>Domain</th><th>Assigned</th><th>Progress</th><th>Failed</th></tr></thead><tbody>
       ${Object.keys(byDomain).sort().map(d=>{const sub=byDomain[d];const sa=aggregate(sub);return `<tr><td>${esc(d)}</td><td>${sub.length}</td><td style="min-width:160px">${progressBar(sub)}</td><td>${sa.failed?badge(sa.failed+" failed",'#ef4444'):'<span class="muted">0</span>'}</td></tr>`;}).join("")||'<tr><td colspan="4" class="muted">Import the library and build a campaign to see numbers.</td></tr>'}
+      </tbody></table>
+    </div>
+    <div class="card"><b>By process (PRC)</b> <span class="muted" style="font-size:12px">— click a row to list its test cases</span>
+      <table><thead><tr><th>PRC</th><th>Assigned</th><th>Progress</th><th>P/F/B</th></tr></thead><tbody>
+      ${Object.keys(byProc).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y))).map(p=>{const sub=byProc[p];const sa=aggregate(sub);return `<tr style="cursor:pointer" title="Click to list" onclick="openProcList('${jsq(p)}')"><td><b>${esc(p)}</b></td><td>${sub.length}</td><td style="min-width:160px">${progressBar(sub)}</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td></tr>`;}).join("")||'<tr><td colspan="4" class="muted">No execution yet.</td></tr>'}
       </tbody></table>
     </div>`;
 }
@@ -516,6 +554,8 @@ function renderCampaign(){
           ${tCombo('trkTester',trkFilter.tester,"trkFilter.tester=v;renderCampaign()",{emptyLabel:'All testers',placeholder:'🔍 all testers…',width:'180px'})}
           <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
           <div class="spacer"></div>
+          <button onclick="exportAssignments()" title="Export a (blank) assignment sheet for the current filter — a SPOC fills the Tester column">⬇ Assignment sheet (SPOC)</button>
+          <label class="pill" style="cursor:pointer" title="Re-import a SPOC's filled assignment sheet — creates missing testers">⬆ Import assignments<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAssignments(this)"/></label>
           <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
           <button onclick="openTesterList()">📋 Tester list (Outlook)</button>
           <button onclick="openGenTester()">⬇ Generate tester HTML</button>
