@@ -302,16 +302,27 @@ function exportAssignments(){
 }
 function importAssignments(input){
   const f=input.files[0]; if(!f)return; const reader=new FileReader();
-  reader.onload=ev=>{ const wb=XLSX.read(ev.target.result,{type:"array"}); let upd=0,newT=0,miss=0;
+  reader.onload=ev=>{ const wb=XLSX.read(ev.target.result,{type:"array"}); let upd=0,newT=0,miss=0,cloned=0;
+    const findTester=nm=>{ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newT++;} return t.id; };
     wb.SheetNames.forEach(sn=>{ XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""}).forEach(r=>{
       const id=String(r.ExecId||"").trim(); if(!id)return;
       const e=S.executions.find(x=>x.id===id); if(!e){ miss++; return; }
-      if("Tester" in r){ const nm=String(r.Tester||"").trim();
-        if(nm){ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newT++;} e.testerId=t.id; }
-        else e.testerId=""; }
-      if("DueDate" in r) e.testDate=String(r.DueDate||"").trim();
+      const due=("DueDate" in r)?String(r.DueDate||"").trim():null;
+      if("Tester" in r){
+        const ids=String(r.Tester||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(findTester);
+        if(!ids.length){ e.testerId=""; }
+        else { e.testerId=ids[0];
+          for(let i=1;i<ids.length;i++){ const tid2=ids[i];
+            if(S.executions.some(x=>x.iterationId===e.iterationId&&x.entity===e.entity&&x.process===e.process&&x.scenario===e.scenario&&x.testerId===tid2)) continue;
+            const c=Object.assign({},e,{id:uid(),testerId:tid2,status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()});
+            if(due!=null) c.testDate=due;
+            S.executions.push(c); cloned++;
+          }
+        }
+      }
+      if(due!=null) e.testDate=due;
       e.updatedAt=new Date().toISOString(); upd++; }); });
-    renderAll(); save(); alert(`Assignments imported: ${upd} execution(s) updated, ${newT} new tester(s) created`+(miss?`, ${miss} row(s) skipped (unknown ExecId)`:``)+`.`);
+    renderAll(); save(); alert(`Assignments imported: ${upd} updated, ${cloned} extra execution(s) created (multi-tester), ${newT} new tester(s)`+(miss?`, ${miss} skipped (unknown ExecId)`:``)+`.`);
   };
   reader.readAsArrayBuffer(f);
 }
@@ -555,7 +566,7 @@ function renderCampaign(){
           <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
           <div class="spacer"></div>
           <button onclick="exportAssignments()" title="Export a (blank) assignment sheet for the current filter — a SPOC fills the Tester column">⬇ Assignment sheet (SPOC)</button>
-          <label class="pill" style="cursor:pointer" title="Re-import a SPOC's filled assignment sheet — creates missing testers">⬆ Import assignments<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAssignments(this)"/></label>
+          <label class="pill" style="cursor:pointer" title="Re-import a SPOC's filled assignment sheet — creates missing testers; several names separated by ; on a row create one execution per tester">⬆ Import assignments<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAssignments(this)"/></label>
           <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
           <button onclick="openTesterList()">📋 Tester list (Outlook)</button>
           <button onclick="openGenTester()">⬇ Generate tester HTML</button>
