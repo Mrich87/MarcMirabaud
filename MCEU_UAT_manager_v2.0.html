@@ -331,7 +331,7 @@ button{background:#0ea5e9;color:#06283b;border:0;border-radius:6px;padding:9px 1
 <main>
   <p class="muted" id="intro"></p>
   <div class="toolbar"><input id="q" placeholder="🔍" style="max-width:280px" oninput="render()"/><span class="muted" id="cnt"></span></div>
-  <table><thead><tr><th id="hP"></th><th id="hS"></th><th id="hE"></th><th style="width:280px" id="hT"></th><th style="width:160px" id="hD"></th></tr></thead><tbody id="tb"></tbody></table>
+  <table><thead><tr><th id="hP"></th><th id="hS"></th><th id="hE"></th><th style="width:280px" id="hT"></th><th style="width:160px" id="hD"></th><th style="width:84px"></th></tr></thead><tbody id="tb"></tbody></table>
   <datalist id="dl"></datalist>
 </main>
 <div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
@@ -339,7 +339,7 @@ button{background:#0ea5e9;color:#06283b;border:0;border-radius:6px;padding:9px 1
 const DATA=${dataJson};
 const LSK="mceu_spoc_"+DATA.iterationId+"_"+DATA.scope;
 let lang=(function(){try{return localStorage.getItem("mceu_spoc_lang")||"fr";}catch(e){return "fr";}})();
-const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Affecte un ou plusieurs testeurs (séparés par ;) à chaque test, plus une date d'échéance si besoin. Tu peux taper un nouveau nom. Clique Enregistrer puis renvoie le fichier .json au coordinateur.",hP:"PRC",hS:"Scénario",hE:"Entité",hT:"Testeur(s)",hD:"Date d'échéance",testerPh:"nom(s), séparés par ;",duePh:"ex. 2026-07-01",save:"⬇ Enregistrer (JSON)",saved:"enregistré ✓",assigned:"assignés"},en:{title:"SPOC assignment sheet",intro:"Assign one or more testers (separated by ;) to each test, plus a due date if needed. You can type a new name. Click Save and send the .json file back to the coordinator.",hP:"PRC",hS:"Scenario",hE:"Entity",hT:"Tester(s)",hD:"Due date",testerPh:"name(s), separated by ;",duePh:"e.g. 2026-07-01",save:"⬇ Save (JSON)",saved:"saved ✓",assigned:"assigned"}};
+const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Affecte un ou plusieurs testeurs (séparés par ;) à chaque test, plus une date d'échéance si besoin. Tu peux taper un nouveau nom. Clique Enregistrer puis renvoie le fichier .json au coordinateur.",hP:"PRC",hS:"Scénario",hE:"Entité",hT:"Testeur(s)",hD:"Date d'échéance",testerPh:"nom(s), séparés par ;",duePh:"ex. 2026-07-01",save:"⬇ Enregistrer (JSON)",saved:"enregistré ✓",assigned:"assignés",dup:"Dupliquer (rejouer / autre testeur)",del:"Retirer cette copie",copyTag:"copie"},en:{title:"SPOC assignment sheet",intro:"Assign one or more testers (separated by ;) to each test, plus a due date if needed. You can type a new name. Click Save and send the .json file back to the coordinator.",hP:"PRC",hS:"Scenario",hE:"Entity",hT:"Tester(s)",hD:"Due date",testerPh:"name(s), separated by ;",duePh:"e.g. 2026-07-01",save:"⬇ Save (JSON)",saved:"saved ✓",assigned:"assigned",dup:"Duplicate (replay / another tester)",del:"Remove this copy",copyTag:"copy"}};
 function T(k){return (I18N[lang]||I18N.fr)[k]||k;}
 function setLang(l){lang=l;try{localStorage.setItem("mceu_spoc_lang",l);}catch(e){}applyLang();render();}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
@@ -349,23 +349,31 @@ function render(){
   const tb=document.getElementById("tb"); tb.innerHTML="";
   const q=(document.getElementById("q").value||"").toLowerCase().trim(); let shown=0;
   rows.forEach(function(r,i){ if(q&&!((r.process+" "+r.scenario+" "+r.entity).toLowerCase().indexOf(q)>=0)) return; shown++;
-    const tr=document.createElement("tr");
-    tr.innerHTML='<td><b>'+esc(r.process)+'</b></td><td>'+esc(r.scenario)+'</td><td><span class="badge">'+esc(r.entity)+'</span></td>'+
+    var tr=document.createElement("tr");
+    var dupBadge=r.isDup?' <span class="badge" style="background:#a855f733;color:#c4b5fd">'+esc(T("copyTag"))+'</span>':'';
+    tr.innerHTML='<td><b>'+esc(r.process)+'</b>'+dupBadge+'</td><td>'+esc(r.scenario)+'</td><td><span class="badge">'+esc(r.entity)+'</span></td>'+
       '<td><input class="tin" list="dl" value="'+esc(r.tester)+'" placeholder="'+esc(T("testerPh"))+'"/></td>'+
-      '<td><input class="din" value="'+esc(r.due)+'" placeholder="'+esc(T("duePh"))+'"/></td>';
+      '<td><input class="din" value="'+esc(r.due)+'" placeholder="'+esc(T("duePh"))+'"/></td>'+
+      '<td style="white-space:nowrap"><button class="dupb" title="'+esc(T("dup"))+'" style="padding:4px 9px">⧉</button>'+(r.isDup?' <button class="delb" title="'+esc(T("del"))+'" style="padding:4px 9px;background:#ef4444;color:#fff">✕</button>':'')+'</td>';
     tr.querySelector(".tin").addEventListener("input",function(){rows[i].tester=this.value;autosave();updateProg();});
     tr.querySelector(".din").addEventListener("input",function(){rows[i].due=this.value;autosave();});
+    tr.querySelector(".dupb").addEventListener("click",function(){dupRow(i);});
+    var db=tr.querySelector(".delb"); if(db) db.addEventListener("click",function(){delRow(i);});
     tb.appendChild(tr);
   });
   document.getElementById("cnt").textContent=q?(shown+" / "+rows.length):""; updateProg();
 }
 function updateProg(){const done=rows.filter(function(r){return (r.tester||"").trim();}).length;document.getElementById("prog").textContent=done+" / "+rows.length+" "+T("assigned");}
-function payloadOut(){return {_type:"MCEU_SPOC_ASSIGNMENTS",iterationId:DATA.iterationId,scope:DATA.scope,rows:rows.map(function(r){return {ExecId:r.id,Tester:r.tester||"",DueDate:r.due||""};})};}
-function autosave(){try{localStorage.setItem(LSK,JSON.stringify(payloadOut()));var m=document.getElementById("savedMsg");m.textContent=T("saved");setTimeout(function(){m.textContent="";},1200);}catch(e){}}
-function saveJSON(){var b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="assignments_"+DATA.scope+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();}
+function dupRow(i){ var r=rows[i]; var nr=Object.assign({},r,{id:"spoc"+Math.random().toString(36).slice(2,9),srcId:r.srcId||r.id,tester:"",isDup:true}); rows.splice(i+1,0,nr); autosave(); render(); }
+function delRow(i){ if(!rows[i]||!rows[i].isDup)return; rows.splice(i,1); autosave(); render(); }
+function exportPayload(){return {_type:"MCEU_SPOC_ASSIGNMENTS",iterationId:DATA.iterationId,scope:DATA.scope,rows:rows.map(function(r){return {ExecId:r.id,srcId:r.srcId||"",process:r.process,scenario:r.scenario,entity:r.entity,domain:r.domain,Tester:r.tester||"",DueDate:r.due||""};})};}
+function autosave(){try{localStorage.setItem(LSK,JSON.stringify({rows:rows}));var m=document.getElementById("savedMsg");m.textContent=T("saved");setTimeout(function(){m.textContent="";},1200);}catch(e){}}
+function saveJSON(){var b=new Blob([JSON.stringify(exportPayload(),null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="assignments_"+DATA.scope+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();}
 function init(){
   var saved=(function(){try{return JSON.parse(localStorage.getItem(LSK)||"null");}catch(e){return null;}})();
-  rows=DATA.rows.map(function(r){var s=saved&&saved.rows&&saved.rows.find(function(x){return x.ExecId===r.id;});return Object.assign({},r,{tester:s?s.Tester:r.tester,due:s?s.DueDate:r.due});});
+  var sr=(saved&&saved.rows)||[];
+  rows = sr.length ? sr.slice() : DATA.rows.map(function(r){return Object.assign({},r);});
+  if(sr.length){ DATA.rows.forEach(function(r){ if(!rows.some(function(x){return x.id===r.id;})) rows.push(Object.assign({},r)); }); }
   document.getElementById("dl").innerHTML=DATA.testerNames.map(function(n){return '<option value="'+esc(n)+'"></option>';}).join("");
   document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · "+DATA.scope;
   applyLang(); render();
@@ -374,11 +382,23 @@ init();
 <\/script></body></html>`;
 }
 function applyAssignments(rows){
-  let upd=0,newT=0,miss=0,cloned=0;
+  let upd=0,newT=0,miss=0,cloned=0,created=0;
   const findTester=nm=>{ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newT++;} return t.id; };
   rows.forEach(r=>{
-    const id=String(r.ExecId||"").trim(); if(!id)return;
-    const e=S.executions.find(x=>x.id===id); if(!e){ miss++; return; }
+    const id=String(r.ExecId||"").trim();
+    let e=id?S.executions.find(x=>x.id===id):null;
+    if(!e){
+      // a SPOC-duplicated / new row → create an execution (cloned from its source when known)
+      const proc=String(r.process||r.PRC||"").trim(), scen=String(r.scenario||r.Scenario||"").trim();
+      let src=r.srcId?S.executions.find(x=>x.id===String(r.srcId)):null;
+      if(!src&&(proc||scen)) src=S.executions.find(x=>x.process===proc&&x.scenario===scen);
+      if(!proc&&!scen&&!src){ miss++; return; }
+      const ent=String(r.entity||r.Entity||(src&&src.entity)||"").trim();
+      const dom=String(r.domain||r.Domain||(src&&src.domain)||"").trim();
+      e=src?Object.assign({},src,{id:id||uid(),testerId:"",status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],testDate:"",updatedAt:new Date().toISOString()})
+            :{id:id||uid(),iterationId:activeIter().id,libraryItemId:null,process:proc,scenario:scen,domain:dom,steps:[],txnRef:false,txnRefValue:"",entity:ent,testerId:"",status:"Not started",comment:"",recurrence:"",testDate:"",failedSteps:{},screens:[],adhoc:false,updatedAt:new Date().toISOString()};
+      S.executions.push(e); created++;
+    }
     const due=("DueDate" in r)?String(r.DueDate||"").trim():null;
     if("Tester" in r){
       const ids=String(r.Tester||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(findTester);
@@ -393,7 +413,7 @@ function applyAssignments(rows){
     }
     if(due!=null) e.testDate=due; e.updatedAt=new Date().toISOString(); upd++;
   });
-  return {upd,newT,miss,cloned};
+  return {upd,newT,miss,cloned,created};
 }
 function importAssignmentsAny(input){ const f=input.files[0]; if(!f)return; if(/\.json$/i.test(f.name)) importSpocJSON(input); else importAssignments(input); }
 function importAssignments(input){
@@ -401,7 +421,7 @@ function importAssignments(input){
   reader.onload=ev=>{ const wb=XLSX.read(ev.target.result,{type:"array"}); const rows=[];
     wb.SheetNames.forEach(sn=>{ XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""}).forEach(r=>rows.push(r)); });
     const res=applyAssignments(rows); renderAll(); save();
-    alert(`Assignments imported: ${res.upd} updated, ${res.cloned} extra execution(s) created (multi-tester), ${res.newT} new tester(s)`+(res.miss?`, ${res.miss} skipped (unknown ExecId)`:``)+`.`);
+    alert(`Assignments imported: ${res.upd} updated, ${res.created} new (duplicated), ${res.cloned} multi-tester, ${res.newT} new tester(s)`+(res.miss?`, ${res.miss} skipped`:``)+`.`);
   };
   reader.readAsArrayBuffer(f);
 }
@@ -409,7 +429,7 @@ function importSpocJSON(input){
   const f=input.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_SPOC_ASSIGNMENTS"){ alert("Not a SPOC assignment file."); return; }
     const res=applyAssignments(p.rows||[]); renderAll(); save();
-    alert(`SPOC assignments imported: ${res.upd} updated, ${res.cloned} extra execution(s) created (multi-tester), ${res.newT} new tester(s)`+(res.miss?`, ${res.miss} skipped (unknown ExecId)`:``)+`.`);
+    alert(`SPOC assignments imported: ${res.upd} updated, ${res.created} new (duplicated), ${res.cloned} multi-tester, ${res.newT} new tester(s)`+(res.miss?`, ${res.miss} skipped`:``)+`.`);
   }catch(err){ alert("Invalid file."); } };
   r.readAsText(f);
 }
