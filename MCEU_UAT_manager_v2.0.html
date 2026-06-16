@@ -337,7 +337,7 @@ select.ein{width:auto;min-width:88px}
 <main>
   <p class="muted" id="intro"></p>
   <div class="toolbar"><input id="q" placeholder="🔍" style="max-width:280px" oninput="render()"/><span class="muted" id="cnt"></span></div>
-  <table><thead><tr><th id="hP"></th><th id="hS"></th><th id="hE"></th><th style="width:260px" id="hT"></th><th style="width:150px" id="hD"></th><th style="width:96px"></th></tr></thead><tbody id="tb"></tbody></table>
+  <table><thead><tr><th id="hP"></th><th id="hS"></th><th id="hE"></th><th style="width:260px" id="hT"></th><th style="width:150px;cursor:pointer;user-select:none" id="hD" onclick="sortDue()"></th><th style="width:96px"></th></tr></thead><tbody id="tb"></tbody></table>
   <datalist id="dl"></datalist>
 </main>
 <div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
@@ -349,13 +349,16 @@ const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Identifie ton entité 
 function T(k,n){var v=(I18N[lang]||I18N.fr)[k]||k;return n==null?v:v.replace("{n}",n);}
 function setLang(l){lang=l;try{localStorage.setItem("mceu_spoc_lang",l);}catch(e){}applyLang();render();}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
-let rows=[], expanded={}, myEnt="";
+let rows=[], expanded={}, myEnt="", sortDir=0;
 function setMyEnt(v){myEnt=v;try{localStorage.setItem("mceu_spoc_ent_"+DATA.iterationId,v);}catch(e){}}
-function applyLang(){["ttl|title","intro|intro","hP|hP","hS|hS","hE|hE","hT|hT","hD|hD","btnSave|save","lblEnt|myEnt"].forEach(function(p){var a=p.split("|");document.getElementById(a[0]).textContent=T(a[1]);});document.getElementById("langSel").value=lang;}
+function sortDue(){ sortDir = sortDir===1?-1:(sortDir===-1?0:1); render(); }
+function applyLang(){["ttl|title","intro|intro","hP|hP","hS|hS","hE|hE","hT|hT","btnSave|save","lblEnt|myEnt"].forEach(function(p){var a=p.split("|");document.getElementById(a[0]).textContent=T(a[1]);});document.getElementById("hD").innerHTML=T("hD")+' <span id="arD"></span>';document.getElementById("langSel").value=lang;}
 function render(){
   var tb=document.getElementById("tb"); tb.innerHTML="";
   var q=(document.getElementById("q").value||"").toLowerCase().trim(); var shown=0;
-  rows.forEach(function(r,i){ if(q&&!((r.process+" "+r.scenario+" "+r.entity).toLowerCase().indexOf(q)>=0)) return; shown++;
+  var list=rows.map(function(r,i){return {r:r,i:i};});
+  if(sortDir){ list.sort(function(a,b){var da=(a.r.due||""),db=(b.r.due||"");if(!da&&!db)return 0;if(!da)return 1;if(!db)return -1;return da<db?-sortDir:da>db?sortDir:0;}); }
+  list.forEach(function(o){ var r=o.r,i=o.i; if(q&&!((r.process+" "+r.scenario+" "+r.entity).toLowerCase().indexOf(q)>=0)) return; shown++;
     var tr=document.createElement("tr"); if(r.removed) tr.className="removed";
     var nSteps=(r.steps&&r.steps.length)||0;
     var badges=(r.isDup?' <span class="badge" style="background:#a855f733;color:#c4b5fd">'+esc(T("copyTag"))+'</span>':'')+(r.removed?' <span class="badge" style="background:#ef444433;color:#fca5a5">'+esc(T("removedTag"))+'</span>':'');
@@ -379,6 +382,7 @@ function render(){
       sr2.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+r.steps.map(function(s){return '<li>'+esc(s)+'</li>';}).join("")+'</ol></td>';
       tb.appendChild(sr2); }
   });
+  var ar=document.getElementById("arD"); if(ar) ar.textContent=sortDir===1?"▲":sortDir===-1?"▼":"";
   document.getElementById("cnt").textContent=q?(shown+" / "+rows.length):""; updateProg();
 }
 function updateProg(){var act=rows.filter(function(r){return !r.removed;});var done=act.filter(function(r){return (r.tester||"").trim();}).length;document.getElementById("prog").textContent=done+" / "+act.length+" "+T("assigned");}
