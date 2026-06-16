@@ -680,6 +680,25 @@ function findOrCreateTester(name){ name=(name||"").trim(); if(!name)return "";
   let t=S.testers.find(x=>x.name===name); if(!t){t={id:uid(),name,email:"",country:"",dept:""};S.testers.push(t);} return t.id; }
 function setExecTester(id,name){ const e=S.executions.find(x=>x.id===id); if(!e)return;
   e.testerId=findOrCreateTester(name); e.updatedAt=new Date().toISOString(); persist(); }
+function addTesterToExec(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  modal(`<h2>Add tester(s)</h2>
+    <p class="hint">${esc(e.process)} · ${esc(e.scenario)} · ${badge(e.entity,entityMeta(e.entity).color)}</p>
+    <div class="field"><label>Tester name(s) — separate several with ;</label>
+      <input id="addt_names" list="testerDL" placeholder="e.g. Smith Anna; Doe John" style="width:100%" autofocus/>
+      <div class="hint">A new name creates the tester (tagged with this entity). One execution is added per tester; testers already on this process are skipped.</div></div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="confirmAddTester('${e.id}')">Add</button></div>`);
+}
+function confirmAddTester(id){ const e=S.executions.find(x=>x.id===id); if(!e){ closeModal(); return; }
+  const names=String(($("#addt_names")||{}).value||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+  if(!names.length){ closeModal(); return; }
+  const idx=S.executions.indexOf(e); let off=1, added=0;
+  names.forEach(nm=>{ const tid=findOrCreateTester(nm); if(!tid) return;
+    const t=S.testers.find(x=>x.id===tid); if(t&&e.entity&&!t.country) t.country=e.entity;   /* tag tester entity */
+    if(S.executions.some(x=>x.iterationId===e.iterationId&&(x.entity||"")===(e.entity||"")&&x.process===e.process&&x.scenario===e.scenario&&x.testerId===tid)) return;
+    const c=Object.assign({},e,{id:uid(),testerId:tid,status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()});
+    S.executions.splice(idx+off,0,c); off++; added++;
+  });
+  closeModal(); persist(); }
 function bulkAssign(){ if(!trkSel.size)return; const nm=(($("#bulkTester")||{}).value||"").trim();
   if(!nm){ alert("Type a tester name first."); return; }
   const v=findOrCreateTester(nm);
@@ -805,7 +824,7 @@ function renderTrackingTable(){
       <td><select onchange="setExec('${e.id}','status',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
       <td><input type="text" value="${esc(e.testDate||'')}" placeholder="e.g. 2026-06-10 / W24 / TBD" title="Execution due date — free text, set by coordinator, read-only for the tester" onchange="setExec('${e.id}','testDate',this.value)"/></td>
       <td><textarea style="min-height:36px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setExec('${e.id}','comment',this.value)">${esc(e.comment)}</textarea>${need?'<div class="hint" style="color:#ef4444">required</div>':''}</td>
-      <td>${((e.screens&&e.screens.length)||(e.failedSteps&&Object.keys(e.failedSteps).length))?`<button class="sm" title="View evidence" onclick="openEvidence('${e.id}')">📎${(e.screens&&e.screens.length)||''}</button> `:''}<button class="sm danger" onclick="delExec('${e.id}')">✕</button></td></tr>`;}).join("")}
+      <td>${((e.screens&&e.screens.length)||(e.failedSteps&&Object.keys(e.failedSteps).length))?`<button class="sm" title="View evidence" onclick="openEvidence('${e.id}')">📎${(e.screens&&e.screens.length)||''}</button> `:''}<button class="sm" title="Add tester(s) to this process" onclick="addTesterToExec('${e.id}')">＋👤</button> <button class="sm danger" onclick="delExec('${e.id}')">✕</button></td></tr>`;}).join("")}
     </tbody></table>`;
 }
 function openEvidence(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
