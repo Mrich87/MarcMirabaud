@@ -416,10 +416,11 @@ init();
 <\/script></body></html>`;
 }
 function applyAssignments(rows){
-  // Entity-aware merge: executions are keyed by (process, scenario, entity) within the active
-  // iteration, so several SPOC files (one per entity) build a cross-entity view of the same
-  // process/scenario instead of overwriting each other. New testers are created and tagged with
-  // their entity (country). Re-importing the same file just updates (idempotent, never blocking).
+  // Per-(process, scenario, entity, tester) merge within the active iteration. Each tester on a
+  // process/scenario is its own execution, so: several SPOC files (one per entity) build a
+  // cross-entity view; multiple testers on the same scenario coexist; and testers can be ADDED
+  // afterward without touching the others. New testers are created and tagged with their entity
+  // (country). Re-importing the same file just updates (idempotent, never blocking).
   let upd=0,newT=0,miss=0,cloned=0,created=0,removedN=0;
   const iter=activeIter();
   const findTester=(nm,ent)=>{ let t=S.testers.find(x=>x.name===nm);
@@ -427,7 +428,7 @@ function applyAssignments(rows){
     else if(ent&&!t.country){ t.country=ent; }   /* attach entity to an existing untagged tester */
     return t.id; };
   const isRem=r=>r.Remove===true||r.Remove==="true"||r.Remove==="yes";
-  const findExec=(proc,scen,ent)=>S.executions.find(x=>x.iterationId===iter.id&&x.process===proc&&x.scenario===scen&&(x.entity||"")===(ent||""));
+  const sameSP=(x,proc,scen)=>x.iterationId===iter.id&&String(x.process||"").trim()===proc&&String(x.scenario||"").trim()===scen;
   rows.slice().sort((a,b)=>(isRem(a)?1:0)-(isRem(b)?1:0)).forEach(r=>{
     const id=String(r.ExecId||"").trim();
     // a source execution (by ExecId / srcId / proc+scen) lets us inherit library link, steps, txnRef
@@ -437,37 +438,31 @@ function applyAssignments(rows){
     const scen=String(r.scenario||r.Scenario||(src&&src.scenario)||"").trim();
     if(!src&&(proc||scen)) src=S.executions.find(x=>x.process===proc&&x.scenario===scen);
     const ent=String(r.entity||r.Entity||(src&&src.entity)||"").trim();
+    const dom=String(r.domain||r.Domain||(src&&src.domain)||"").trim();
     const due=("DueDate" in r)?String(r.DueDate||"").trim():null;
-    if(isRem(r)){ const tgt=findExec(proc,scen,ent)||(src&&(src.entity||"")===ent?src:null);
-      if(tgt){ S.executions=S.executions.filter(x=>x.id!==tgt.id); removedN++; } return; }
+    if(isRem(r)){ const gone=S.executions.filter(x=>sameSP(x,proc,scen)&&(x.entity||"")===ent);
+      if(gone.length){ const ids=new Set(gone.map(x=>x.id)); S.executions=S.executions.filter(x=>!ids.has(x.id)); removedN+=gone.length; } return; }
     if(!proc&&!scen){ miss++; return; }
-    let e=findExec(proc,scen,ent);
-    if(!e && ent){ /* first entity claims an unassigned, blank-entity placeholder instead of leaving an orphan */
-      const ph=S.executions.find(x=>x.iterationId===iter.id&&x.process===proc&&x.scenario===scen&&!(x.entity||"").trim()&&!x.testerId);
-      if(ph){ ph.entity=ent; e=ph; }
-    }
-    if(!e){
-      const base=src||{};
-      e=Object.assign({},base,{id:uid(),iterationId:iter.id,
-        process:proc,scenario:scen,domain:String(r.domain||r.Domain||base.domain||"").trim(),
+    const mkExec=tid=>{ const base=src||{};
+      const e=Object.assign({},base,{id:uid(),iterationId:iter.id,process:proc,scenario:scen,domain:dom,
         libraryItemId:base.libraryItemId||null,steps:Array.isArray(base.steps)?base.steps.slice():[],
         txnRef:!!base.txnRef,txnRefValue:"",recurrence:base.recurrence||"",adhoc:base.adhoc||false,
-        entity:ent,testerId:"",status:"Not started",comment:"",failedSteps:{},screens:[],testDate:"",
+        entity:ent,testerId:tid||"",status:"Not started",comment:"",failedSteps:{},screens:[],testDate:"",
         updatedAt:new Date().toISOString()});
-      S.executions.push(e); created++;
-    }
-    if("Tester" in r){
-      const ids=String(r.Tester||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(nm=>findTester(nm,ent));
-      if(!ids.length){ e.testerId=""; }
-      else { e.testerId=ids[0];
-        for(let i=1;i<ids.length;i++){ const tid2=ids[i];
-          if(S.executions.some(x=>x.iterationId===iter.id&&(x.entity||"")===ent&&x.process===e.process&&x.scenario===e.scenario&&x.testerId===tid2)) continue;
-          const c=Object.assign({},e,{id:uid(),testerId:tid2,status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()});
-          if(due!=null) c.testDate=due; S.executions.push(c); cloned++;
-        }
-      }
-    }
-    if(due!=null) e.testDate=due; e.updatedAt=new Date().toISOString(); upd++;
+      S.executions.push(e); created++; return e; };
+    // a first assignment can reuse an unassigned placeholder (blank-entity, or already this entity)
+    const claimPh=tid=>{ const ph=S.executions.find(x=>sameSP(x,proc,scen)&&!x.testerId&&(!(x.entity||"").trim()||(x.entity||"")===ent));
+      if(ph){ ph.entity=ent; ph.testerId=tid||""; return ph; } return null; };
+    const ids = ("Tester" in r) ? String(r.Tester||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(nm=>findTester(nm,ent)) : null;
+    if(ids===null || ids.length===0){ // no tester provided -> keep/create one unassigned row so it still shows
+      let e=S.executions.find(x=>sameSP(x,proc,scen)&&(x.entity||"")===ent&&!x.testerId)||claimPh("")||mkExec("");
+      if(due!=null) e.testDate=due; e.updatedAt=new Date().toISOString(); upd++; return; }
+    ids.forEach((tid,idx)=>{
+      let e=S.executions.find(x=>sameSP(x,proc,scen)&&(x.entity||"")===ent&&x.testerId===tid);
+      if(!e) e=claimPh(tid);            // reuse an empty placeholder for the first tester
+      if(!e){ e=mkExec(tid); if(idx>0) cloned++; }
+      if(due!=null) e.testDate=due; e.updatedAt=new Date().toISOString(); upd++;
+    });
   });
   return {upd,newT,miss,cloned,created,removedN};
 }
