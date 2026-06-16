@@ -376,10 +376,9 @@ function render(){
     var entSel='<select class="ein">'+entOpts.map(function(c){return '<option'+(c===r.entity?' selected':'')+'>'+esc(c)+'</option>';}).join("")+'</select>';
     tr.innerHTML='<td class="pcell"><b>'+esc(r.process)+'</b>'+badges+stepTog+'</td><td class="pcell scen"'+(nSteps?' style="cursor:pointer" title="'+esc(T("stepsFollow"))+'"':'')+'>'+esc(r.scenario)+(nSteps?' <span class="steptoggle">'+(expanded[r.id]?'▾':'▸')+'</span>':'')+'</td><td>'+entSel+'</td>'+
       '<td><input class="tin" list="dl" value="'+esc(r.tester)+'" placeholder="'+esc(T("testerPh"))+'"'+(r.removed?' disabled':'')+'/></td>'+
-      '<td><input class="din" value="'+esc(r.due)+'" placeholder="'+esc(T("duePh"))+'"'+(r.removed?' disabled':'')+'/></td>'+
+      '<td class="duecell muted">'+esc(r.due||"—")+'</td>'+
       '<td style="white-space:nowrap"><button class="dupb" title="'+esc(T("dup"))+'" style="padding:4px 9px">⧉</button> <button class="remb" title="'+esc(r.isDup?T("delCopy"):(r.removed?T("restore"):T("remove")))+'" style="padding:4px 9px;background:'+(r.removed?'#22c55e':'#ef4444')+';color:#fff">'+(r.removed?'↺':'✕')+'</button></td>';
     var tin=tr.querySelector(".tin"); if(tin) tin.addEventListener("input",function(){rows[i].tester=this.value;autosave();updateProg();});
-    var din=tr.querySelector(".din"); if(din) din.addEventListener("input",function(){rows[i].due=this.value;autosave();});
     tr.querySelector(".ein").addEventListener("change",function(){rows[i].entity=this.value;autosave();});
     if(nSteps){ var togFn=function(){expanded[r.id]=!expanded[r.id];render();};
       var st=tr.querySelector(".pcell .steptoggle"); if(st) st.addEventListener("click",togFn);
