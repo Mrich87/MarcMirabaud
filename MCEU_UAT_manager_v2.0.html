@@ -352,14 +352,14 @@ select.ein{width:auto;min-width:88px}
 const DATA=${dataJson};
 const LSK="mceu_spoc_"+DATA.iterationId+"_"+DATA.scope;
 let lang=(function(){try{return localStorage.getItem("mceu_spoc_lang")||"fr";}catch(e){return "fr";}})();
-const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Identifie ton entité (en haut), puis affecte un ou plusieurs testeurs (séparés par ;) à chaque test. Déplie un test (▸ étapes) pour voir les étapes. Tu peux dupliquer un test (⧉) pour le rejouer/l'assigner à plusieurs, et retirer un scénario non pertinent (✕). Clique Enregistrer puis renvoie le .json au coordinateur.",hP:"PRC",hS:"Scénario",hE:"Entité",hT:"Testeur(s)",hD:"Date d'échéance",testerPh:"nom(s), séparés par ;",duePh:"ex. 2026-07-01",save:"⬇ Enregistrer (JSON)",saved:"enregistré ✓",assigned:"assignés",dup:"Dupliquer (rejouer / autre testeur)",delCopy:"Retirer cette copie",remove:"Marquer non pertinent (sera retiré)",restore:"Rétablir",copyTag:"copie",removedTag:"retiré",stepsN:"étapes ({n})",stepsFollow:"Étapes à suivre :",myEnt:"Mon entité :"},en:{title:"SPOC assignment sheet",intro:"Identify your entity (top), then assign one or more testers (separated by ;) to each test. Expand a test (▸ steps) to view the steps. You can duplicate a test (⧉) to replay/assign it to several people, and remove a non-relevant scenario (✕). Click Save and send the .json back to the coordinator.",hP:"PRC",hS:"Scenario",hE:"Entity",hT:"Tester(s)",hD:"Due date",testerPh:"name(s), separated by ;",duePh:"e.g. 2026-07-01",save:"⬇ Save (JSON)",saved:"saved ✓",assigned:"assigned",dup:"Duplicate (replay / another tester)",delCopy:"Remove this copy",remove:"Mark not relevant (will be removed)",restore:"Restore",copyTag:"copy",removedTag:"removed",stepsN:"steps ({n})",stepsFollow:"Steps to follow:",myEnt:"My entity:"}};
+const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Choisis ton entité (en haut) : elle est appliquée automatiquement à TOUS les scénarios. Affecte ensuite un ou plusieurs testeurs (séparés par ;) à chaque test — tu peux déplier un test (▸) pour voir les étapes, utile pour choisir le bon testeur. Tu peux dupliquer un test (⧉) pour le rejouer/l'assigner à plusieurs, et retirer un scénario non pertinent (✕). Clique Enregistrer puis renvoie le .json au coordinateur.",hP:"PRC",hS:"Scénario",hE:"Entité",hT:"Testeur(s)",hD:"Date d'échéance",testerPh:"nom(s), séparés par ;",duePh:"ex. 2026-07-01",save:"⬇ Enregistrer (JSON)",saved:"enregistré ✓",assigned:"assignés",dup:"Dupliquer (rejouer / autre testeur)",delCopy:"Retirer cette copie",remove:"Marquer non pertinent (sera retiré)",restore:"Rétablir",copyTag:"copie",removedTag:"retiré",stepsN:"étapes ({n})",stepsFollow:"Étapes à suivre :",myEnt:"Mon entité :"},en:{title:"SPOC assignment sheet",intro:"Pick your entity (top): it is applied automatically to ALL scenarios. Then assign one or more testers (separated by ;) to each test — expand a test (▸) to view the steps, handy to pick the right tester. You can duplicate a test (⧉) to replay/assign it to several people, and remove a non-relevant scenario (✕). Click Save and send the .json back to the coordinator.",hP:"PRC",hS:"Scenario",hE:"Entity",hT:"Tester(s)",hD:"Due date",testerPh:"name(s), separated by ;",duePh:"e.g. 2026-07-01",save:"⬇ Save (JSON)",saved:"saved ✓",assigned:"assigned",dup:"Duplicate (replay / another tester)",delCopy:"Remove this copy",remove:"Mark not relevant (will be removed)",restore:"Restore",copyTag:"copy",removedTag:"removed",stepsN:"steps ({n})",stepsFollow:"Steps to follow:",myEnt:"My entity:"}};
 function T(k,n){var v=(I18N[lang]||I18N.fr)[k]||k;return n==null?v:v.replace("{n}",n);}
 function setLang(l){lang=l;try{localStorage.setItem("mceu_spoc_lang",l);}catch(e){}applyLang();render();}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function stepTagsHtml(tags){return (tags||[]).map(function(x){return ' <span class="badge" style="margin-left:6px;background:#0ea5e933;color:#7dd3fc">'+esc(x)+'</span>';}).join("");}
 function stepTxt(s){return typeof s==="string"?s:((s&&s.t)||"");}
 let rows=[], expanded={}, myEnt="", sortDir=0;
-function setMyEnt(v){myEnt=v;try{localStorage.setItem("mceu_spoc_ent_"+DATA.iterationId,v);}catch(e){}}
+function setMyEnt(v){myEnt=v;try{localStorage.setItem("mceu_spoc_ent_"+DATA.iterationId,v);}catch(e){}rows.forEach(function(r){r.entity=v;});autosave();render();}
 function sortDue(){ sortDir = sortDir===1?-1:(sortDir===-1?0:1); render(); }
 function applyLang(){["ttl|title","intro|intro","hP|hP","hS|hS","hE|hE","hT|hT","btnSave|save","lblEnt|myEnt"].forEach(function(p){var a=p.split("|");document.getElementById(a[0]).textContent=T(a[1]);});document.getElementById("hD").innerHTML=T("hD")+' <span id="arD"></span>';document.getElementById("langSel").value=lang;}
 function render(){
@@ -407,6 +407,7 @@ function init(){
   if(sr.length){ DATA.rows.forEach(function(r){ if(!rows.some(function(x){return x.id===r.id;})) rows.push(Object.assign({},r)); }); }
   var savedEnt=null; try{savedEnt=localStorage.getItem("mceu_spoc_ent_"+DATA.iterationId);}catch(e){}
   myEnt = savedEnt || (DATA.entities.indexOf(DATA.scope)>=0?DATA.scope:(DATA.entities[0]||""));
+  if(!sr.length && myEnt){ rows.forEach(function(r){r.entity=myEnt;}); }  /* fresh load: apply my entity to every scenario */
   document.getElementById("myEnt").innerHTML=DATA.entities.map(function(c){return '<option'+(c===myEnt?' selected':'')+'>'+esc(c)+'</option>';}).join("");
   document.getElementById("dl").innerHTML=DATA.testerNames.map(function(n){return '<option value="'+esc(n)+'"></option>';}).join("");
   document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · "+DATA.scope;
@@ -416,33 +417,52 @@ init();
 <\/script></body></html>`;
 }
 function applyAssignments(rows){
+  // Entity-aware merge: executions are keyed by (process, scenario, entity) within the active
+  // iteration, so several SPOC files (one per entity) build a cross-entity view of the same
+  // process/scenario instead of overwriting each other. New testers are created and tagged with
+  // their entity (country). Re-importing the same file just updates (idempotent, never blocking).
   let upd=0,newT=0,miss=0,cloned=0,created=0,removedN=0;
-  const findTester=nm=>{ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newT++;} return t.id; };
+  const iter=activeIter();
+  const findTester=(nm,ent)=>{ let t=S.testers.find(x=>x.name===nm);
+    if(!t){ t={id:uid(),name:nm,email:"",country:ent||"",dept:""}; S.testers.push(t); newT++; }
+    else if(ent&&!t.country){ t.country=ent; }   /* attach entity to an existing untagged tester */
+    return t.id; };
   const isRem=r=>r.Remove===true||r.Remove==="true"||r.Remove==="yes";
+  const findExec=(proc,scen,ent)=>S.executions.find(x=>x.iterationId===iter.id&&x.process===proc&&x.scenario===scen&&(x.entity||"")===(ent||""));
   rows.slice().sort((a,b)=>(isRem(a)?1:0)-(isRem(b)?1:0)).forEach(r=>{
     const id=String(r.ExecId||"").trim();
-    let e=id?S.executions.find(x=>x.id===id):null;
-    if(r.Remove===true||r.Remove==="true"||r.Remove==="yes"){ if(e){ S.executions=S.executions.filter(x=>x.id!==e.id); removedN++; } return; }
+    // a source execution (by ExecId / srcId / proc+scen) lets us inherit library link, steps, txnRef
+    let src = id?S.executions.find(x=>x.id===id):null;
+    if(!src&&r.srcId) src=S.executions.find(x=>x.id===String(r.srcId));
+    const proc=String(r.process||r.PRC||(src&&src.process)||"").trim();
+    const scen=String(r.scenario||r.Scenario||(src&&src.scenario)||"").trim();
+    if(!src&&(proc||scen)) src=S.executions.find(x=>x.process===proc&&x.scenario===scen);
+    const ent=String(r.entity||r.Entity||(src&&src.entity)||"").trim();
+    const due=("DueDate" in r)?String(r.DueDate||"").trim():null;
+    if(isRem(r)){ const tgt=findExec(proc,scen,ent)||(src&&(src.entity||"")===ent?src:null);
+      if(tgt){ S.executions=S.executions.filter(x=>x.id!==tgt.id); removedN++; } return; }
+    if(!proc&&!scen){ miss++; return; }
+    let e=findExec(proc,scen,ent);
+    if(!e && ent){ /* first entity claims an unassigned, blank-entity placeholder instead of leaving an orphan */
+      const ph=S.executions.find(x=>x.iterationId===iter.id&&x.process===proc&&x.scenario===scen&&!(x.entity||"").trim()&&!x.testerId);
+      if(ph){ ph.entity=ent; e=ph; }
+    }
     if(!e){
-      // a SPOC-duplicated / new row → create an execution (cloned from its source when known)
-      const proc=String(r.process||r.PRC||"").trim(), scen=String(r.scenario||r.Scenario||"").trim();
-      let src=r.srcId?S.executions.find(x=>x.id===String(r.srcId)):null;
-      if(!src&&(proc||scen)) src=S.executions.find(x=>x.process===proc&&x.scenario===scen);
-      if(!proc&&!scen&&!src){ miss++; return; }
-      const ent=String(r.entity||r.Entity||(src&&src.entity)||"").trim();
-      const dom=String(r.domain||r.Domain||(src&&src.domain)||"").trim();
-      e=src?Object.assign({},src,{id:id||uid(),testerId:"",status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],testDate:"",updatedAt:new Date().toISOString()})
-            :{id:id||uid(),iterationId:activeIter().id,libraryItemId:null,process:proc,scenario:scen,domain:dom,steps:[],txnRef:false,txnRefValue:"",entity:ent,testerId:"",status:"Not started",comment:"",recurrence:"",testDate:"",failedSteps:{},screens:[],adhoc:false,updatedAt:new Date().toISOString()};
+      const base=src||{};
+      e=Object.assign({},base,{id:uid(),iterationId:iter.id,
+        process:proc,scenario:scen,domain:String(r.domain||r.Domain||base.domain||"").trim(),
+        libraryItemId:base.libraryItemId||null,steps:Array.isArray(base.steps)?base.steps.slice():[],
+        txnRef:!!base.txnRef,txnRefValue:"",recurrence:base.recurrence||"",adhoc:base.adhoc||false,
+        entity:ent,testerId:"",status:"Not started",comment:"",failedSteps:{},screens:[],testDate:"",
+        updatedAt:new Date().toISOString()});
       S.executions.push(e); created++;
     }
-    const entv=String(r.entity||r.Entity||"").trim(); if(entv) e.entity=entv;
-    const due=("DueDate" in r)?String(r.DueDate||"").trim():null;
     if("Tester" in r){
-      const ids=String(r.Tester||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(findTester);
+      const ids=String(r.Tester||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(nm=>findTester(nm,ent));
       if(!ids.length){ e.testerId=""; }
       else { e.testerId=ids[0];
         for(let i=1;i<ids.length;i++){ const tid2=ids[i];
-          if(S.executions.some(x=>x.iterationId===e.iterationId&&x.entity===e.entity&&x.process===e.process&&x.scenario===e.scenario&&x.testerId===tid2)) continue;
+          if(S.executions.some(x=>x.iterationId===iter.id&&(x.entity||"")===ent&&x.process===e.process&&x.scenario===e.scenario&&x.testerId===tid2)) continue;
           const c=Object.assign({},e,{id:uid(),testerId:tid2,status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()});
           if(due!=null) c.testDate=due; S.executions.push(c); cloned++;
         }
