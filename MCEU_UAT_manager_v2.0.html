@@ -652,7 +652,13 @@ function toggleTrkSel(id,on){ if(on)trkSel.add(id); else trkSel.delete(id);
   const bb=document.getElementById("bulkBar"); if(bb){ bb.style.display=trkSel.size?"flex":"none"; const c=document.getElementById("bulkCount"); if(c)c.textContent=trkSel.size; } }
 function trkSelAllPage(on){ trkPageIds.forEach(id=> on?trkSel.add(id):trkSel.delete(id)); renderCampaign(); }
 function bulkClear(){ trkSel.clear(); renderCampaign(); }
-function bulkAssign(){ if(!trkSel.size)return; const v=($("#bulkTester")||{}).value||"";
+function findOrCreateTester(name){ name=(name||"").trim(); if(!name)return "";
+  let t=S.testers.find(x=>x.name===name); if(!t){t={id:uid(),name,email:"",country:"",dept:""};S.testers.push(t);} return t.id; }
+function setExecTester(id,name){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  e.testerId=findOrCreateTester(name); e.updatedAt=new Date().toISOString(); persist(); }
+function bulkAssign(){ if(!trkSel.size)return; const nm=(($("#bulkTester")||{}).value||"").trim();
+  if(!nm){ alert("Type a tester name first."); return; }
+  const v=findOrCreateTester(nm);
   S.executions.forEach(e=>{ if(trkSel.has(e.id)){ e.testerId=v; e.updatedAt=new Date().toISOString(); } }); persist(); }
 function bulkSetDate(){ if(!trkSel.size)return; const v=($("#bulkDate")||{}).value||"";
   S.executions.forEach(e=>{ if(trkSel.has(e.id)){ e.testDate=v; e.updatedAt=new Date().toISOString(); } }); persist(); }
@@ -760,17 +766,18 @@ function renderTrackingTable(){
   const sh=(label,field,extra)=>`<th style="cursor:pointer;user-select:none;${extra||''}" onclick="setTrkSort('${field}')">${label}${sa(field)}</th>`;
   const bulk=`<div id="bulkBar" class="card" style="display:${trkSel.size?'flex':'none'};gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:10px 12px">
     <b><span id="bulkCount">${trkSel.size}</span> selected</b>
-    <span class="muted">Tester:</span>${tCombo('bulkTester','',"",{hidden:'bulkTester',emptyLabel:'— choose —',width:'180px'})}<button class="sm" onclick="bulkAssign()">Assign</button>
+    <span class="muted">Tester:</span><input id="bulkTester" list="testerDL" placeholder="name (new ok)" style="width:180px"/><button class="sm" onclick="bulkAssign()">Assign</button>
     <span class="muted" style="margin-left:8px">Due date:</span><input id="bulkDate" placeholder="e.g. 2026-06-20 / W25" style="width:150px"/><button class="sm" onclick="bulkSetDate()">Apply</button>
     <div class="spacer"></div><button class="sm danger" onclick="bulkDelSel()">Delete</button><button class="sm" onclick="bulkClear()">Clear</button></div>`;
   const pager=`<div class="toolbar" style="margin-bottom:8px"><span class="muted">${total} execution(s)${pages>1?` · page ${trkPage+1}/${pages} (${a0}–${b0})`:''}</span><div class="spacer"></div>${pages>1?`<button class="sm" onclick="trkGo(-1)">◀ Prev</button><button class="sm" onclick="trkGo(1)">Next ▶</button>`:''}</div>`;
-  return bulk+pager+`<table><thead><tr><th style="width:26px"><input type="checkbox" ${allOnPage?'checked':''} title="Select page" onchange="trkSelAllPage(this.checked)"></th>${sh('PRC','process')}${sh('Scenario','scenario')}${sh('Entity','entity')}${sh('Tester','tester')}${sh('Status','status','width:130px')}${sh('Execution due date','testDate','width:150px')}<th>Business comment</th><th></th></tr></thead><tbody>
+  const tdl=`<datalist id="testerDL">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>`<option value="${esc(t.name)}"></option>`).join("")}</datalist>`;
+  return tdl+bulk+pager+`<table><thead><tr><th style="width:26px"><input type="checkbox" ${allOnPage?'checked':''} title="Select page" onchange="trkSelAllPage(this.checked)"></th>${sh('PRC','process')}${sh('Scenario','scenario')}${sh('Entity','entity')}${sh('Tester','tester')}${sh('Status','status','width:130px')}${sh('Execution due date','testDate','width:150px')}<th>Business comment</th><th></th></tr></thead><tbody>
     ${pageEx.map(e=>{const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.comment;return `<tr>
       <td><input type="checkbox" class="trkchk" ${trkSel.has(e.id)?'checked':''} onchange="toggleTrkSel('${e.id}',this.checked)"></td>
       <td>${esc(e.process)}${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td>
       <td><textarea style="min-height:36px" title="Edit the scenario text — it is used as-is in the generated tester HTML" oninput="setExec('${e.id}','scenario',this.value)">${esc(e.scenario)}</textarea></td>
       <td><select onchange="setExec('${e.id}','entity',this.value)">${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
-      <td>${tCombo('row_'+e.id,e.testerId,"setExec('"+e.id+"','testerId',v)",{emptyLabel:'—',width:'100%'})}</td>
+      <td><input list="testerDL" value="${esc((tester(e.testerId)||{}).name||'')}" placeholder="name (new ok)" title="Type a name — a new tester is created automatically" onchange="setExecTester('${e.id}',this.value)" style="width:100%"/></td>
       <td><select onchange="setExec('${e.id}','status',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
       <td><input type="text" value="${esc(e.testDate||'')}" placeholder="e.g. 2026-06-10 / W24 / TBD" title="Execution due date — free text, set by coordinator, read-only for the tester" onchange="setExec('${e.id}','testDate',this.value)"/></td>
       <td><textarea style="min-height:36px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setExec('${e.id}','comment',this.value)">${esc(e.comment)}</textarea>${need?'<div class="hint" style="color:#ef4444">required</div>':''}</td>
