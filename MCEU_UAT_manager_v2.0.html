@@ -476,13 +476,38 @@ function importAssignments(input){
   };
   reader.readAsArrayBuffer(f);
 }
+const spocAmbEnt=v=>{ const s=String(v||"").trim().toUpperCase(); return !s||s==="ALL"; };
 function importSpocJSON(input){
   const f=input.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_SPOC_ASSIGNMENTS"){ alert("Not a SPOC assignment file."); return; }
-    const res=applyAssignments(p.rows||[]); renderAll(); save();
-    alert(`SPOC assignments imported: ${res.upd} updated, ${res.created} new (duplicated), ${res.cloned} multi-tester, ${res.newT} new tester(s), ${res.removedN} removed`+(res.miss?`, ${res.miss} skipped`:``)+`.`);
+    const rows=p.rows||[];
+    const need=rows.some(x=>spocAmbEnt(x.entity||x.Entity));          // some lines carry no usable entity
+    const scope=String(p.scope||"").trim();
+    const scopeOk=scope&&S.config.entities.some(en=>en.code===scope); // file generated for a single real entity
+    if(need&&scopeOk){ finishSpocImport(rows,scope); return; }        // safety net: auto-fall back to the file scope
+    if(need){ promptSpocEntity(p,rows); return; }                     // still ambiguous -> ask (with a do-nothing way out)
+    finishSpocImport(rows,"");                                        // every line already has an entity
   }catch(err){ alert("Invalid file."); } };
   r.readAsText(f);
+}
+function promptSpocEntity(p,rows){
+  const n=rows.filter(x=>spocAmbEnt(x.entity||x.Entity)).length;
+  window.__spocPending={rows};
+  modal(`<h2>Which entity is this file for?</h2>
+    <p class="hint">${n} line(s) in this SPOC file have no entity${p.scope?` (file scope: <b>${esc(p.scope)}</b>)`:''}. Pick the entity to attach to those lines — or leave them as they are, or do nothing.</p>
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin:10px 0">
+      ${S.config.entities.map(en=>`<button class="primary" onclick="resolveSpocEntity('${en.code}')">${esc(en.label||en.code)}</button>`).join("")}
+    </div>
+    <div class="toolbar" style="margin-top:14px"><button onclick="resolveSpocEntity('__asis')">Leave as-is (import unchanged)</button><div class="spacer"></div><button onclick="resolveSpocEntity('__cancel')">Cancel — do nothing</button></div>`);
+}
+function resolveSpocEntity(choice){ const pend=window.__spocPending; closeModal(); window.__spocPending=null;
+  if(!pend||choice==="__cancel") return;                              // do nothing: no import, no change
+  finishSpocImport(pend.rows, choice==="__asis"?"":choice);
+}
+function finishSpocImport(rows,forced){
+  const rr=forced?rows.map(r=>spocAmbEnt(r.entity||r.Entity)?Object.assign({},r,{entity:forced,Entity:forced}):r):rows;
+  const res=applyAssignments(rr); renderAll(); save();
+  alert(`SPOC assignments imported: ${res.upd} updated, ${res.created} new (duplicated), ${res.cloned} multi-tester, ${res.newT} new tester(s), ${res.removedN} removed`+(res.miss?`, ${res.miss} skipped`:``)+(forced?`. Entity "${forced}" applied to lines that had none.`:``)+`.`);
 }
 function renderDashboard(){
   const iter=activeIter(); const ex=iterExecs(); const a=aggregate(ex);
