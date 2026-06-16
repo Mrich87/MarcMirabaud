@@ -616,7 +616,7 @@ function importDevops(input){
         if(!seen.has(key)){ updated++; seen.add(key); }
         if(domain) c.domain=domain;
         c.defaultTesterIds=c.defaultTesterIds||[]; tIds.forEach(id=>{ if(!c.defaultTesterIds.includes(id)) c.defaultTesterIds.push(id); });
-        if(steps!==null){ c.steps=steps; if(steps.length)stepsSet++; }
+        if(steps&&steps.length){ c.steps=steps; stepsSet++; }   /* never wipe steps from an empty/absent Steps column */
         if(txn!==null) c.txnRef=txn;
       } else {
         c={id:uid(),order:++maxO,domain,process,scenario,defaultTesterIds:tIds,notes:"",steps:steps||[],txnRef:txn||false};
