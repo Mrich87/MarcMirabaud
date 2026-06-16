@@ -84,6 +84,7 @@
   .steplist li{margin:2px 0}
   .steprow>td{background:var(--chip)}
   .reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+  .steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
   .tpick{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer}
   .tpick:hover{background:rgba(255,255,255,.04)}
   .tlist{max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;margin-top:4px}
@@ -171,6 +172,12 @@ function persist(){ save(); renderTab(currentTab); }
 /* helpers */
 const $ = sel => document.querySelector(sel);
 const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+/* Steps may be plain strings OR structured objects {text, stream, app}. These helpers
+   read either form so the structure (stream/app) is preserved and displayed. */
+function stepText(s){ return typeof s==="string" ? s : ((s&&s.text)||""); }
+function stepTags(s){ if(!s||typeof s==="string") return []; return [s.stream,s.app].filter(Boolean); }
+function stepTagsHTML(s){ return stepTags(s).map(x=>' <span class="steptag">'+esc(x)+'</span>').join(""); }
+function normSteps(arr){ return (arr||[]).map(s=>({t:stepText(s),tags:stepTags(s)})); }
 const statusMeta = v => S.config.statuses.find(x=>x.value===v) || {value:v,color:"#64748b",requiresComment:false};
 const entityMeta = c => S.config.entities.find(x=>x.code===c) || {code:c,label:c,color:"#64748b"};
 const tester = id => S.testers.find(x=>x.id===id);
@@ -309,7 +316,7 @@ function genSpocPage(){
     entities:S.config.entities.map(en=>en.code),
     testerNames:S.testers.map(t=>t.name).filter(Boolean).sort((a,b)=>a.localeCompare(b)),
     rows:ex.map(e=>({id:e.id,process:e.process||"",scenario:e.scenario||"",entity:e.entity||"",domain:e.domain||"",tester:(tester(e.testerId)||{}).name||"",due:e.testDate||"",
-      steps:(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]))}))};
+      steps:normSteps(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]))}))};
   download(`MCEU_SPOC_${slug(iter.name)}_${scope}.html`, buildSpocHTML(payload), "text/html");
 }
 function buildSpocHTML(payload){
@@ -349,6 +356,8 @@ const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Identifie ton entité 
 function T(k,n){var v=(I18N[lang]||I18N.fr)[k]||k;return n==null?v:v.replace("{n}",n);}
 function setLang(l){lang=l;try{localStorage.setItem("mceu_spoc_lang",l);}catch(e){}applyLang();render();}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function stepTagsHtml(tags){return (tags||[]).map(function(x){return ' <span class="badge" style="margin-left:6px;background:#0ea5e933;color:#7dd3fc">'+esc(x)+'</span>';}).join("");}
+function stepTxt(s){return typeof s==="string"?s:((s&&s.t)||"");}
 let rows=[], expanded={}, myEnt="", sortDir=0;
 function setMyEnt(v){myEnt=v;try{localStorage.setItem("mceu_spoc_ent_"+DATA.iterationId,v);}catch(e){}}
 function sortDue(){ sortDir = sortDir===1?-1:(sortDir===-1?0:1); render(); }
@@ -379,7 +388,7 @@ function render(){
     tr.querySelector(".remb").addEventListener("click",function(){removeRow(i);});
     tb.appendChild(tr);
     if(nSteps&&expanded[r.id]){ var sr2=document.createElement("tr"); sr2.className="steprow";
-      sr2.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+r.steps.map(function(s){return '<li>'+esc(s)+'</li>';}).join("")+'</ol></td>';
+      sr2.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+r.steps.map(function(s){return '<li>'+esc(stepTxt(s))+stepTagsHtml(s&&s.tags)+'</li>';}).join("")+'</ol></td>';
       tb.appendChild(sr2); }
   });
   var ar=document.getElementById("arD"); if(ar) ar.textContent=sortDir===1?"▲":sortDir===-1?"▼":"";
@@ -545,7 +554,7 @@ function renderLibrary(){
         <td>${esc(c.domain)}</td>
         <td class="muted">${esc(testerNames(libTesterIds(c))||"—")}</td>
         <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button></td>
-      </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(s)}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
+      </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(stepText(s))}${stepTagsHTML(s)}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
       </tbody>
     </table>`}`;
 }
@@ -570,7 +579,7 @@ function editLibItem(id){ const c=libById(id);
       </div>
       <div class="field"><label>Order</label><input type="number" id="l_order" value="${c.order||0}"/></div>
     </div>
-    <div class="field" style="margin-top:8px"><label>Steps to follow (one per line)</label><textarea id="l_steps" style="min-height:96px" placeholder="Step 1&#10;Step 2&#10;…">${esc((c.steps||[]).join("\n"))}</textarea><div class="hint">Pre-filled by the coordinator; the tester can expand the test case to view them.</div></div>
+    <div class="field" style="margin-top:8px"><label>Steps to follow (one per line)</label><textarea id="l_steps" style="min-height:96px" placeholder="Step 1&#10;Step 2&#10;…">${esc((c.steps||[]).map(stepText).join("\n"))}</textarea><div class="hint">Pre-filled by the coordinator; the tester can expand the test case to view them. Stream/app tags (if any) are kept when you edit the text in place.</div></div>
     <div class="field" style="margin-top:8px"><label class="pill" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;width:fit-content"><input type="checkbox" id="l_txn" ${c.txnRef?'checked':''}/> Require a <b>transaction reference</b> (opens a reference field for the tester)</label></div>
     <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="l_notes">${esc(c.notes||"")}</textarea></div>
     <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delLibItem('${c.id}')">Delete</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveLibItem('${c.id}')">Save</button></div>`);
@@ -581,7 +590,8 @@ function saveLibItem(id){ const c=libById(id);
   c.process=$("#l_proc").value;c.domain=$("#l_dom").value;c.scenario=$("#l_scen").value;
   c.defaultTesterIds=[...document.querySelectorAll("#l_tlist .ltchk:checked")].map(x=>x.value); delete c.defaultTesterId;
   c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;
-  c.steps=$("#l_steps").value.split("\n").map(x=>x.trim()).filter(Boolean);
+  { const _old=(c.steps||[]); c.steps=$("#l_steps").value.split("\n").map(x=>x.trim()).filter(Boolean)
+      .map((t,i)=>{ const o=_old[i]; return (o&&typeof o==="object") ? Object.assign({},o,{text:t}) : t; }); }
   c.txnRef=$("#l_txn").checked;
   closeModal(); persist(); }
 function delLibItem(id){ if(!confirm("Delete this definition?"))return; S.library=S.library.filter(c=>String(c.id)!==String(id)); closeModal(); persist(); }
@@ -785,12 +795,12 @@ function renderTrackingTable(){
     </tbody></table>`;
 }
 function openEvidence(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
-  const steps=e.steps||[]; const fs=e.failedSteps||{};
-  const flagged=Object.keys(fs).filter(k=>fs[k]).map(k=>steps[k]||("step "+(parseInt(k)+1))).filter(Boolean);
+  const steps=(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[])); const fs=e.failedSteps||{};
+  const flagged=Object.keys(fs).filter(k=>fs[k]).map(k=>steps[k]!=null?steps[k]:("step "+(parseInt(k)+1))).filter(Boolean);
   const shots=(e.screens||[]).map(sc=>`<a href="${sc.data}" target="_blank" title="${esc(sc.name||'')}"><img src="${sc.data}" style="max-height:160px;border:1px solid var(--line);border-radius:8px"/></a>`).join(" ");
   modal(`<h2>Evidence — ${esc(e.process)}</h2>
     <p class="hint">${esc(e.scenario)} · ${badge(e.entity,entityMeta(e.entity).color)} · ${esc(testerName(e.testerId))} · ${badge(e.status,statusMeta(e.status).color)}</p>
-    <div class="field"><label>Problematic step(s)</label>${flagged.length?`<ol class="steplist">${flagged.map(s=>`<li>${esc(s)}</li>`).join("")}</ol>`:'<span class="muted">none flagged</span>'}</div>
+    <div class="field"><label>Problematic step(s)</label>${flagged.length?`<ol class="steplist">${flagged.map(s=>`<li>${esc(stepText(s))}${stepTagsHTML(s)}</li>`).join("")}</ol>`:'<span class="muted">none flagged</span>'}</div>
     <div class="field" style="margin-top:8px"><label>Screenshots (${(e.screens||[]).length})</label><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">${shots||'<span class="muted">none</span>'}</div></div>
     <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
 }
@@ -853,7 +863,7 @@ function slug(s){ return String(s||"").replace(/\W+/g,'_'); }
 function execToTest(e){ return {id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||"",
   txnRef:(e.txnRef!=null?!!e.txnRef:!!((libById(e.libraryItemId)||{}).txnRef)),txnRefValue:e.txnRefValue||"",
   failedSteps:e.failedSteps||{},screens:e.screens||[],
-  steps:(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[])).slice()}; }
+  steps:normSteps(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]))}; }
 function basePayload(iter,testers){ return {campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,
   entities:S.config.entities.map(x=>x.code),statuses:S.config.statuses,links:(S.config.links||[]).filter(l=>l&&(l.label||l.url)),testers}; }
 function genTesterPage(){
@@ -899,6 +909,7 @@ ol.steps{margin:4px 0;padding-left:22px}
 ol.steps li{margin:3px 0}
 .duedate{white-space:nowrap}
 .reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
 .txnlbl{font-size:12px;color:#94a3b8;margin-top:4px;display:inline-block}
 input.txnin{margin-top:3px;width:260px;max-width:100%}
 input.txnin.req{border-color:#ef4444}
@@ -980,6 +991,8 @@ function applyLang(){
   const ls=document.getElementById("langSel"); if(ls) ls.value=lang;
 }
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function stepTxt(s){return typeof s==="string"?s:((s&&s.t)||"");}
+function stepTagsHtml(tags){return (tags||[]).map(function(x){return ' <span class="steptag">'+esc(x)+'</span>';}).join("");}
 function nat(s){return String(s||"").toLowerCase().replace(/\\d+/g,m=>m.padStart(10,"0"));}
 function lsk(id){return "mceu_tester_"+DATA.iterationId+"_"+id;}
 function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.requiresComment;}
@@ -1051,12 +1064,12 @@ function rowEl(t,i,isAd){
   return tr;
 }
 function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow";
-  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ol></td>';
+  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(stepTxt(s))+stepTagsHtml(s&&s.tags)+'</li>').join("")+'</ol></td>';
   return tr; }
 function issueRowEl(t,isAd){ const tr=document.createElement("tr"); tr.className="steprow";
   t.failedSteps=t.failedSteps||{}; t.screens=t.screens||[];
   const steps=(!isAd && t.steps)?t.steps:[];
-  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">'+esc(T("tickSteps"))+'</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(s)+'</label>').join("")):'<div class="muted" style="font-size:12px">'+esc(T("noSteps"))+'</div>';
+  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">'+esc(T("tickSteps"))+'</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(stepTxt(s))+stepTagsHtml(s&&s.tags)+'</label>').join("")):'<div class="muted" style="font-size:12px">'+esc(T("noSteps"))+'</div>';
   const shots=t.screens.map((sc,si)=>'<span class="shot"><img src="'+sc.data+'" alt=""/><button class="rmshot" data-si="'+si+'" title="'+esc(T("remove"))+'">✕</button></span>').join("");
   tr.innerHTML='<td></td><td colspan="5"><div class="issuebox">'+stepsHtml+
     '<div class="muted" style="font-size:12px;margin:8px 0 2px">'+esc(T("evidence"))+'</div>'+
@@ -1209,7 +1222,7 @@ function exportLibrary(){
     const r={};
     r[m.domain]=c.domain||""; r[m.process]=c.process||""; r[m.scenario]=c.scenario||"";
     r[m.tester]=libTesterIds(c).map(id=>{const t=tester(id);return t?t.name:null;}).filter(Boolean).join("; ");
-    r.Steps=(c.steps||[]).join("\n"); r.TxnRef=c.txnRef?"yes":""; r.Order=c.order||0; r.Notes=c.notes||"";
+    r.Steps=(c.steps||[]).map(stepText).join("\n"); r.TxnRef=c.txnRef?"yes":""; r.Order=c.order||0; r.Notes=c.notes||"";
     return r; });
   const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{[m.process]:"",[m.scenario]:""}]);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"LUX");
