@@ -995,7 +995,7 @@ th.sortable{cursor:pointer;user-select:none}
 .wopt{padding:7px 10px;cursor:pointer;white-space:nowrap}
 .wopt:hover{background:#0ea5e9;color:#06283b}
 </style></head><body>
-<header><h1 id="sheetTitle">UAT Test Sheet</h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option></select><button id="btnSaveTop" onclick="saveJSON()" style="padding:6px 12px"></button></header>
+<header><h1 id="sheetTitle">UAT Test Sheet</h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option><option value="es">ES</option></select><button id="btnSaveTop" onclick="saveJSON()" style="padding:6px 12px"></button></header>
 <main>
   <div class="whoami" id="whoamiBar"><label class="muted" id="lblWho" for="whoami"></label><div class="wcombo"><input id="whoami" autocomplete="off"/><div class="wlist" id="whoamiList"></div></div></div>
   <div class="links" id="links"></div>
@@ -1032,7 +1032,17 @@ const I18N={
    evidence:"Evidence — drag & drop screenshot(s) here, or click to browse:",dropHere:"Drop screenshot here / click to browse",
    txnRef:"Transaction reference",required:"required",txnPh:"enter transaction reference…",cReq:"required…",cOpt:"optional",
    done:"done",saved:"saved ✓",full:"⚠ storage full (screenshots too large) — save the JSON",pickFirst:"Select your name first.",noRes:"no match",remove:"remove",
-   cNoCom:"{n} test(s) Failed/Blocked without a comment. Save anyway?",cNoTxn:"{n} executed test(s) require a transaction reference that is still empty. Save anyway?"}
+   cNoCom:"{n} test(s) Failed/Blocked without a comment. Save anyway?",cNoTxn:"{n} executed test(s) require a transaction reference that is still empty. Save anyway?"},
+ es:{title:"Hoja de pruebas UAT",selectName:"Selecciona tu nombre:",namePh:"escribe tu nombre…",
+   intro:"Indica un <b>Estado</b> para cada prueba. Un comentario es <b>obligatorio</b> para Failed/Blocked. Despliega una prueba (▸&nbsp;pasos) para ver los pasos a seguir; introduce la <b>referencia de transacción</b> cuando se solicite. Para una prueba <b>Failed/Blocked</b>, marca el paso problemático y arrastra y suelta una o varias <b>capturas de pantalla</b> como prueba. Tu trabajo se guarda automáticamente; haz clic en <b>Guardar mis resultados (JSON)</b> y envía el archivo al coordinador.",
+   proc:"Proceso",allShort:"— Todos —",allProc:"— Todos los procesos ({n}) —",shown:"mostrados",
+   hPRC:"PRC",hScn:"Escenario",hEnt:"Entidad",hSt:"Estado",hDue:"Fecha límite de ejecución",hCom:"Comentario",
+   addAdhoc:"+ Añadir prueba ad-hoc",save:"⬇ Guardar mis resultados (JSON)",links:"Enlaces útiles:",
+   stepsN:"pasos ({n})",stepsFollow:"Pasos a seguir:",tickSteps:"Marca el/los paso(s) con error:",noSteps:"No hay pasos predefinidos que señalar.",
+   evidence:"Prueba — arrastra y suelta una o varias capturas aquí, o haz clic para explorar:",dropHere:"Suelta una captura aquí / haz clic para explorar",
+   txnRef:"Referencia de transacción",required:"obligatorio",txnPh:"introduce la referencia de transacción…",cReq:"obligatorio…",cOpt:"opcional",
+   done:"hechos",saved:"guardado ✓",full:"⚠ almacenamiento lleno (capturas demasiado grandes) — guarda el JSON",pickFirst:"Selecciona primero tu nombre.",noRes:"sin coincidencias",remove:"quitar",
+   cNoCom:"{n} prueba(s) Failed/Blocked sin comentario. ¿Guardar de todos modos?",cNoTxn:"{n} prueba(s) ejecutada(s) requieren una referencia de transacción aún vacía. ¿Guardar de todos modos?"}
 };
 let lang=(function(){try{return localStorage.getItem("mceu_tester_lang")||"fr";}catch(e){return "fr";}})();
 function T(k,n){let v=(I18N[lang]||I18N.fr)[k]||k; return n==null?v:v.replace("{n}",n);}
