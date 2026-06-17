@@ -453,7 +453,7 @@ function applyAssignments(rows){
     // a first assignment can reuse an unassigned placeholder (blank-entity, or already this entity)
     const claimPh=tid=>{ const ph=S.executions.find(x=>sameSP(x,proc,scen)&&!x.testerId&&(!(x.entity||"").trim()||(x.entity||"")===ent));
       if(ph){ ph.entity=ent; ph.testerId=tid||""; return ph; } return null; };
-    const ids = ("Tester" in r) ? String(r.Tester||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(nm=>findTester(nm,ent)) : null;
+    const ids = ("Tester" in r) ? String(r.Tester||"").split(/[;\n]/).map(x=>x.trim()).filter(Boolean).map(nm=>findTester(nm,ent)) : null;
     if(ids===null || ids.length===0){ // no tester provided -> keep/create one unassigned row so it still shows
       let e=S.executions.find(x=>sameSP(x,proc,scen)&&(x.entity||"")===ent&&!x.testerId)||claimPh("")||mkExec("");
       if(due!=null) e.testDate=due; e.updatedAt=new Date().toISOString(); upd++; return; }
@@ -655,7 +655,7 @@ function importDevops(input){
       const scenario=(r[m.scenario]||"").toString().trim();
       if(!process&&!scenario) return;
       const key=process+"||"+scenario;
-      const tnames=String(r[m.tester]||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+      const tnames=String(r[m.tester]||"").split(/[;\n]/).map(x=>x.trim()).filter(Boolean);
       const tIds=tnames.map(nm=>{ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newTesters++;} return t.id; });
       const steps=hasSteps?String(r.Steps||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean):null;
       const txn=hasTxn?/^(y|yes|true|1|x|oui)$/i.test(String(r.TxnRef||"").trim()):null;
@@ -714,7 +714,7 @@ function addTesterToExec(id){ const e=S.executions.find(x=>x.id===id); if(!e)ret
     <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="confirmAddTester('${e.id}')">Add</button></div>`);
 }
 function confirmAddTester(id){ const e=S.executions.find(x=>x.id===id); if(!e){ closeModal(); return; }
-  const names=String(($("#addt_names")||{}).value||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+  const names=String(($("#addt_names")||{}).value||"").split(/[;\n]/).map(x=>x.trim()).filter(Boolean);
   if(!names.length){ closeModal(); return; }
   const idx=S.executions.indexOf(e); let off=1, added=0;
   names.forEach(nm=>{ const tid=findOrCreateTester(nm); if(!tid) return;
