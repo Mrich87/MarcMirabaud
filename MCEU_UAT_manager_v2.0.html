@@ -85,6 +85,7 @@
   .steprow>td{background:var(--chip)}
   .reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
   .steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+  .steptag.app{background:#f59e0b22;color:#fcd34d;border-color:#f59e0b}
   .tpick{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer}
   .tpick:hover{background:rgba(255,255,255,.04)}
   .tlist{max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;margin-top:4px}
@@ -176,8 +177,8 @@ const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g, c=>({"&":"&amp;","<":
    read either form so the structure (stream/app) is preserved and displayed. */
 function stepText(s){ return typeof s==="string" ? s : ((s&&s.text)||""); }
 function stepTags(s){ if(!s||typeof s==="string") return []; return [s.stream,s.app].filter(Boolean); }
-function stepTagsHTML(s){ return stepTags(s).map(x=>' <span class="steptag">'+esc(x)+'</span>').join(""); }
-function normSteps(arr){ return (arr||[]).map(s=>({t:stepText(s),tags:stepTags(s)})); }
+function stepTagsHTML(s){ if(!s||typeof s==="string") return ""; return (s.stream?' <span class="steptag">'+esc(s.stream)+'</span>':'')+(s.app?' <span class="steptag app">'+esc(s.app)+'</span>':''); }
+function normSteps(arr){ return (arr||[]).map(s=>({t:stepText(s),stream:(s&&typeof s==="object"&&s.stream)||"",app:(s&&typeof s==="object"&&s.app)||""})); }
 const statusMeta = v => S.config.statuses.find(x=>x.value===v) || {value:v,color:"#64748b",requiresComment:false};
 const entityMeta = c => S.config.entities.find(x=>x.code===c) || {code:c,label:c,color:"#64748b"};
 const tester = id => S.testers.find(x=>x.id===id);
@@ -340,7 +341,7 @@ button{background:#0ea5e9;color:#06283b;border:0;border-radius:6px;padding:9px 1
 tr.removed{opacity:.55}tr.removed .pcell{text-decoration:line-through}
 select.ein{width:auto;min-width:88px}
 </style></head><body>
-<header><h1 id="ttl"></h1><span class="muted" id="hdr"></span><label class="muted" id="lblEnt" style="margin-left:auto"></label><select id="myEnt" onchange="setMyEnt(this.value)" style="width:auto"></select><select id="langSel" onchange="setLang(this.value)" style="width:auto"><option value="fr">FR</option><option value="en">EN</option></select></header>
+<header><h1 id="ttl"></h1><span class="muted" id="hdr"></span><label class="muted" id="lblEnt" style="margin-left:auto"></label><select id="myEnt" onchange="setMyEnt(this.value)" style="width:auto"></select><select id="langSel" onchange="setLang(this.value)" style="width:auto"><option value="fr">FR</option><option value="en">EN</option></select><button id="btnSaveTop" onclick="saveJSON()" style="padding:6px 12px"></button></header>
 <main>
   <p class="muted" id="intro"></p>
   <div class="toolbar"><input id="q" placeholder="🔍" style="max-width:280px" oninput="render()"/><span class="muted" id="cnt"></span></div>
@@ -356,12 +357,12 @@ const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Choisis ton entité (e
 function T(k,n){var v=(I18N[lang]||I18N.fr)[k]||k;return n==null?v:v.replace("{n}",n);}
 function setLang(l){lang=l;try{localStorage.setItem("mceu_spoc_lang",l);}catch(e){}applyLang();render();}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
-function stepTagsHtml(tags){return (tags||[]).map(function(x){return ' <span class="badge" style="margin-left:6px;background:#0ea5e933;color:#7dd3fc">'+esc(x)+'</span>';}).join("");}
+function stepTagsHtml(s){var h="";if(s&&s.stream)h+=' <span class="badge" style="margin-left:6px;background:#0ea5e933;color:#7dd3fc">'+esc(s.stream)+'</span>';if(s&&s.app)h+=' <span class="badge" style="margin-left:6px;background:#f59e0b33;color:#fcd34d">'+esc(s.app)+'</span>';return h;}
 function stepTxt(s){return typeof s==="string"?s:((s&&s.t)||"");}
 let rows=[], expanded={}, myEnt="", sortDir=0;
 function setMyEnt(v){myEnt=v;try{localStorage.setItem("mceu_spoc_ent_"+DATA.iterationId,v);}catch(e){}rows.forEach(function(r){r.entity=v;});autosave();render();}
 function sortDue(){ sortDir = sortDir===1?-1:(sortDir===-1?0:1); render(); }
-function applyLang(){["ttl|title","intro|intro","hP|hP","hS|hS","hE|hE","hT|hT","btnSave|save","lblEnt|myEnt"].forEach(function(p){var a=p.split("|");document.getElementById(a[0]).textContent=T(a[1]);});document.getElementById("hD").innerHTML=T("hD")+' <span id="arD"></span>';document.getElementById("langSel").value=lang;}
+function applyLang(){["ttl|title","intro|intro","hP|hP","hS|hS","hE|hE","hT|hT","btnSave|save","btnSaveTop|save","lblEnt|myEnt"].forEach(function(p){var a=p.split("|");document.getElementById(a[0]).textContent=T(a[1]);});document.getElementById("hD").innerHTML=T("hD")+' <span id="arD"></span>';document.getElementById("langSel").value=lang;}
 function render(){
   var tb=document.getElementById("tb"); tb.innerHTML="";
   var q=(document.getElementById("q").value||"").toLowerCase().trim(); var shown=0;
@@ -387,7 +388,7 @@ function render(){
     tr.querySelector(".remb").addEventListener("click",function(){removeRow(i);});
     tb.appendChild(tr);
     if(nSteps&&expanded[r.id]){ var sr2=document.createElement("tr"); sr2.className="steprow";
-      sr2.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+r.steps.map(function(s){return '<li>'+esc(stepTxt(s))+stepTagsHtml(s&&s.tags)+'</li>';}).join("")+'</ol></td>';
+      sr2.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+r.steps.map(function(s){return '<li>'+esc(stepTxt(s))+stepTagsHtml(s)+'</li>';}).join("")+'</ol></td>';
       tb.appendChild(sr2); }
   });
   var ar=document.getElementById("arD"); if(ar) ar.textContent=sortDir===1?"▲":sortDir===-1?"▼":"";
@@ -579,6 +580,7 @@ function renderLibrary(){
       <div class="spacer"></div><span class="muted">${rows.length} shown</span>
       <button class="sm" onclick="resetLibOrder()">↕ Reset order</button>
       <button class="sm" onclick="newLibItem()">+ New PRC</button>
+      <button class="sm" onclick="pushLibToIteration()" title="Send the current Library selection to the active iteration (Campaign → Load &amp; dispatch)">➜ Push to iteration</button>
       <button class="sm" onclick="exportLibrary()">⬇ Export .xlsx</button>
       <label class="pill" style="cursor:pointer">⬆ Import .xlsx<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label>
       <input id="impSheet" value="LUX" title="sheet name" style="width:70px"/>
@@ -603,6 +605,7 @@ function moveLib(id,dir){ const ids=libDisplayedIds(); const idx=ids.indexOf(Str
   if(idx<0||j<0||j>=ids.length)return; const a=libById(ids[idx]),b=libById(ids[j]); const t=a.order;a.order=b.order;b.order=t; persist(); }
 function resetLibOrder(){ let n=0; sortedLib(S.library).forEach(c=>c.order=++n); persist(); }
 function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterIds:[],notes:"",steps:[],txnRef:false}; S.library.push(c); save(); editLibItem(c.id); }
+function pushLibToIteration(){ loadSel.domain=libFilter.domain||""; loadSel.process=libFilter.process||""; campSec.load=true; go('campaign'); }
 function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)",steps:(o.steps||[]).slice(),defaultTesterIds:libTesterIds(o).slice()}; S.library.push(c); persist(); }
 function editLibItem(id){ const c=libById(id);
   modal(`<h2>Edit library definition</h2>
@@ -769,7 +772,7 @@ function renderCampaign(){
     <details class="sec" ${campSec.track?'open':''} ontoggle="campSec.track=this.open"><summary>Execution tracking (${ex.length})</summary>
       <div class="card">
         <div class="toolbar">
-          <input placeholder="🔍 search…" value="${esc(trkFilter.q)}" oninput="trkFilter.q=this.value;renderCampaign()" style="min-width:180px"/>
+          <input placeholder="🔍 search…" value="${esc(trkFilter.q)}" oninput="trkSearch(this.value)" style="min-width:180px"/>
           <select onchange="trkFilter.entity=this.value;renderCampaign()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${trkFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>
           ${tCombo('trkTester',trkFilter.tester,"trkFilter.tester=v;renderCampaign()",{emptyLabel:'All testers',placeholder:'🔍 all testers…',width:'180px'})}
           <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
@@ -781,10 +784,11 @@ function renderCampaign(){
           <button onclick="openTesterList()">📋 Tester list (Outlook)</button>
           <button onclick="openGenTester()">⬇ Generate tester HTML</button>
         </div>
-        ${renderTrackingTable()}
+        <div id="trkTableWrap">${renderTrackingTable()}</div>
       </div>
     </details>`;
 }
+function trkSearch(v){ trkFilter.q=v; trkPage=0; const w=$("#trkTableWrap"); if(w) w.innerHTML=renderTrackingTable(); else renderCampaign(); }
 function renderLoadPanel(){
   if(S.library.length===0) return '<p class="muted">Library is empty — import definitions first (Library tab).</p>';
   const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
@@ -968,6 +972,7 @@ ol.steps li{margin:3px 0}
 .duedate{white-space:nowrap}
 .reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
 .steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.steptag.app{background:#f59e0b33;color:#fcd34d;border-color:#f59e0b}
 .txnlbl{font-size:12px;color:#94a3b8;margin-top:4px;display:inline-block}
 input.txnin{margin-top:3px;width:260px;max-width:100%}
 input.txnin.req{border-color:#ef4444}
@@ -990,7 +995,7 @@ th.sortable{cursor:pointer;user-select:none}
 .wopt{padding:7px 10px;cursor:pointer;white-space:nowrap}
 .wopt:hover{background:#0ea5e9;color:#06283b}
 </style></head><body>
-<header><h1 id="sheetTitle">UAT Test Sheet</h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option></select></header>
+<header><h1 id="sheetTitle">UAT Test Sheet</h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option></select><button id="btnSaveTop" onclick="saveJSON()" style="padding:6px 12px"></button></header>
 <main>
   <div class="whoami" id="whoamiBar"><label class="muted" id="lblWho" for="whoami"></label><div class="wcombo"><input id="whoami" autocomplete="off"/><div class="wlist" id="whoamiList"></div></div></div>
   <div class="links" id="links"></div>
@@ -1040,6 +1045,7 @@ function applyLang(){
   document.getElementById("lblProc").textContent=T("proc");
   document.getElementById("btnAdhoc").textContent=T("addAdhoc");
   document.getElementById("btnSave").textContent=T("save");
+  document.getElementById("btnSaveTop").textContent=T("save");
   document.getElementById("thPRC").innerHTML=T("hPRC")+' <span id="arP"></span>';
   document.getElementById("thScn").textContent=T("hScn");
   document.getElementById("thEnt").textContent=T("hEnt");
@@ -1050,7 +1056,7 @@ function applyLang(){
 }
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function stepTxt(s){return typeof s==="string"?s:((s&&s.t)||"");}
-function stepTagsHtml(tags){return (tags||[]).map(function(x){return ' <span class="steptag">'+esc(x)+'</span>';}).join("");}
+function stepTagsHtml(s){var h="";if(s&&s.stream)h+=' <span class="steptag">'+esc(s.stream)+'</span>';if(s&&s.app)h+=' <span class="steptag app">'+esc(s.app)+'</span>';return h;}
 function nat(s){return String(s||"").toLowerCase().replace(/\\d+/g,m=>m.padStart(10,"0"));}
 function lsk(id){return "mceu_tester_"+DATA.iterationId+"_"+id;}
 function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.requiresComment;}
@@ -1122,12 +1128,12 @@ function rowEl(t,i,isAd){
   return tr;
 }
 function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow";
-  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(stepTxt(s))+stepTagsHtml(s&&s.tags)+'</li>').join("")+'</ol></td>';
+  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(stepTxt(s))+stepTagsHtml(s)+'</li>').join("")+'</ol></td>';
   return tr; }
 function issueRowEl(t,isAd){ const tr=document.createElement("tr"); tr.className="steprow";
   t.failedSteps=t.failedSteps||{}; t.screens=t.screens||[];
   const steps=(!isAd && t.steps)?t.steps:[];
-  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">'+esc(T("tickSteps"))+'</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(stepTxt(s))+stepTagsHtml(s&&s.tags)+'</label>').join("")):'<div class="muted" style="font-size:12px">'+esc(T("noSteps"))+'</div>';
+  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">'+esc(T("tickSteps"))+'</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(stepTxt(s))+stepTagsHtml(s)+'</label>').join("")):'<div class="muted" style="font-size:12px">'+esc(T("noSteps"))+'</div>';
   const shots=t.screens.map((sc,si)=>'<span class="shot"><img src="'+sc.data+'" alt=""/><button class="rmshot" data-si="'+si+'" title="'+esc(T("remove"))+'">✕</button></span>').join("");
   tr.innerHTML='<td></td><td colspan="5"><div class="issuebox">'+stepsHtml+
     '<div class="muted" style="font-size:12px;margin:8px 0 2px">'+esc(T("evidence"))+'</div>'+
