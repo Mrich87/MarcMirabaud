@@ -297,6 +297,7 @@ function openProcList(proc){ showExecModal(esc(proc)+" — "+esc(activeIter().na
 function trkFiltered(){ return iterExecs().filter(e=>
   (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
   (!trkFilter.status||e.status===trkFilter.status)&&(!trkFilter.process||e.process===trkFilter.process)&&
+  (!trkFilter.date||(e.testDate||"")===trkFilter.date)&&
   (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase()))); }
 function exportAssignments(){
   const iter=activeIter();
@@ -685,7 +686,7 @@ function importDevops(input){
 /* =========================================================================
    CAMPAIGN — iterations, testers(country), dispatch, tracking, tester HTML
    ========================================================================= */
-let trkFilter={entity:"",tester:"",status:"",process:"",q:""};
+let trkFilter={entity:"",tester:"",status:"",process:"",q:"",date:""};
 let trkSort={field:"process",dir:1};
 let loadSel={domain:"",process:""};
 let campSec={iter:true,testers:false,load:null,track:true}; /* remembered open/closed state per section */
@@ -776,6 +777,7 @@ function renderCampaign(){
           <select onchange="trkFilter.entity=this.value;renderCampaign()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${trkFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>
           ${tCombo('trkTester',trkFilter.tester,"trkFilter.tester=v;renderCampaign()",{emptyLabel:'All testers',placeholder:'🔍 all testers…',width:'180px'})}
           <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
+          <select title="Filter by execution due date — then use Tester list (Outlook) to invite that date's testers" onchange="trkFilter.date=this.value;renderCampaign()"><option value="">All dates</option>${[...new Set(iterExecs().map(e=>e.testDate).filter(Boolean))].sort().map(d=>`<option ${trkFilter.date===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
           <div class="spacer"></div>
           <button onclick="genSpocPage()" title="Generate a standalone HTML page for the current filter so a SPOC can assign testers (then sends back the JSON)">⬇ SPOC page (HTML)</button>
           <button onclick="exportAssignments()" title="Export the same as an Excel sheet (SPOC fills the Tester column)">⬇ …or Excel</button>
@@ -825,6 +827,7 @@ function renderTrackingTable(){
   let ex=iterExecs().filter(e=>
     (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
     (!trkFilter.status||e.status===trkFilter.status)&&(!trkFilter.process||e.process===trkFilter.process)&&
+    (!trkFilter.date||(e.testDate||"")===trkFilter.date)&&
     (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase())));
   ex=ex.sort((a,b)=>{const ka=trkKey(a,trkSort.field),kb=trkKey(b,trkSort.field);return (ka<kb?-1:ka>kb?1:0)*trkSort.dir;});
   if(ex.length===0) return '<div class="empty">No execution in this iteration yet — load Library definitions above.</div>';
@@ -895,14 +898,15 @@ function carryOver(){ const from=activeIter(); const name=prompt("New iteration 
    ========================================================================= */
 /* extract the testers assigned in the current iteration, ready to paste into Outlook */
 function openTesterList(){
-  const ids=[...new Set(iterExecs().map(e=>e.testerId).filter(Boolean))];
+  const ids=[...new Set(trkFiltered().map(e=>e.testerId).filter(Boolean))];
   const ts=ids.map(id=>tester(id)).filter(Boolean).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
-  if(!ts.length){ alert("No tester assigned in this iteration yet."); return; }
+  if(!ts.length){ alert("No tester matches the current filters."); return; }
   const names=ts.map(t=>t.name).join("; ");
   const emails=ts.map(t=>t.email).filter(Boolean).join("; ");
   const noMail=ts.filter(t=>!t.email).map(t=>t.name);
-  modal(`<h2>Testers in ${esc(activeIter().name)}</h2>
-    <p class="hint">${ts.length} tester(s) assigned in this iteration. Click a box to select all, or use the copy buttons, then paste into Outlook.</p>
+  const scopeLbl=trkFilter.date?`due on ${esc(trkFilter.date)}`:`in ${esc(activeIter().name)}`;
+  modal(`<h2>Testers ${scopeLbl}</h2>
+    <p class="hint">${ts.length} tester(s) matching the current filters${trkFilter.date?` for <b>${esc(trkFilter.date)}</b>`:''}. Click a box to select all, or use the copy buttons, then paste into Outlook.</p>
     <div class="field" style="margin-top:8px"><label>Names</label><textarea id="tl_names" style="min-height:54px" onclick="this.select()">${esc(names)}</textarea>
       <div class="toolbar" style="margin-top:6px"><button class="sm" onclick="copyFrom('tl_names')">⧉ Copy names</button></div></div>
     <div class="field" style="margin-top:4px"><label>Emails (Outlook “To” field)</label><textarea id="tl_emails" style="min-height:54px" onclick="this.select()">${esc(emails)}</textarea>
