@@ -106,7 +106,7 @@
   <div id="view-library" class="view"></div>
   <div id="view-campaign" class="view"></div>
   <div id="view-testerview" class="view"></div>
-  <div id="view-issues" class="view"></div>
+  <div id="view-results" class="view"></div>
   <div id="view-admin" class="view"></div>
 </main>
 
@@ -245,7 +245,7 @@ function comboPick(key,v){ const c=_combos[key]; if(!c)return; c.value=String(v|
 /* =========================================================================
    NAVIGATION — 4 tabs
    ========================================================================= */
-const TABS = [["dashboard","Dashboard"],["library","Library"],["campaign","Campaign"],["testerview","Tester view"],["issues","Issues"],["admin","Admin"]];
+const TABS = [["dashboard","Dashboard"],["library","Library"],["campaign","Campaign"],["testerview","Tester view"],["results","Results"],["admin","Admin"]];
 let currentTab = "dashboard";
 function buildNav(){ $("#nav").innerHTML = TABS.map(([id,label])=>
   `<button class="${id===currentTab?'active':''}" onclick="go('${id}')">${label}</button>`).join(""); }
@@ -253,7 +253,7 @@ function go(tab){ currentTab=tab; document.querySelectorAll(".view").forEach(v=>
   $("#view-"+tab).classList.add("active"); buildNav(); renderTab(tab); }
 function renderAll(){ buildIterSelect(); buildNav(); renderTab(currentTab); }
 function renderTab(tab){ buildIterSelect();
-  ({dashboard:renderDashboard,library:renderLibrary,campaign:renderCampaign,testerview:renderTesterView,issues:renderIssues,admin:renderAdmin}[tab]||(()=>{}))(); }
+  ({dashboard:renderDashboard,library:renderLibrary,campaign:renderCampaign,testerview:renderTesterView,results:renderResults,admin:renderAdmin}[tab]||(()=>{}))(); }
 function buildIterSelect(){ $("#iterSelect").innerHTML = S.iterations.map(i=>
   `<option value="${i.id}" ${i.id===S.activeIterationId?'selected':''}>${esc(i.name)}</option>`).join(""); }
 function setActiveIteration(id){ S.activeIterationId=id; renderAll(); save(); }
@@ -358,7 +358,8 @@ function renderMissingCards(){ const md=missingData();
     ${card(md.noScenario.length,"Missing scenario","noScenario","#ef4444")}</div>`;
 }
 /* ===== Issues register (Failed/Blocked) ===== */
-let issueFilter={status:"",only:""};
+let resFilter={status:"",entity:"",tester:"",q:"",only:""};
+function statusRank(s){ const o={"Failed":0,"Blocked":1,"In progress":2,"Not started":3,"N/A":4,"Passed":5}; return (s in o)?o[s]:9; }
 function issueCompleteness(e){ const miss=[];
   if(!(e.comment||"").trim())miss.push("comment");
   if(!hasEvidence(e))miss.push("evidence");
@@ -367,42 +368,71 @@ function issueCompleteness(e){ const miss=[];
   if(!((e.retestStatus||"").trim()))miss.push("retest status");
   return {ok:miss.length===0,missing:miss}; }
 function setIssue(id,field,val){ const e=S.executions.find(x=>x.id===id); if(!e)return; e[field]=val; e.updatedAt=new Date().toISOString(); save(); }
-function renderIssues(){
+function resList(){ let ex=iterExecs().slice();
+  if(resFilter.status) ex=ex.filter(e=>e.status===resFilter.status);
+  if(resFilter.entity) ex=ex.filter(e=>e.entity===resFilter.entity);
+  if(resFilter.tester) ex=ex.filter(e=>(e.testerId||"")===resFilter.tester);
+  if(resFilter.q){ const q=resFilter.q.toLowerCase(); ex=ex.filter(e=>((e.process||"")+" "+(e.scenario||"")+" "+(e.txnRefValue||"")).toLowerCase().includes(q)); }
+  if(resFilter.only==="fb") ex=ex.filter(isOpenIssue);
+  if(resFilter.only==="comment") ex=ex.filter(e=>isOpenIssue(e)&&!(e.comment||"").trim());
+  if(resFilter.only==="evidence") ex=ex.filter(e=>isOpenIssue(e)&&!hasEvidence(e));
+  if(resFilter.only==="txn") ex=ex.filter(e=>(e.txnRefValue||"").trim());
+  if(resFilter.only==="incomplete") ex=ex.filter(e=>isOpenIssue(e)&&!issueCompleteness(e).ok);
+  return ex.sort((a,b)=>(statusRank(a.status)-statusRank(b.status))||naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
+}
+function resTableHtml(){
   const PRIO=["","Low","Medium","High","Critical"], RET=["","Not retested","Retest planned","Retested - Passed","Retested - Failed"];
-  const all=iterExecs().filter(isOpenIssue);
-  let ex=all.slice();
-  if(issueFilter.status) ex=ex.filter(e=>e.status===issueFilter.status);
-  if(issueFilter.only==="comment") ex=ex.filter(e=>!(e.comment||"").trim());
-  if(issueFilter.only==="evidence") ex=ex.filter(e=>!hasEvidence(e));
-  if(issueFilter.only==="incomplete") ex=ex.filter(e=>!issueCompleteness(e).ok);
-  ex=ex.sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
-  const sel=(cur,opts)=>opts.map(o=>`<option ${o===cur?'selected':''}>${esc(o)}</option>`).join("");
-  const flt=(lbl,val)=>`<button class="sm" style="${issueFilter.only===val?'background:#0ea5e9;color:#06283b':''}" onclick="issueFilter.only=(issueFilter.only==='${val}'?'':'${val}');renderIssues()">${lbl}</button>`;
-  const stf=`<select onchange="issueFilter.status=this.value;renderIssues()"><option value="">All (Failed + Blocked)</option><option ${issueFilter.status==='Failed'?'selected':''}>Failed</option><option ${issueFilter.status==='Blocked'?'selected':''}>Blocked</option></select>`;
-  const rows=ex.map(e=>{ const sm=statusMeta(e.status); const comp=issueCompleteness(e);
+  const all=iterExecs(); const ex=resList(); const sel=(cur,opts)=>opts.map(o=>`<option ${o===cur?'selected':''}>${esc(o)}</option>`).join(""); const m='<span class="muted">—</span>';
+  const rows=ex.map(e=>{ const sm=statusMeta(e.status); const fb=isOpenIssue(e); const comp=fb?issueCompleteness(e):null;
     const fs=e.failedSteps||{}; const steps=(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]));
     const flagged=Object.keys(fs).filter(k=>fs[k]).map(k=>stepText(steps[k])||("step "+(parseInt(k)+1))).filter(Boolean).join("; ");
     const evN=(e.screens&&e.screens.length)||0;
+    const issueCells = fb
+      ? `<td><input value="${esc(e.issueId||'')}" placeholder="defect id" oninput="setIssue('${e.id}','issueId',this.value)" style="width:90px"/></td>
+         <td><input value="${esc(e.issueOwner||'')}" placeholder="owner" oninput="setIssue('${e.id}','issueOwner',this.value)" style="width:90px"/></td>
+         <td><select onchange="setIssue('${e.id}','issuePriority',this.value);renderResults()">${sel(e.issuePriority||'',PRIO)}</select></td>
+         <td><input value="${esc(e.issueTargetDate||'')}" placeholder="target" oninput="setIssue('${e.id}','issueTargetDate',this.value)" style="width:90px"/></td>
+         <td><select onchange="setIssue('${e.id}','retestStatus',this.value);renderResults()">${sel(e.retestStatus||'',RET)}</select></td>
+         <td><input value="${esc(e.retestComment||'')}" placeholder="retest comment" oninput="setIssue('${e.id}','retestComment',this.value)" style="width:110px"/></td>
+         <td>${comp.ok?badge('Complete','#22c55e'):badge('Missing: '+comp.missing.join(', '),'#f59e0b')}</td>`
+      : `<td>${m}</td><td>${m}</td><td>${m}</td><td>${m}</td><td>${m}</td><td>${m}</td><td>${m}</td>`;
     return `<tr>
-      <td style="min-width:180px"><b>${esc(e.process)}</b><div class="muted" style="font-size:11px">${esc(e.scenario)}</div></td>
-      <td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))}</td><td>${badge(e.status,sm.color)}</td>
-      <td style="max-width:220px">${esc(e.comment||'')||'<span class="muted">—</span>'}${flagged?'<div class="muted" style="font-size:11px">⚠ '+esc(flagged)+'</div>':''}</td>
-      <td>${(evN||Object.keys(fs).length)?`<button class="sm" onclick="openEvidence('${e.id}')">📎${evN||''}</button>`:'<span class="muted">0</span>'}</td>
-      <td><input value="${esc(e.issueId||'')}" placeholder="defect id" oninput="setIssue('${e.id}','issueId',this.value)" style="width:90px"/></td>
-      <td><input value="${esc(e.issueOwner||'')}" placeholder="owner" oninput="setIssue('${e.id}','issueOwner',this.value)" style="width:100px"/></td>
-      <td><select onchange="setIssue('${e.id}','issuePriority',this.value);renderIssues()">${sel(e.issuePriority||'',PRIO)}</select></td>
-      <td><input value="${esc(e.issueTargetDate||'')}" placeholder="target" oninput="setIssue('${e.id}','issueTargetDate',this.value)" style="width:100px"/></td>
-      <td><select onchange="setIssue('${e.id}','retestStatus',this.value);renderIssues()">${sel(e.retestStatus||'',RET)}</select></td>
-      <td><input value="${esc(e.retestComment||'')}" placeholder="retest comment" oninput="setIssue('${e.id}','retestComment',this.value)" style="width:120px"/></td>
-      <td>${comp.ok?badge('Complete','#22c55e'):badge('Missing: '+comp.missing.join(', '),'#f59e0b')}</td>
+      <td style="min-width:170px"><b>${esc(e.process)}</b><div class="muted" style="font-size:11px">${esc(e.scenario)}</div></td>
+      <td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))||m}</td><td>${badge(e.status,sm.color)}</td>
+      <td>${esc(e.txnRefValue||'')||m}</td>
+      <td style="max-width:220px">${esc(e.comment||'')||m}${flagged?'<div class="muted" style="font-size:11px">⚠ '+esc(flagged)+'</div>':''}</td>
+      <td>${(evN||Object.keys(fs).length)?`<button class="sm" title="View problem &amp; screenshots" onclick="openEvidence('${e.id}')">📎${evN||''}</button>`:m}</td>
+      ${issueCells}
       <td class="muted" style="font-size:11px">${e.updatedAt?esc(String(e.updatedAt).slice(0,16).replace('T',' ')):''}</td></tr>`;}).join("")
-    ||'<tr><td colspan="14" class="muted">No Failed/Blocked test case in this iteration. 🎉</td></tr>';
-  $("#view-issues").innerHTML=`
-    <h2>Issues — ${esc(activeIter().name)}</h2>
-    <p class="sub">Failed and Blocked test cases of the active iteration. Fields auto-save; an item leaves the register when its status changes to Passed/N/A.</p>
-    <div class="toolbar">${stf}${flt('Missing comment','comment')}${flt('Missing evidence','evidence')}${flt('Incomplete','incomplete')}<div class="spacer"></div><span class="muted">${ex.length} / ${all.length} issue(s)</span></div>
-    <div style="overflow:auto"><table><thead><tr><th>Process / Scenario</th><th>Entity</th><th>Tester</th><th>Status</th><th>Comment</th><th>Ev.</th><th>Defect ID</th><th>Owner</th><th>Priority</th><th>Target date</th><th>Retest status</th><th>Retest comment</th><th>Completeness</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    ||`<tr><td colspan="15" class="muted">No test case matches the filters.</td></tr>`;
+  return `<div style="overflow:auto"><table><thead><tr><th>Process / Scenario</th><th>Entity</th><th>Tester</th><th>Status</th><th>Txn / client ref</th><th>Comment</th><th>Evidence</th><th>Defect ID</th><th>Owner</th><th>Priority</th><th>Target date</th><th>Retest status</th><th>Retest comment</th><th>Completeness</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="muted" style="margin-top:6px">${ex.length} / ${all.length} test case(s) shown</div>`;
 }
+function resSearch(v){ resFilter.q=v; const w=$("#resTableWrap"); if(w) w.innerHTML=resTableHtml(); else renderResults(); }
+function renderResults(){
+  const stSel=`<select onchange="resFilter.status=this.value;renderResults()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${resFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>`;
+  const enSel=`<select onchange="resFilter.entity=this.value;renderResults()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${resFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>`;
+  const tids=[...new Set(iterExecs().map(e=>e.testerId).filter(Boolean))].sort((a,b)=>testerName(a).localeCompare(testerName(b)));
+  const teSel=`<select onchange="resFilter.tester=this.value;renderResults()"><option value="">All testers</option>${tids.map(id=>`<option value="${id}" ${resFilter.tester===id?'selected':''}>${esc(testerName(id))}</option>`).join("")}</select>`;
+  const flt=(lbl,val)=>`<button class="sm" style="${resFilter.only===val?'background:#0ea5e9;color:#06283b':''}" onclick="resFilter.only=(resFilter.only==='${val}'?'':'${val}');renderResults()">${lbl}</button>`;
+  $("#view-results").innerHTML=`
+    <h2>Results — ${esc(activeIter().name)}</h2>
+    <p class="sub">All test cases of the active iteration. Filter by status / entity / tester, view the problem &amp; screenshots (📎) for Failed/Blocked, and export. Sorted Failed/Blocked first.</p>
+    <div class="toolbar">${stSel}${enSel}${teSel}
+      <input id="resQ" placeholder="🔍 process / scenario / ref…" value="${esc(resFilter.q)}" oninput="resSearch(this.value)" style="min-width:180px"/>
+      ${flt('Failed/Blocked','fb')}${flt('Missing comment','comment')}${flt('Missing evidence','evidence')}${flt('Has txn ref','txn')}${flt('Incomplete','incomplete')}
+      <div class="spacer"></div><button class="sm" onclick="exportResults()">⬇ Export results</button></div>
+    <div id="resTableWrap">${resTableHtml()}</div>`;
+}
+function exportResults(){ const ex=resList(); if(!ex.length){ alert("No test case matches the filters."); return; } const it=activeIter();
+  const data=ex.map(e=>{ const t=tester(e.testerId)||{}; const fs=e.failedSteps||{}; const steps=(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]));
+    const flagged=Object.keys(fs).filter(k=>fs[k]).map(k=>stepText(steps[k])||("step "+(parseInt(k)+1))).filter(Boolean).join(" ; ");
+    return {Iteration:it.name||"",Process:e.process||"",Scenario:e.scenario||"",Entity:e.entity||"",Tester:t.name||"",Status:e.status||"",
+      "Transaction/Client ref":e.txnRefValue||"",Comment:e.comment||"","Failed/Blocked step":flagged,"Evidence count":(e.screens&&e.screens.length)||0,
+      "Defect ID":e.issueId||"","Issue owner":e.issueOwner||"",Priority:e.issuePriority||"","Target date":e.issueTargetDate||"","Retest status":e.retestStatus||"","Retest comment":e.retestComment||"",
+      "Business domain":e.domain||"",Updated:e.updatedAt||""}; });
+  const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Results");
+  XLSX.writeFile(wb,`MCEU_results_${slug(it.name)}_${slug(resFilter.status||"all")}_${new Date().toISOString().slice(0,10)}.xlsx`); }
 /* ---- SPOC assignment sheets: export a (blank) list, re-import their tester assignments ---- */
 function trkFiltered(){ return iterExecs().filter(e=>
   (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
@@ -650,7 +680,7 @@ function renderDashboard(){
     <details class="sec" open><summary>Missing data</summary><div class="card">
       <p class="hint" style="margin-top:0">Data-quality & follow-up gaps in the active iteration — click a card to list the items.</p>
       ${renderMissingCards()}
-      <div style="margin-top:8px"><span class="muted">Open issues (Failed/Blocked): </span><b style="color:#ef4444">${ex.filter(isOpenIssue).length}</b> · <a href="#" onclick="go('issues');return false">open Issues register →</a></div>
+      <div style="margin-top:8px"><span class="muted">Open issues (Failed/Blocked): </span><b style="color:#ef4444">${ex.filter(isOpenIssue).length}</b> · <a href="#" onclick="resFilter.only='fb';go('results');return false">open Results (Failed/Blocked) →</a></div>
     </div></details>
     <details class="sec" open><summary>Tester workload warnings</summary><div class="card">${renderWorkloadWarnings()}</div></details>
     <div class="split">
