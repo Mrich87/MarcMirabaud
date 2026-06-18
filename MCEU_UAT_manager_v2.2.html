@@ -970,6 +970,7 @@ function renderCampaign(){
           <button onclick="exportTxnRefs()" title="Export the transaction references entered by testers (respects current filters)">⬇ Transaction refs</button>
           <label class="pill" style="cursor:pointer" title="Re-import a SPOC's filled assignment file (.json from the SPOC page, or .xlsx) — creates missing testers; several names separated by ; create one execution per tester">⬆ Import assignments<input type="file" accept=".xlsx,.xls,.json" style="display:none" onchange="importAssignmentsAny(this)"/></label>
           <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
+          <label class="pill" style="cursor:pointer" title="Set the execution due date per process from an Excel (Process Ref + date column). Active iteration only; Library untouched.">📅 Import campaign dates<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importCampaignDates(this)"/></label>
           <button onclick="openTesterList()">📋 Tester list (Outlook)</button>
           <button onclick="openGenTester()">⬇ Generate tester HTML</button>
         </div>
@@ -1487,6 +1488,35 @@ function importTesterResults(input){
     renderAll(); save(); alert(`Results merged for ${esc(p.testerName||"tester")}: ${upd} updated, ${add} ad-hoc added.`);
   }catch(err){ alert("Invalid file."); } };
   r.readAsText(f);
+}
+/* Import campaign dates per PRC -> sets execution due date (testDate) on the
+   active iteration only. Additive & idempotent; Library and all other fields
+   are untouched. Date column auto-detected (e.g. "Earliest Date LUX"). */
+let _campaignDates=null;
+function prcRef(p){ const m=String(p||"").match(/PRC-\d+/i); return m?m[0].toUpperCase():""; }
+function normDate(d){ const m=String(d).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m?(m[3]+"-"+m[2]+"-"+m[1]):String(d).trim(); }
+function importCampaignDates(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const wb=XLSX.read(e.target.result,{type:"array"}); let map=null,dateCol=null,sheet=null;
+    for(const sn of wb.SheetNames){ const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""}); if(!rows.length)continue;
+      const cols=Object.keys(rows[0]); if(!cols.includes("Process Ref"))continue;
+      const dc=cols.find(c=>/date/i.test(c)); if(!dc)continue;
+      map={}; rows.forEach(row=>{const p=String(row["Process Ref"]||"").trim().toUpperCase(); const d=String(row[dc]||"").trim(); if(p&&d&&!map[p])map[p]=d;});
+      dateCol=dc; sheet=sn; break; }
+    if(!map||!Object.keys(map).length){ alert("No 'Process Ref' + date column found in this file."); input.value=""; return; }
+    _campaignDates=map; const ex=iterExecs();
+    const match=ex.filter(e2=>map[prcRef(e2.process)]).length;
+    modal(`<h2>Import campaign dates (per process)</h2>
+      <p class="hint">Sheet “${esc(sheet)}”, date column “${esc(dateCol)}”. ${Object.keys(map).length} process(es) dated. Sets the <b>execution due date</b> on matching test cases of the active iteration (<b>${esc(activeIter().name)}</b>). The Library and statuses/comments/evidence are not touched. Dates stored as YYYY-MM-DD.</p>
+      <p><b>${match}</b> of ${ex.length} execution(s) match a dated process.</p>
+      <label class="pill" style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="cd_over" checked/> Overwrite existing dates (uncheck = fill only blanks)</label>
+      <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="_campaignDates=null;closeModal()">Cancel</button><button class="primary" onclick="applyCampaignDates()">Apply</button></div>`);
+  }catch(err){ alert("Invalid file."); } input.value=""; };
+  r.readAsArrayBuffer(f);
+}
+function applyCampaignDates(){ const map=_campaignDates; if(!map){ closeModal(); return; }
+  const over=$("#cd_over")?$("#cd_over").checked:true; let n=0;
+  iterExecs().forEach(e=>{ const d=map[prcRef(e.process)]; if(!d)return; if(!over&&(e.testDate||"").trim())return; e.testDate=normDate(d); e.updatedAt=new Date().toISOString(); n++; });
+  _campaignDates=null; closeModal(); persist(); alert(n+" execution(s) updated with campaign dates.");
 }
 
 /* =========================================================================
