@@ -442,7 +442,29 @@ function resTableHtml(){
   return `<div style="overflow:auto"><table><thead><tr><th>Process / Scenario</th><th>Entity</th><th>Tester</th><th>Status</th><th>Txn / client ref</th><th>Comment</th><th>Evidence</th><th>Defect ID</th><th>Owner</th><th>Priority</th><th>Target date</th><th>Retest status</th><th>Retest comment</th><th>Completeness</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="muted" style="margin-top:6px">${ex.length} / ${all.length} test case(s) shown</div>`;
 }
-function resSearch(v){ resFilter.q=v; const w=$("#resTableWrap"); if(w) w.innerHTML=resTableHtml(); else renderResults(); }
+function resScope(){ let ex=iterExecs().slice();
+  if(resFilter.entity) ex=ex.filter(e=>e.entity===resFilter.entity);
+  if(resFilter.tester) ex=ex.filter(e=>(e.testerId||"")===resFilter.tester);
+  if(resFilter.q){ const q=resFilter.q.toLowerCase(); ex=ex.filter(e=>((e.process||"")+" "+(e.scenario||"")+" "+(e.txnRefValue||"")).toLowerCase().includes(q)); }
+  return ex; }
+function resOverviewHtml(){
+  const ex=resScope(); const a=aggregate(ex); const pct=a.total?Math.round(a.done/a.total*100):0; const sc=st=>ex.filter(e=>e.status===st).length;
+  const byProc={}; ex.forEach(e=>{const p=e.process||"(none)";(byProc[p]=byProc[p]||[]).push(e);});
+  const procRows=Object.keys(byProc).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y))).map(p=>{const sub=byProc[p];const sa=aggregate(sub);const op=sub.filter(isOpenIssue).length;return `<tr style="cursor:pointer" title="Process drill-down" onclick="openProcDrill('${jsq(p)}')"><td><b>${esc(p)}</b></td><td>${sub.length}</td><td style="min-width:160px">${progressBar(sub)}</td><td>${sa.total?Math.round(sa.done/sa.total*100):0}%</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td><td>${op?badge(op+' open','#ef4444'):'<span class="muted">0</span>'}</td></tr>`;}).join("")||'<tr><td colspan="6" class="muted">No test case in scope.</td></tr>';
+  return `<div class="card"><b>Global progress</b> <span class="muted">— ${a.done}/${a.total} executed (${pct}%)</span>${progressBar(ex)}
+      <div class="cards" style="margin-top:6px">
+        <div class="kpi"><div class="n">${a.total}</div><div class="l">Total</div></div>
+        <div class="kpi"><div class="n" style="color:#22c55e">${a.passed}</div><div class="l">Passed</div></div>
+        <div class="kpi"><div class="n" style="color:#ef4444">${a.failed}</div><div class="l">Failed</div></div>
+        <div class="kpi"><div class="n" style="color:#f59e0b">${a.blocked}</div><div class="l">Blocked</div></div>
+        <div class="kpi"><div class="n" style="color:#a855f7">${sc("In progress")}</div><div class="l">In progress</div></div>
+        <div class="kpi"><div class="n" style="color:#94a3b8">${sc("Not started")}</div><div class="l">Not started</div></div>
+        <div class="kpi"><div class="n" style="color:#475569">${sc("N/A")}</div><div class="l">N/A</div></div>
+      </div></div>
+    <div class="card"><b>Progress by process</b> <span class="muted" style="font-size:12px">— ${Object.keys(byProc).length} process(es) · click a row for drill-down</span>
+      <div style="max-height:40vh;overflow:auto"><table><thead><tr><th>Process</th><th>Total</th><th>Progress</th><th>%</th><th>P/F/B</th><th>Open issues</th></tr></thead><tbody>${procRows}</tbody></table></div></div>`;
+}
+function resSearch(v){ resFilter.q=v; const w=$("#resTableWrap"); if(w) w.innerHTML=resTableHtml(); const o=$("#resOverview"); if(o) o.innerHTML=resOverviewHtml(); if(!w) renderResults(); }
 function renderResults(){
   const stSel=`<select onchange="resFilter.status=this.value;renderResults()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${resFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>`;
   const enSel=`<select onchange="resFilter.entity=this.value;renderResults()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${resFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>`;
@@ -452,6 +474,7 @@ function renderResults(){
   $("#view-results").innerHTML=`
     <h2>Results — ${esc(activeIter().name)}</h2>
     <p class="sub">All test cases of the active iteration. Filter by status / entity / tester, view the problem &amp; screenshots (📎) for Failed/Blocked, and export. Sorted Failed/Blocked first.</p>
+    <details class="sec" open><summary>Overview — global &amp; per-process progress</summary><div id="resOverview">${resOverviewHtml()}</div></details>
     <div class="toolbar">${stSel}${enSel}${teSel}
       <input id="resQ" placeholder="🔍 process / scenario / ref…" value="${esc(resFilter.q)}" oninput="resSearch(this.value)" style="min-width:180px"/>
       ${flt('Failed/Blocked','fb')}${flt('Missing comment','comment')}${flt('Missing evidence','evidence')}${flt('Has txn ref','txn')}${flt('Incomplete','incomplete')}
