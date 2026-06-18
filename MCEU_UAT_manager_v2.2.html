@@ -433,6 +433,43 @@ function exportResults(){ const ex=resList(); if(!ex.length){ alert("No test cas
       "Business domain":e.domain||"",Updated:e.updatedAt||""}; });
   const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Results");
   XLSX.writeFile(wb,`MCEU_results_${slug(it.name)}_${slug(resFilter.status||"all")}_${new Date().toISOString().slice(0,10)}.xlsx`); }
+/* ===== Management export pack (multi-sheet, governance-ready) ===== */
+function exportMgmtPack(){
+  const it=activeIter(); const ex=iterExecs(); const a=aggregate(ex);
+  const sc=(sub,st)=>sub.filter(e=>e.status===st).length; const pctOf=(d,t)=>t?Math.round(d/t*100):0;
+  const wb=XLSX.utils.book_new();
+  const add=(name,rows)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[{Info:"(empty)"}]),name);
+  const grpRow=(scope,name,sub)=>{const sa=aggregate(sub);return {Scope:scope,Name:name,Total:sub.length,Passed:sa.passed,Failed:sa.failed,Blocked:sa.blocked,"In progress":sc(sub,"In progress"),"Not started":sc(sub,"Not started"),"N/A":sc(sub,"N/A"),Executed:sa.done,"Progress %":pctOf(sa.done,sub.length),"Open issues":sub.filter(isOpenIssue).length};};
+  // 1 Dashboard
+  const dash=[grpRow("Overall",it.name||"",ex)];
+  S.config.entities.forEach(en=>{const sub=ex.filter(e=>e.entity===en.code);if(sub.length)dash.push(grpRow("Entity",en.code,sub));});
+  const byT={};ex.forEach(e=>{(byT[e.testerId||""]=byT[e.testerId||""]||[]).push(e);});
+  Object.keys(byT).forEach(tid=>dash.push(grpRow("Tester",tid?testerName(tid):"(unassigned)",byT[tid])));
+  const byD={};ex.forEach(e=>{const d=e.domain||"(none)";(byD[d]=byD[d]||[]).push(e);});
+  Object.keys(byD).sort().forEach(d=>dash.push(grpRow("Business domain",d,byD[d])));
+  const byP={};ex.forEach(e=>{const p=e.process||"(none)";(byP[p]=byP[p]||[]).push(e);});
+  Object.keys(byP).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y))).forEach(p=>dash.push(grpRow("Process",p,byP[p])));
+  add("Dashboard",dash);
+  // 2 Tester Workload
+  add("Tester Workload", testerWorkload().map(o=>({Tester:o.name,Email:o.email,"Entity/Country":o.country,"Test cases":o.count,Processes:o.processes,Scenarios:o.scenarios,Entities:o.entities,Passed:o.passed,Failed:o.failed,Blocked:o.blocked,"Not started":o.notrun,"In progress":o.inprogress,"N/A":o.na,"Warning level":o.level,"Warning details":o.flags.join(" ; ")})));
+  // 3 Issues Register (Failed/Blocked)
+  add("Issues Register", ex.filter(isOpenIssue).sort((x,y)=>naturalKey(x.process+x.scenario).localeCompare(naturalKey(y.process+y.scenario))).map(e=>{const fs=e.failedSteps||{};const steps=(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]));const flagged=Object.keys(fs).filter(k=>fs[k]).map(k=>stepText(steps[k])||("step "+(parseInt(k)+1))).filter(Boolean).join(" ; ");const c=issueCompleteness(e);return {Process:e.process||"",Scenario:e.scenario||"",Entity:e.entity||"",Tester:testerName(e.testerId),Status:e.status,Comment:e.comment||"","Failed/blocked step":flagged,"Evidence count":(e.screens&&e.screens.length)||0,"Defect ID":e.issueId||"","Issue owner":e.issueOwner||"",Priority:e.issuePriority||"","Target date":e.issueTargetDate||"","Retest status":e.retestStatus||"","Retest comment":e.retestComment||"",Completeness:c.ok?"Complete":("Missing: "+c.missing.join(", ")),Updated:e.updatedAt||""};}));
+  // 4 Process Progress
+  add("Process Progress", Object.keys(byP).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y))).map(p=>{const sub=byP[p];const sa=aggregate(sub);return {Process:p,"Business domain":[...new Set(sub.map(e=>e.domain).filter(Boolean))].join(", "),"Total test cases":sub.length,Passed:sa.passed,Failed:sa.failed,Blocked:sa.blocked,"Not started":sc(sub,"Not started"),"In progress":sc(sub,"In progress"),"N/A":sc(sub,"N/A"),"Progress %":pctOf(sa.done,sub.length),"Number of testers":new Set(sub.map(e=>e.testerId).filter(Boolean)).size,"Number of entities":new Set(sub.map(e=>e.entity).filter(Boolean)).size,"Open issues":sub.filter(isOpenIssue).length};}));
+  // 5 Missing Data
+  const md=missingData(); const mdRows=[]; const push=(cat,arr,fmt)=>arr.forEach(x=>mdRows.push(Object.assign({Category:cat},fmt(x))));
+  push("Test case without tester",md.noTester,e=>({Process:e.process||"",Scenario:e.scenario||"",Entity:e.entity||"",Tester:""}));
+  push("Failed/Blocked without comment",md.failedNoComment,e=>({Process:e.process||"",Scenario:e.scenario||"",Entity:e.entity||"",Tester:testerName(e.testerId)}));
+  push("Failed/Blocked without evidence",md.failedNoEvidence,e=>({Process:e.process||"",Scenario:e.scenario||"",Entity:e.entity||"",Tester:testerName(e.testerId)}));
+  push("Tester without email",md.testersNoEmail,t=>({Process:"",Scenario:"",Entity:t.country||"",Tester:t.name}));
+  push("Process without tester",md.procsNoTester.map(p=>({p})),x=>({Process:x.p,Scenario:"",Entity:"",Tester:""}));
+  push("Test case with missing process",md.noProcess,e=>({Process:"",Scenario:e.scenario||"",Entity:e.entity||"",Tester:testerName(e.testerId)}));
+  push("Test case with missing scenario",md.noScenario,e=>({Process:e.process||"",Scenario:"",Entity:e.entity||"",Tester:testerName(e.testerId)}));
+  add("Missing Data",mdRows);
+  // 6 Raw Execution Data
+  add("Raw Execution Data", ex.map(e=>{const t=tester(e.testerId)||{};const c=libById(e.libraryItemId)||{};return {Iteration:it.name||"",Process:e.process||"",Scenario:e.scenario||"",Entity:e.entity||"",Tester:t.name||"",Email:t.email||"",Status:e.status,Comment:e.comment||"","Transaction/Client ref":e.txnRefValue||"","Evidence count":(e.screens&&e.screens.length)||0,"Defect ID":e.issueId||"","Issue owner":e.issueOwner||"",Priority:e.issuePriority||"","Target date":e.issueTargetDate||"","Retest status":e.retestStatus||"","Retest comment":e.retestComment||"","Business domain":e.domain||"","Due date":e.testDate||"",Recurrence:e.recurrence||"","Ad-hoc":e.adhoc?"yes":"",Prereq:e.prereq||c.prereq||"",Updated:e.updatedAt||""};}));
+  XLSX.writeFile(wb,`MCEU_management_pack_${slug(it.name)}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
 /* ---- SPOC assignment sheets: export a (blank) list, re-import their tester assignments ---- */
 function trkFiltered(){ return iterExecs().filter(e=>
   (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
@@ -667,7 +704,7 @@ function renderDashboard(){
   const byProc={}; ex.forEach(e=>{const p=e.process||"(none)";(byProc[p]=byProc[p]||[]).push(e);});
 
   $("#view-dashboard").innerHTML=`
-    <h2>Dashboard — ${esc(iter?iter.name:"—")}</h2>
+    <div class="toolbar"><h2 style="margin:0">Dashboard — ${esc(iter?iter.name:"—")}</h2><div class="spacer"></div><button class="sm" onclick="exportMgmtPack()" title="Excel workbook: Dashboard, Tester Workload, Issues Register, Process Progress, Missing Data, Raw Execution Data">⬇ Management pack</button></div>
     <p class="sub">${esc(S.config.campaignName)} · live progress for the active iteration.</p>
     <div class="cards">
       ${kpi(a.total,"Assigned",null,'all')}${kpi(a.done+" ("+pct(a.done)+"%)","Executed",'#38bdf8','done')}
