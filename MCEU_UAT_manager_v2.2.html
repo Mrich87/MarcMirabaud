@@ -296,6 +296,39 @@ function openExecList(key){ const titleMap={all:"All assigned",done:"Executed",t
   showExecModal((titleMap[key]||key)+" — "+esc(activeIter().name), iterExecs().filter(e=>execMatch(e,key))); }
 function openProcList(proc){ showExecModal(esc(proc)+" — "+esc(activeIter().name), iterExecs().filter(e=>(e.process||"(none)")===proc)); }
 function openTesterExecs(tid){ showExecModal((testerName(tid)||"Unassigned")+" — "+esc(activeIter().name), iterExecs().filter(e=>(e.testerId||"")===(tid||""))); }
+function openProcDrill(proc){
+  const ex=iterExecs().filter(e=>(e.process||"(none)")===proc);
+  if(!ex.length){ showExecModal(esc(proc),ex); return; }
+  const a=aggregate(ex);
+  const doms=[...new Set(ex.map(e=>e.domain).filter(Boolean))];
+  const scen=new Set(ex.map(e=>e.scenario));
+  const stepsCount=ex.reduce((n,e)=>n+((e.steps&&e.steps.length)||((libById(e.libraryItemId)||{}).steps||[]).length),0);
+  const ents=[...new Set(ex.map(e=>e.entity).filter(Boolean))];
+  const tids=[...new Set(ex.map(e=>e.testerId).filter(Boolean))];
+  const openIss=ex.filter(isOpenIssue).length;
+  const noTester=ex.filter(e=>!e.testerId).length;
+  const noComment=ex.filter(e=>isOpenIssue(e)&&!(e.comment||"").trim()).length;
+  const noEvidence=ex.filter(e=>isOpenIssue(e)&&!hasEvidence(e)).length;
+  const km=(n,l,c)=>`<div class="kpi"><div class="n" style="color:${n&&c?c:'inherit'}">${n}</div><div class="l">${l}</div></div>`;
+  const list=ex.slice().sort((x,y)=>(statusRank(x.status)-statusRank(y.status))||naturalKey(x.scenario).localeCompare(naturalKey(y.scenario)));
+  const rowsHtml=list.map(e=>`<tr>
+    <td>${esc(e.scenario)}</td><td>${badge(e.entity,entityMeta(e.entity).color)}</td>
+    <td><input list="testerDL" value="${esc(testerName(e.testerId))}" placeholder="assign…" title="Reassign tester" onchange="setExecTester('${e.id}',this.value);openProcDrill('${jsq(proc)}')" style="width:130px"/></td>
+    <td>${badge(e.status,statusMeta(e.status).color)}</td>
+    <td style="max-width:200px">${esc(e.comment||'')||'<span class="muted">—</span>'}</td>
+    <td>${((e.screens&&e.screens.length)||(e.failedSteps&&Object.keys(e.failedSteps).length))?`<button class="sm" title="View problem & screenshots" onclick="openEvidence('${e.id}')">📎${(e.screens&&e.screens.length)||''}</button>`:'<span class="muted">0</span>'}</td>
+    <td>${esc(e.issueId||'')||'<span class="muted">—</span>'}</td>
+    <td>${esc(e.retestStatus||'')||'<span class="muted">—</span>'}</td></tr>`).join("");
+  const tdl=`<datalist id="testerDL">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>`<option value="${esc(t.name)}"></option>`).join("")}</datalist>`;
+  const qf=(only,lbl)=>`<button class="sm" onclick="resFilter={status:'',entity:'',tester:'',q:'${jsq(prcRef(proc)||proc)}',only:'${only}'};closeModal();go('results')">${lbl}</button>`;
+  modal(`${tdl}<h2>${esc(proc)}</h2>
+    <p class="hint">${doms.map(d=>badge(d,'#a855f7')).join(' ')||'<span class="muted">no domain</span>'} · ${scen.size} scenario(s) · ${stepsCount} step(s) · ${ents.map(en=>badge(en,entityMeta(en).color)).join(' ')||'—'} · ${tids.length} tester(s)</p>
+    <div style="margin:6px 0">${progressBar(ex)}</div>
+    <div class="cards" style="margin:6px 0">${km(a.failed,'Failed','#ef4444')}${km(a.blocked,'Blocked','#f59e0b')}${km(openIss,'Open issues','#ef4444')}${km(noTester,'Missing tester','#ef4444')}${km(noComment,'Missing comment','#f59e0b')}${km(noEvidence,'Missing evidence','#f59e0b')}</div>
+    <div class="toolbar"><span class="muted">Open in Results:</span>${qf('fb','Failed/Blocked')}${qf('comment','Missing comment')}${qf('evidence','Missing evidence')}</div>
+    <div style="max-height:44vh;overflow:auto;margin-top:8px"><table><thead><tr><th>Scenario</th><th>Entity</th><th>Tester</th><th>Status</th><th>Comment</th><th>Ev.</th><th>Defect ID</th><th>Retest</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+    <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
+}
 /* ===== Workload warnings + missing-data + issue helpers (active iteration only) ===== */
 const hasEvidence=e=>!!((e.screens&&e.screens.length)||(e.failedSteps&&Object.keys(e.failedSteps).length));
 const isOpenIssue=e=>e.status==="Failed"||e.status==="Blocked";
@@ -739,7 +772,7 @@ function renderDashboard(){
     </div>
     <div class="card"><b>By process (PRC)</b> <span class="muted" style="font-size:12px">— click a row to list its test cases</span>
       <table><thead><tr><th>PRC</th><th>Assigned</th><th>Progress</th><th>P/F/B</th></tr></thead><tbody>
-      ${Object.keys(byProc).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y))).map(p=>{const sub=byProc[p];const sa=aggregate(sub);return `<tr style="cursor:pointer" title="Click to list" onclick="openProcList('${jsq(p)}')"><td><b>${esc(p)}</b></td><td>${sub.length}</td><td style="min-width:160px">${progressBar(sub)}</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td></tr>`;}).join("")||'<tr><td colspan="4" class="muted">No execution yet.</td></tr>'}
+      ${Object.keys(byProc).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y))).map(p=>{const sub=byProc[p];const sa=aggregate(sub);return `<tr style="cursor:pointer" title="Click for process drill-down" onclick="openProcDrill('${jsq(p)}')"><td><b>${esc(p)}</b></td><td>${sub.length}</td><td style="min-width:160px">${progressBar(sub)}</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td></tr>`;}).join("")||'<tr><td colspan="4" class="muted">No execution yet.</td></tr>'}
       </tbody></table>
     </div>`;
 }
