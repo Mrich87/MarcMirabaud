@@ -105,6 +105,7 @@
   <div id="view-dashboard" class="view"></div>
   <div id="view-library" class="view"></div>
   <div id="view-campaign" class="view"></div>
+  <div id="view-testerview" class="view"></div>
   <div id="view-admin" class="view"></div>
 </main>
 
@@ -243,7 +244,7 @@ function comboPick(key,v){ const c=_combos[key]; if(!c)return; c.value=String(v|
 /* =========================================================================
    NAVIGATION — 4 tabs
    ========================================================================= */
-const TABS = [["dashboard","Dashboard"],["library","Library"],["campaign","Campaign"],["admin","Admin"]];
+const TABS = [["dashboard","Dashboard"],["library","Library"],["campaign","Campaign"],["testerview","Tester view"],["admin","Admin"]];
 let currentTab = "dashboard";
 function buildNav(){ $("#nav").innerHTML = TABS.map(([id,label])=>
   `<button class="${id===currentTab?'active':''}" onclick="go('${id}')">${label}</button>`).join(""); }
@@ -251,7 +252,7 @@ function go(tab){ currentTab=tab; document.querySelectorAll(".view").forEach(v=>
   $("#view-"+tab).classList.add("active"); buildNav(); renderTab(tab); }
 function renderAll(){ buildIterSelect(); buildNav(); renderTab(currentTab); }
 function renderTab(tab){ buildIterSelect();
-  ({dashboard:renderDashboard,library:renderLibrary,campaign:renderCampaign,admin:renderAdmin}[tab]||(()=>{}))(); }
+  ({dashboard:renderDashboard,library:renderLibrary,campaign:renderCampaign,testerview:renderTesterView,admin:renderAdmin}[tab]||(()=>{}))(); }
 function buildIterSelect(){ $("#iterSelect").innerHTML = S.iterations.map(i=>
   `<option value="${i.id}" ${i.id===S.activeIterationId?'selected':''}>${esc(i.name)}</option>`).join(""); }
 function setActiveIteration(id){ S.activeIterationId=id; renderAll(); save(); }
@@ -688,6 +689,7 @@ function importDevops(input){
    ========================================================================= */
 let trkFilter={entity:"",tester:"",status:"",process:"",q:"",date:""};
 let trkSort={field:"process",dir:1};
+let tvFilter={entity:"",status:""}, tvExpanded=new Set();
 let loadSel={domain:"",process:""};
 let campSec={iter:true,testers:false,load:null,track:true}; /* remembered open/closed state per section */
 function setTrkSort(field){ if(trkSort.field===field) trkSort.dir=-trkSort.dir; else {trkSort.field=field;trkSort.dir=1;} renderCampaign(); }
@@ -877,6 +879,67 @@ function delExec(id){ S.executions=S.executions.filter(x=>x.id!==id); persist();
 function delTester(i){ const t=S.testers[i];
   if((S.executions.some(e=>e.testerId===t.id)||S.library.some(c=>libTesterIds(c).includes(t.id)))&&!confirm("This tester is referenced. Remove anyway?"))return;
   S.testers.splice(i,1); persist(); }
+
+/* ===== Tester view: cross-service/entity projection + on-the-fly reassignment ===== */
+function tvToggle(tid){ if(tvExpanded.has(tid))tvExpanded.delete(tid); else tvExpanded.add(tid); renderTesterView(); }
+function reassignAll(fromTid){ const inp=$("#reassign_"+(fromTid||'none')); const name=((inp&&inp.value)||"").trim();
+  if(!name){ alert("Type a target tester first."); return; }
+  const toId=findOrCreateTester(name); if(toId===fromTid){ alert("Same tester — nothing to do."); return; }
+  const list=iterExecs().filter(e=>(e.testerId||"")===(fromTid||"")&&(!tvFilter.entity||e.entity===tvFilter.entity)&&(!tvFilter.status||e.status===tvFilter.status));
+  if(!list.length){ alert("No matching test to move."); return; }
+  if(!confirm("Reassign "+list.length+" test(s) from "+(fromTid?testerName(fromTid):'Unassigned')+" to "+name+"?")) return;
+  list.forEach(e=>{ e.testerId=toId; e.updatedAt=new Date().toISOString(); }); persist(); }
+function renderTesterView(){
+  const iter=activeIter(); const all=iterExecs();
+  // Section 1 — cross-service (domains) / cross-entity processes
+  const bp={};
+  all.forEach(e=>{ const p=e.process||"(none)"; const o=bp[p]||(bp[p]={ex:[],dom:new Set(),ent:new Set(),tst:new Set(),scn:new Set()});
+    o.ex.push(e); if(e.domain)o.dom.add(e.domain); if(e.entity)o.ent.add(e.entity); if(e.testerId)o.tst.add(e.testerId); o.scn.add(e.scenario); });
+  const cross=Object.entries(bp).filter(([p,o])=>o.dom.size>1||o.ent.size>1).sort((a,b)=>naturalKey(a[0]).localeCompare(naturalKey(b[0])));
+  const crossHtml = cross.length
+    ? `<table><thead><tr><th>Process</th><th>Scén.</th><th>Services (domaines)</th><th>Entités</th><th>Testeurs</th><th style="min-width:150px">Progress</th></tr></thead><tbody>`
+      + cross.map(([p,o])=>`<tr>
+          <td><b>${esc(p)}</b> ${o.dom.size>1?badge('cross-service','#a855f7'):''}${o.ent.size>1?badge('cross-entité','#0ea5e9'):''}</td>
+          <td>${o.scn.size}</td>
+          <td>${[...o.dom].sort().map(d=>esc(d)).join(', ')||'<span class="muted">—</span>'}</td>
+          <td>${[...o.ent].sort().map(en=>badge(en,entityMeta(en).color)).join(' ')||'<span class="muted">—</span>'}</td>
+          <td>${o.tst.size}${o.tst.size>1?' '+badge('multi-testeurs','#22c55e'):''}</td>
+          <td>${progressBar(o.ex)}</td></tr>`).join("")
+      + `</tbody></table>`
+    : '<p class="muted">Aucun process cross-service ou cross-entité dans cette itération.</p>';
+  // Section 2 — by tester, with reassignment
+  const fex=all.filter(e=>(!tvFilter.entity||e.entity===tvFilter.entity)&&(!tvFilter.status||e.status===tvFilter.status));
+  const byT={}; fex.forEach(e=>{ (byT[e.testerId||""]=byT[e.testerId||""]||[]).push(e); });
+  const tdl=`<datalist id="testerDL">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>`<option value="${esc(t.name)}"></option>`).join("")}</datalist>`;
+  const entSel=`<select onchange="tvFilter.entity=this.value;renderTesterView()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${tvFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>`;
+  const stSel=`<select onchange="tvFilter.status=this.value;renderTesterView()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${tvFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>`;
+  const groups=Object.keys(byT).sort((a,b)=>{ if(a==="")return 1; if(b==="")return -1; return (testerName(a)||"").localeCompare(testerName(b)); });
+  const cards=groups.map(tid=>{ const list=byT[tid]; const ents=[...new Set(list.map(e=>e.entity).filter(Boolean))];
+    const nm=tid?testerName(tid):'— Unassigned —'; const open=tvExpanded.has(tid);
+    const detail = open ? `<div style="margin-top:6px;border-top:1px solid var(--line);padding-top:6px">`
+      + list.slice().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(e=>`<div style="display:flex;gap:8px;align-items:center;padding:3px 0">
+          <span style="flex:1">${esc(e.process)} · ${esc(e.scenario)} ${badge(e.entity,entityMeta(e.entity).color)} ${badge(e.status,statusMeta(e.status).color)}</span>
+          <input list="testerDL" placeholder="reassign to…" title="Type a tester to move this test" onchange="setExecTester('${e.id}',this.value)" style="width:180px"/></div>`).join("")
+      + `</div>` : '';
+    return `<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="sm" onclick="tvToggle('${tid}')">${open?'▾':'▸'}</button>
+        <b style="min-width:150px">${esc(nm)}</b> ${ents.map(en=>badge(en,entityMeta(en).color)).join(' ')}
+        <span class="muted">${list.length} test(s)</span>
+        <div style="flex:1;min-width:150px">${progressBar(list)}</div>
+        <span class="muted">Reassign all →</span>
+        <input list="testerDL" id="reassign_${esc(tid||'none')}" placeholder="target tester…" style="width:160px"/>
+        <button class="sm" onclick="reassignAll('${tid}')">Move all</button>
+      </div>${detail}</div>`; }).join("");
+  $("#view-testerview").innerHTML=`${tdl}
+    <h2>Tester view — ${esc(iter?iter.name:'—')}</h2>
+    <p class="sub">Projection des assignations et réaffectation à la volée (indisponibilités) — sans passer par l'Execution Tracking.</p>
+    <details class="sec" open><summary>Cross-service / cross-entity processes</summary><div class="card">
+      <p class="hint">Process couvrant plusieurs domaines (services) et/ou plusieurs entités — pratique là où des testeurs ont été ajoutés.</p>
+      ${crossHtml}</div></details>
+    <details class="sec" open><summary>By tester — reassign</summary><div class="card">
+      <div class="toolbar">${entSel}${stSel}<span class="muted">${groups.filter(g=>g).length} tester(s)${byT[""]?' + unassigned':''}</span></div>
+      ${cards||'<p class="muted">No assignment in this iteration.</p>'}</div></details>`;
+}
 
 /* iterations */
 function newIter(){ const name=prompt("Iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
