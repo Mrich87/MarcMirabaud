@@ -1076,6 +1076,11 @@ function reassignAll(fromTid){ const inp=$("#reassign_"+(fromTid||'none')); cons
   if(!list.length){ alert("No matching test to move."); return; }
   if(!confirm("Reassign "+list.length+" test(s) from "+(fromTid?testerName(fromTid):'Unassigned')+" to "+name+"?")) return;
   list.forEach(e=>{ e.testerId=toId; e.updatedAt=new Date().toISOString(); }); persist(); }
+function unassignAll(fromTid){ if(!fromTid) return;
+  const list=iterExecs().filter(e=>(e.testerId||"")===fromTid&&(!tvFilter.entity||e.entity===tvFilter.entity)&&(!tvFilter.status||e.status===tvFilter.status));
+  if(!list.length){ alert("No matching test to unassign."); return; }
+  if(!confirm("Unassign "+list.length+" test(s) from "+testerName(fromTid)+"? They move to the Unassigned group.")) return;
+  list.forEach(e=>{ e.testerId=""; e.updatedAt=new Date().toISOString(); }); persist(); }
 function renderTesterView(){
   const iter=activeIter(); const all=iterExecs();
   // Section 1 — cross-service (domains) / cross-entity processes
@@ -1107,7 +1112,8 @@ function renderTesterView(){
     const detail = open ? `<div style="margin-top:6px;border-top:1px solid var(--line);padding-top:6px">`
       + list.slice().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(e=>`<div style="display:flex;gap:8px;align-items:center;padding:3px 0">
           <span style="flex:1">${esc(e.process)} · ${esc(e.scenario)} ${badge(e.entity,entityMeta(e.entity).color)} ${badge(e.status,statusMeta(e.status).color)}</span>
-          <input list="testerDL" placeholder="reassign to…" title="Type a tester to move this test" onchange="setExecTester('${e.id}',this.value)" style="width:180px"/></div>`).join("")
+          <input list="testerDL" placeholder="reassign to…" title="Type a tester to move this test" onchange="setExecTester('${e.id}',this.value)" style="width:180px"/>
+          <button class="sm" title="Unassign this test" onclick="setExecTester('${e.id}','')">✕</button></div>`).join("")
       + `</div>` : '';
     return `<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="sm" onclick="tvToggle('${tid}')">${open?'▾':'▸'}</button>
@@ -1116,7 +1122,7 @@ function renderTesterView(){
         <div style="flex:1;min-width:150px">${progressBar(list)}</div>
         <span class="muted">Reassign all →</span>
         <input list="testerDL" id="reassign_${esc(tid||'none')}" placeholder="target tester…" style="width:160px"/>
-        <button class="sm" onclick="reassignAll('${tid}')">Move all</button>
+        <button class="sm" onclick="reassignAll('${tid}')">Move all</button>${tid?`<button class="sm" title="Unassign all of this tester's test cases" onclick="unassignAll('${tid}')">Unassign all</button>`:''}
       </div>${detail}</div>`; }).join("");
   $("#view-testerview").innerHTML=`${tdl}
     <h2>Tester view — ${esc(iter?iter.name:'—')}</h2>
