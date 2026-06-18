@@ -589,6 +589,7 @@ function renderLibrary(){
       <button class="sm" onclick="resetLibOrder()">↕ Reset order</button>
       <button class="sm" onclick="newLibItem()">+ New PRC</button>
       <button class="sm" onclick="pushLibToIteration()" title="Send the current Library selection to the active iteration (Campaign → Load &amp; dispatch)">➜ Push to iteration</button>
+      <button class="sm" onclick="openTestDataRef()" title="Vue centralisée des données de test / pré-requis renseignés (le « fichier » de référence)">🧪 Test data reference</button>
       <button class="sm" onclick="exportLibrary()">⬇ Export .xlsx</button>
       <label class="pill" style="cursor:pointer">⬆ Import .xlsx<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label>
       <input id="impSheet" value="Tester_View" title="sheet name (UAT5 step-level = Tester_View)" style="width:110px"/>
@@ -846,6 +847,7 @@ function renderCampaign(){
           <div class="spacer"></div>
           <button onclick="genSpocPage()" title="Generate a standalone HTML page for the current filter so a SPOC can assign testers (then sends back the JSON)">⬇ SPOC page (HTML)</button>
           <button onclick="exportAssignments()" title="Export the same as an Excel sheet (SPOC fills the Tester column)">⬇ …or Excel</button>
+          <button onclick="exportTxnRefs()" title="Export the transaction references entered by testers (respects current filters)">⬇ Transaction refs</button>
           <label class="pill" style="cursor:pointer" title="Re-import a SPOC's filled assignment file (.json from the SPOC page, or .xlsx) — creates missing testers; several names separated by ; create one execution per tester">⬆ Import assignments<input type="file" accept=".xlsx,.xls,.json" style="display:none" onchange="importAssignmentsAny(this)"/></label>
           <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
           <button onclick="openTesterList()">📋 Tester list (Outlook)</button>
@@ -1044,6 +1046,33 @@ function openTesterList(){
 function copyFrom(id){ const el=$("#"+id); if(!el)return; el.focus(); el.select();
   try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(el.value); } else { document.execCommand("copy"); } }
   catch(e){ try{ document.execCommand("copy"); }catch(_){} } }
+/* Centralized test-data / prerequisites reference (Florian's "fichier") */
+function openTestDataRef(){
+  const items=S.library.filter(c=>(c.prereq||"").trim())
+    .sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
+  const tsv=items.map(c=>[c.process,c.scenario,c.domain||"",(c.prereq||"").replace(/\t/g," ").replace(/\r?\n/g," / ")].join("\t")).join("\n");
+  const body=items.length
+    ? `<table><thead><tr><th>PRC</th><th>Scénario</th><th>Domaine</th><th>Données de test / pré-requis</th></tr></thead><tbody>`
+      + items.map(c=>`<tr><td><b>${esc(c.process)}</b></td><td>${esc(c.scenario)}</td><td>${esc(c.domain||"")}</td><td style="white-space:pre-wrap">${esc(c.prereq)}</td></tr>`).join("")
+      + `</tbody></table>`
+    : '<p class="muted">Aucune donnée de test renseignée. Ajoute-les via ✎ sur un scénario (champ « Données de test / pré-requis »).</p>';
+  modal(`<h2>Test data reference — ${items.length} scénario(s)</h2>
+    <p class="hint">Données/pré-requis renseignés sur les scénarios (portefeuilles, ISIN, instruments, flags…). Centralisé pour les testeurs et le coordinateur.</p>
+    ${body}
+    <div class="field" style="margin-top:8px"><label>Copier (TSV — collable dans Excel)</label><textarea id="tdr_tsv" style="min-height:60px" onclick="this.select()">${esc(tsv)}</textarea>
+      <div class="toolbar" style="margin-top:6px"><button class="sm" onclick="copyFrom('tdr_tsv')">⧉ Copy</button></div></div>
+    <div class="toolbar" style="margin-top:10px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
+}
+/* Export transaction references entered by testers (respects tracking filters) */
+function exportTxnRefs(){
+  const ex=trkFiltered().filter(e=>(e.txnRefValue||"").trim());
+  if(!ex.length){ alert("No transaction reference entered for the current filter."); return; }
+  const data=ex.sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(e=>{const t=tester(e.testerId)||{};
+    return {PRC:e.process||"",Scenario:e.scenario||"",Entity:e.entity||"",Tester:t.name||"",Status:e.status||"",TransactionRef:e.txnRefValue||"",DueDate:e.testDate||"",UpdatedAt:e.updatedAt||""};});
+  const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Transaction refs");
+  const scope=trkFilter.entity||"all"; const dt=(trkFilter.date||"").replace(/\W+/g,"")||new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`MCEU_txnrefs_${slug(activeIter().name)}_${scope}_${dt}.xlsx`);
+}
 function openGenTester(){
   modal(`<h2>Generate tester sheet(s)</h2>
     <p class="hint">Standalone HTML for <b>${esc(activeIter().name)}</b>. The tester fills statuses / comments / evidence and sends back the JSON (only their own selection). Import it via "Import tester results".</p>
@@ -1106,6 +1135,7 @@ ol.steps li{margin:3px 0}
 .reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
 .steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
 .steptag.app{background:#f59e0b33;color:#fcd34d;border-color:#f59e0b}
+.prereqbox{margin-top:4px;background:#f59e0b1a;border:1px solid #f59e0b;border-left-width:3px;border-radius:6px;padding:4px 8px;font-size:12px;color:#fcd34d}
 .txnlbl{font-size:12px;color:#94a3b8;margin-top:4px;display:inline-block}
 input.txnin{margin-top:3px;width:260px;max-width:100%}
 input.txnin.req{border-color:#ef4444}
@@ -1258,7 +1288,7 @@ function rowEl(t,i,isAd){
   const needTxn=(!isAd && t.txnRef && t.status && t.status!=="Not started" && !((t.txnRefValue||"").trim()));
   const txnBlock=(!isAd && t.txnRef)?'<div class="txnlbl">'+esc(T("txnRef"))+' <span class="reftag">'+esc(T("required"))+'</span></div><input data-k="txnRefValue" class="txnin'+(needTxn?' req':'')+'" value="'+esc(t.txnRefValue||"")+'" placeholder="'+esc(T("txnPh"))+'"/>':'';
   tr.innerHTML='<td>'+(isAd?'<input value="'+esc(t.process||"")+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
-    '<td>'+(isAd?'<input value="'+esc(t.scenario||"")+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+stepTog+txnBlock))+'</td>'+
+    '<td>'+(isAd?'<input value="'+esc(t.scenario||"")+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+stepTog+txnBlock+((!isAd&&t.prereq)?'<div class="prereqbox">🧪 '+esc(T("prereqLabel"))+' : '+esc(t.prereq)+'</div>':'')))+'</td>'+
     '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||"")+'</span>'))+'</td>'+
     '<td><select data-k="status">'+opts+'</select></td>'+
     '<td class="duedate">'+(t.testDate?esc(t.testDate):'<span class="muted">—</span>')+'</td>'+
@@ -1416,7 +1446,7 @@ function exportReport(){
     const failed=Object.keys(fs).filter(k=>fs[k]).map(k=>steps[k]||("step "+(parseInt(k)+1))).join(" ; ");
     return {Iteration:it.name||"",PRC:e.process||"",Scenario:e.scenario||"",Domain:e.domain||"",Entity:e.entity,
       Tester:t.name||"",TesterCountry:t.country||"",Status:e.status,Recurrence:e.recurrence||"",TestDate:e.testDate||"",
-      BusinessComment:e.comment||"",TransactionRef:e.txnRefValue||"",FailedSteps:failed,Screenshots:(e.screens||[]).length||"",AdHoc:e.adhoc?"yes":""};});
+      BusinessComment:e.comment||"",TransactionRef:e.txnRefValue||"",Prereq:e.prereq||(libById(e.libraryItemId)||{}).prereq||"",FailedSteps:failed,Screenshots:(e.screens||[]).length||"",AdHoc:e.adhoc?"yes":""};});
   const ws=XLSX.utils.json_to_sheet(data.length?data:[{Info:"No execution"}]);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"UAT Report");
   XLSX.writeFile(wb,`MCEU_UAT_report_${new Date().toISOString().slice(0,10)}.xlsx`);
@@ -1429,7 +1459,7 @@ function exportLibrary(){
     const r={};
     r[m.domain]=c.domain||""; r[m.process]=c.process||""; r[m.scenario]=c.scenario||"";
     r[m.tester]=libTesterIds(c).map(id=>{const t=tester(id);return t?t.name:null;}).filter(Boolean).join("; ");
-    r.Steps=(c.steps||[]).map(stepText).join("\n"); r.TxnRef=c.txnRef?"yes":""; r.Order=c.order||0; r.Notes=c.notes||"";
+    r.Steps=(c.steps||[]).map(stepText).join("\n"); r.TxnRef=c.txnRef?"yes":""; r.Order=c.order||0; r.Notes=c.notes||""; r.Prereq=c.prereq||"";
     return r; });
   const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{[m.process]:"",[m.scenario]:""}]);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"LUX");
