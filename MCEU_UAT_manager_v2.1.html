@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MCEU — UAT Campaign Manager</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
+    --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --accent2:#0ea5e9;
+    --ok:#22c55e; --fail:#ef4444; --block:#f59e0b; --na:#64748b; --prog:#a855f7;
+    --chip:#0b1220;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  header{background:linear-gradient(90deg,#0b1220,#16233b);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+  header .brand{color:var(--accent)}
+  .iter-pill{margin-left:auto;display:flex;align-items:center;gap:8px}
+  select,input,textarea{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit}
+  textarea{width:100%;min-height:50px;resize:vertical}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:13px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent2);border-color:var(--accent2);color:#06283b;font-weight:600}
+  button.primary:hover{background:var(--accent)}
+  button.danger{border-color:var(--fail);color:#fca5a5}
+  button.sm{padding:3px 8px;font-size:12px}
+  nav{display:flex;gap:4px;background:#0b1220;padding:6px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  nav button{background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;padding:9px 18px;color:var(--muted);font-size:14px}
+  nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  main{padding:18px;max-width:1600px;margin:0 auto}
+  .view{display:none}
+  .view.active{display:block}
+  h2{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 16px;font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+  .grid{display:grid;gap:12px}
+  .cards{display:flex;gap:12px;flex-wrap:wrap}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:120px;flex:1}
+  .kpi .n{font-size:26px;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel);z-index:1}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .toolbar .spacer{flex:1}
+  .pbar{height:10px;background:#0b1220;border-radius:6px;overflow:hidden;display:flex;min-width:120px}
+  .pbar span{display:block;height:100%}
+  .muted{color:var(--muted)}
+  .tag{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:11px;margin:1px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:12px;color:var(--muted)}
+  .matrix td,.matrix th{text-align:center}
+  .matrix td.proc{text-align:left}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;max-width:680px;width:92%;max-height:88vh;overflow:auto}
+  .pill{background:var(--chip);border:1px solid var(--line);border-radius:20px;padding:3px 10px;font-size:12px}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  .chiprow{display:flex;gap:6px;flex-wrap:wrap}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle}
+  code{background:var(--chip);padding:1px 5px;border-radius:4px}
+  .ord{display:flex;align-items:center;gap:3px}
+  .ord button{padding:0 6px;line-height:1.5;font-size:11px}
+  .ord input{width:52px;text-align:center;padding:3px}
+  details.sec>summary{cursor:pointer;font-weight:600;font-size:15px;padding:6px 0;list-style:none}
+  details.sec>summary::before{content:"▸ ";color:var(--accent)}
+  details.sec[open]>summary::before{content:"▾ "}
+  .stickyhead{position:sticky;top:88px;background:var(--bg);padding:6px 0;z-index:2}
+  .combo{position:relative;display:inline-block;vertical-align:top}
+  .combo .combo-in{width:100%}
+  .combo-list{position:absolute;z-index:60;left:0;right:0;top:100%;margin-top:2px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;max-height:240px;overflow:auto;display:none;box-shadow:0 10px 26px rgba(0,0,0,.45);min-width:170px}
+  .combo-opt{padding:6px 9px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .combo-opt:hover{background:var(--accent2);color:#06283b}
+  .steptoggle{color:var(--accent);cursor:pointer;font-size:12px;user-select:none;white-space:nowrap}
+  .steplist{margin:4px 0 2px;padding-left:20px}
+  .steplist li{margin:2px 0}
+  .steprow>td{background:var(--chip)}
+  .reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+  .steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+  .steptag.app{background:#f59e0b22;color:#fcd34d;border-color:#f59e0b}
+  .tpick{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer}
+  .tpick:hover{background:rgba(255,255,255,.04)}
+  .tlist{max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;margin-top:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="brand">MCEU</span> · UAT Campaign Manager</h1>
+  <span class="muted" id="saveStamp" style="font-size:11px;margin-left:6px"></span>
+  <div class="iter-pill">
+    <span class="muted" style="font-size:12px">Active&nbsp;iteration</span>
+    <select id="iterSelect" onchange="setActiveIteration(this.value)"></select>
+  </div>
+</header>
+<nav id="nav"></nav>
+<main>
+  <div id="view-dashboard" class="view"></div>
+  <div id="view-library" class="view"></div>
+  <div id="view-campaign" class="view"></div>
+  <div id="view-testerview" class="view"></div>
+  <div id="view-admin" class="view"></div>
+</main>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBox"></div></div>
+
+<script>
+/* =========================================================================
+   MCEU UAT MANAGER v2 — local single-file web app · 4 screens
+   Library (reusable PRC x Scenario definitions) -> Campaign (iterations,
+   testers w/ country, dispatch on entities, execution tracking, per-tester
+   standalone HTML) -> Dashboard + Admin (config + import/export).
+   Persistence: localStorage + xlsx/JSON.
+   ========================================================================= */
+
+const LS_KEY = "mceu_uat_state_v2";
+const APP_VERSION = "v2.0";
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+
+function defaultState(){
+  const it1 = {id:uid(), name:"UAT 1", startDate:"", endDate:""};
+  return {
+    version:3,
+    config:{
+      campaignName:"MCEU UAT Campaign",
+      entities:[
+        {code:"LU", label:"Luxembourg",     color:"#38bdf8"},
+        {code:"FR", label:"France",         color:"#a855f7"},
+        {code:"SP", label:"Spain",          color:"#f59e0b"},
+        {code:"UK", label:"United Kingdom",  color:"#22c55e"},
+      ],
+      departments:["Wealth Management","Operations","Compliance","Finance","Investment","Risk"],
+      statuses:[
+        {value:"Not started", color:"#64748b", requiresComment:false},
+        {value:"In progress", color:"#a855f7", requiresComment:false},
+        {value:"Passed",      color:"#22c55e", requiresComment:false},
+        {value:"Failed",      color:"#ef4444", requiresComment:true},
+        {value:"Blocked",     color:"#f59e0b", requiresComment:true},
+        {value:"N/A",         color:"#475569", requiresComment:false},
+      ],
+      recurrences:["Often","Rarely","Exceptionally"],
+      links:[],
+      columnMapping:{ process:"TitleLevel3", scenario:"TitleLevel4", domain:"TitleLevel2", tester:"TesterName" }
+    },
+    testers:[],
+    library:[],
+    iterations:[it1],
+    activeIterationId:it1.id,
+    executions:[]
+  };
+}
+
+let S = load();
+function load(){ try{ const r=localStorage.getItem(LS_KEY); if(r) return migrate(JSON.parse(r)); }catch(e){} return defaultState(); }
+function migrate(s){ const d=defaultState();
+  const cfg=Object.assign(d.config,s.config||{});
+  cfg.columnMapping=Object.assign(d.config.columnMapping,(s.config||{}).columnMapping||{});
+  return Object.assign(d,s,{config:cfg}); }
+function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); stampSaved(); }
+  catch(e){ const el=document.getElementById("saveStamp"); if(el){ el.style.color="#f59e0b"; el.textContent=APP_VERSION+" · ⚠ browser storage full — export a backup"; }
+    if(!save._warned){ save._warned=true; alert("Browser storage is full (screenshots/large data). Use Admin → “Full backup (JSON)” to avoid losing data, then consider trimming evidence."); } } }
+function stampSaved(){ const el=document.getElementById("saveStamp"); if(!el)return; el.style.color="";
+  const lb=(S.meta&&S.meta.lastBackup)?(" · last backup "+new Date(S.meta.lastBackup).toLocaleDateString()):" · ⚠ no backup yet";
+  el.textContent=APP_VERSION+" · saved "+new Date().toLocaleTimeString()+lb; }
+function persist(){ save(); renderTab(currentTab); }
+
+/* helpers */
+const $ = sel => document.querySelector(sel);
+const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+/* Steps may be plain strings OR structured objects {text, stream, app}. These helpers
+   read either form so the structure (stream/app) is preserved and displayed. */
+function stepText(s){ return typeof s==="string" ? s : ((s&&s.text)||""); }
+function stepTags(s){ if(!s||typeof s==="string") return []; return [s.stream,s.app].filter(Boolean); }
+function stepTagsHTML(s){ if(!s||typeof s==="string") return ""; return (s.stream?' <span class="steptag">'+esc(s.stream)+'</span>':'')+(s.app?' <span class="steptag app">'+esc(s.app)+'</span>':''); }
+function normSteps(arr){ return (arr||[]).map(s=>({t:stepText(s),stream:(s&&typeof s==="object"&&s.stream)||"",app:(s&&typeof s==="object"&&s.app)||""})); }
+const statusMeta = v => S.config.statuses.find(x=>x.value===v) || {value:v,color:"#64748b",requiresComment:false};
+const entityMeta = c => S.config.entities.find(x=>x.code===c) || {code:c,label:c,color:"#64748b"};
+const tester = id => S.testers.find(x=>x.id===id);
+const testerName = id => { const t=tester(id); return t?t.name:"—"; };
+const libTesterIds = c => (c&&c.defaultTesterIds&&c.defaultTesterIds.length)?c.defaultTesterIds:(c&&c.defaultTesterId?[c.defaultTesterId]:[]);
+const testerNames = ids => (ids||[]).map(id=>{const t=tester(id);return t?t.name:null;}).filter(Boolean).join(", ");
+const activeIter = () => S.iterations.find(i=>i.id===S.activeIterationId) || S.iterations[0];
+const libById = id => S.library.find(c=>String(c.id)===String(id));
+const naturalKey = s => String(s||"").toLowerCase().replace(/\d+/g, m=>m.padStart(10,"0"));
+const iterExecs = (iterId) => S.executions.filter(e=>e.iterationId===(iterId||S.activeIterationId));
+function badge(text,color){ return `<span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}66">${esc(text)}</span>`; }
+
+/* =========================================================================
+   SEARCHABLE TESTER COMBOBOX — sorted by name + type-to-filter.
+   Drop-in replacement for the old unsorted <select> tester dropdowns.
+   tCombo(key,value,onpick,opts) returns HTML. onpick is a JS snippet run on
+   pick with the chosen id available as `v`. opts: {allowEmpty,emptyLabel,
+   placeholder,width,hidden}. When `hidden` is set, the picked id is mirrored
+   into a hidden <input id=hidden> so existing $("#id").value reads keep working.
+   ========================================================================= */
+const _combos={};
+const jsq = s => String(s==null?"":s).replace(/\\/g,"\\\\").replace(/'/g,"\\'");
+function tCombo(key,value,onpick,o){
+  o=o||{};
+  const list=S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  const items=[];
+  if(o.allowEmpty!==false) items.push({v:"",l:o.emptyLabel||"—"});
+  list.forEach(t=>items.push({v:t.id,l:t.name+(t.country?" ("+t.country+")":"")}));
+  _combos[key]={items,onpick:onpick||"",value:String(value||"")};
+  const sel=items.find(it=>String(it.v)===String(value||""));
+  const w=o.width||"200px";
+  const hid=o.hidden?`<input type="hidden" id="${o.hidden}" value="${esc(value||"")}"/>`:"";
+  return `<span class="combo" style="width:${w}" data-key="${esc(key)}">${hid}`+
+    `<input class="combo-in" autocomplete="off" placeholder="${esc(o.placeholder||"🔍 search tester…")}" value="${esc(sel?sel.l:"")}" `+
+    `onfocus="comboOpen('${jsq(key)}',this)" oninput="comboFilter('${jsq(key)}',this)" onkeydown="comboKey('${jsq(key)}',this,event)" onblur="comboBlur('${jsq(key)}')"/>`+
+    `<div class="combo-list" id="cl_${esc(key)}"></div></span>`;
+}
+function comboItems(key,q){ const c=_combos[key]; if(!c)return [];
+  q=(q||"").toLowerCase().trim();
+  return c.items.filter(it=> q ? (it.v!=="" && it.l.toLowerCase().includes(q)) : true); }
+function comboPaint(key,q){ const c=_combos[key],box=document.getElementById("cl_"+key); if(!c||!box)return;
+  const list=comboItems(key,q);
+  box.innerHTML=list.map(it=>`<div class="combo-opt" onmousedown="comboPick('${jsq(key)}','${jsq(it.v)}')">${esc(it.l)}</div>`).join("")||'<div class="combo-opt muted">no match</div>';
+  box.style.display="block"; }
+function comboOpen(key,inp){ comboPaint(key,""); if(inp.select)inp.select(); }
+function comboFilter(key,inp){ comboPaint(key,inp.value); }
+function comboBlur(key){ setTimeout(()=>{
+  const b=document.getElementById("cl_"+key); if(b)b.style.display="none";
+  const c=_combos[key],wrap=document.querySelector('.combo[data-key="'+key+'"]');
+  if(c&&wrap){ const it=c.items.find(x=>String(x.v)===String(c.value))||{l:""}; const inp=wrap.querySelector(".combo-in");
+    if(inp&&document.activeElement!==inp) inp.value=it.l; }
+},150); }
+function comboKey(key,inp,ev){ if(ev.key==="Enter"){ ev.preventDefault(); const l=comboItems(key,inp.value); if(l.length)comboPick(key,l[0].v); }
+  else if(ev.key==="Escape"){ const b=document.getElementById("cl_"+key); if(b)b.style.display="none"; } }
+function comboPick(key,v){ const c=_combos[key]; if(!c)return; c.value=String(v||"");
+  const it=c.items.find(x=>String(x.v)===String(v))||{v:"",l:""};
+  const wrap=document.querySelector('.combo[data-key="'+key+'"]');
+  if(wrap){ wrap.querySelector(".combo-in").value=it.l; const h=wrap.querySelector('input[type=hidden]'); if(h)h.value=v; }
+  const box=document.getElementById("cl_"+key); if(box)box.style.display="none";
+  if(c.onpick){ try{ new Function("v",c.onpick)(v); }catch(e){ console.error("combo onpick",e); } } }
+
+/* =========================================================================
+   NAVIGATION — 4 tabs
+   ========================================================================= */
+const TABS = [["dashboard","Dashboard"],["library","Library"],["campaign","Campaign"],["testerview","Tester view"],["admin","Admin"]];
+let currentTab = "dashboard";
+function buildNav(){ $("#nav").innerHTML = TABS.map(([id,label])=>
+  `<button class="${id===currentTab?'active':''}" onclick="go('${id}')">${label}</button>`).join(""); }
+function go(tab){ currentTab=tab; document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  $("#view-"+tab).classList.add("active"); buildNav(); renderTab(tab); }
+function renderAll(){ buildIterSelect(); buildNav(); renderTab(currentTab); }
+function renderTab(tab){ buildIterSelect();
+  ({dashboard:renderDashboard,library:renderLibrary,campaign:renderCampaign,testerview:renderTesterView,admin:renderAdmin}[tab]||(()=>{}))(); }
+function buildIterSelect(){ $("#iterSelect").innerHTML = S.iterations.map(i=>
+  `<option value="${i.id}" ${i.id===S.activeIterationId?'selected':''}>${esc(i.name)}</option>`).join(""); }
+function setActiveIteration(id){ S.activeIterationId=id; renderAll(); save(); }
+
+/* modal */
+function modal(html){ $("#modalBox").innerHTML=html; $("#modalBg").classList.add("open"); }
+function closeModal(){ $("#modalBg").classList.remove("open"); }
+$("#modalBg").addEventListener("click",e=>{ if(e.target.id==="modalBg") closeModal(); });
+
+/* aggregation */
+function aggregate(execs){
+  const a={total:execs.length,byStatus:{},done:0,passed:0,failed:0,blocked:0,notrun:0};
+  execs.forEach(e=>{ a.byStatus[e.status]=(a.byStatus[e.status]||0)+1;
+    if(e.status==="Passed"){a.passed++;a.done++;} else if(e.status==="Failed"){a.failed++;a.done++;}
+    else if(e.status==="Blocked"){a.blocked++;a.done++;} else if(e.status==="N/A"){a.done++;} else a.notrun++; });
+  return a;
+}
+function progressBar(execs){ const a=aggregate(execs); if(!a.total) return '<div class="pbar"></div>';
+  const seg=(n,c)=> n? `<span style="width:${n/a.total*100}%;background:${c}"></span>`:"";
+  return `<div class="pbar">${seg(a.passed,'#22c55e')}${seg(a.failed,'#ef4444')}${seg(a.blocked,'#f59e0b')}${seg(a.byStatus['N/A']||0,'#475569')}${seg(a.byStatus['In progress']||0,'#a855f7')}</div>`; }
+
+/* =========================================================================
+   DASHBOARD
+   ========================================================================= */
+const DONE_STATUSES=["Passed","Failed","Blocked","N/A"];
+function execMatch(e,key){
+  if(key==="all") return true;
+  if(key==="done") return DONE_STATUSES.includes(e.status);
+  if(key==="todo") return !DONE_STATUSES.includes(e.status);
+  return e.status===key;
+}
+function showExecModal(title,ex){
+  ex=ex.slice().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
+  const rows=ex.map(e=>{const sm=statusMeta(e.status);return `<tr><td><b>${esc(e.process)}</b>${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td><td>${esc(e.scenario)}</td><td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId))}</td><td>${badge(e.status,sm.color)}</td></tr>`;}).join("")||'<tr><td colspan="5" class="muted">No test case.</td></tr>';
+  modal(`<h2>${title} <span class="muted" style="font-size:13px">(${ex.length})</span></h2>
+    <div style="max-height:62vh;overflow:auto;margin-top:8px"><table><thead><tr><th>PRC</th><th>Scenario</th><th>Entity</th><th>Tester</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
+}
+function openExecList(key){ const titleMap={all:"All assigned",done:"Executed",todo:"To do",Passed:"Passed",Failed:"Failed",Blocked:"Blocked"};
+  showExecModal((titleMap[key]||key)+" — "+esc(activeIter().name), iterExecs().filter(e=>execMatch(e,key))); }
+function openProcList(proc){ showExecModal(esc(proc)+" — "+esc(activeIter().name), iterExecs().filter(e=>(e.process||"(none)")===proc)); }
+/* ---- SPOC assignment sheets: export a (blank) list, re-import their tester assignments ---- */
+function trkFiltered(){ return iterExecs().filter(e=>
+  (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
+  (!trkFilter.status||e.status===trkFilter.status)&&(!trkFilter.process||e.process===trkFilter.process)&&
+  (!trkFilter.date||(e.testDate||"")===trkFilter.date)&&
+  (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase()))); }
+function exportAssignments(){
+  const iter=activeIter();
+  const ex=trkFiltered().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
+  if(!ex.length){ alert("No execution to export (check the tracking filters)."); return; }
+  const data=ex.map(e=>({ExecId:e.id,Entity:e.entity,PRC:e.process||"",Scenario:e.scenario||"",Domain:e.domain||"",Tester:(tester(e.testerId)||{}).name||"",DueDate:e.testDate||""}));
+  const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Assignments");
+  const scope=trkFilter.entity||"all";
+  XLSX.writeFile(wb,`MCEU_assignments_${slug(iter.name)}_${scope}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+function genSpocPage(){
+  const iter=activeIter();
+  const ex=trkFiltered().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario)));
+  if(!ex.length){ alert("No execution to export (check the tracking filters)."); return; }
+  const scope=trkFilter.entity||"all";
+  const payload={campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,scope,
+    entities:S.config.entities.map(en=>en.code),
+    testerNames:S.testers.map(t=>t.name).filter(Boolean).sort((a,b)=>a.localeCompare(b)),
+    rows:ex.map(e=>({id:e.id,process:e.process||"",scenario:e.scenario||"",entity:e.entity||"",domain:e.domain||"",tester:(tester(e.testerId)||{}).name||"",due:e.testDate||"",
+      steps:normSteps(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]))}))};
+  download(`MCEU_SPOC_${slug(iter.name)}_${scope}.html`, buildSpocHTML(payload), "text/html");
+}
+function buildSpocHTML(payload){
+  const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c");
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SPOC — ${esc(payload.scope)} — ${esc(payload.iteration)}</title>
+<style>
+body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px}
+header{background:#16233b;padding:12px 18px;position:sticky;top:0;display:flex;gap:16px;align-items:center;border-bottom:1px solid #334155;z-index:5}
+header h1{font-size:16px;margin:0}.muted{color:#94a3b8}
+main{padding:18px;max-width:1200px;margin:0 auto}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
+th{color:#94a3b8;position:sticky;top:56px;background:#0f172a}
+input{background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-family:inherit;width:100%}
+select,textarea{background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-family:inherit}
+.reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.steptag.app{background:#f59e0b33;color:#fcd34d;border-color:#f59e0b}
+.ptrack{width:120px;height:8px;background:#0b1220;border:1px solid #334155;border-radius:6px;overflow:hidden}
+.ptrack>i{display:block;height:100%;background:#22c55e;width:0;transition:width .2s}
+button{background:#0ea5e9;color:#06283b;border:0;border-radius:6px;padding:9px 16px;font-weight:600;cursor:pointer}
+.bar{position:sticky;bottom:0;background:#16233b;border-top:1px solid #334155;padding:10px 18px;display:flex;gap:10px;align-items:center}
+.saved{color:#22c55e;font-size:12px}.badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#334155}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.steptoggle{color:#38bdf8;cursor:pointer;font-size:12px;white-space:nowrap;user-select:none}
+.steprow>td{background:#0b1220}ol.steps{margin:4px 0;padding-left:22px}ol.steps li{margin:3px 0}
+tr.removed{opacity:.55}tr.removed .pcell{text-decoration:line-through}
+select.ein{width:auto;min-width:88px}
+</style></head><body>
+<header><h1 id="ttl"></h1><span class="muted" id="hdr"></span><label class="muted" id="lblEnt" style="margin-left:auto"></label><select id="myEnt" onchange="setMyEnt(this.value)" style="width:auto"></select><select id="langSel" onchange="setLang(this.value)" style="width:auto"><option value="fr">FR</option><option value="en">EN</option></select><button id="btnSaveTop" onclick="saveJSON()" style="padding:6px 12px"></button></header>
+<main>
+  <p class="muted" id="intro"></p>
+  <div class="toolbar"><input id="q" placeholder="🔍" style="max-width:280px" oninput="render()"/><span class="muted" id="cnt"></span></div>
+  <table><thead><tr><th id="hP"></th><th id="hS"></th><th id="hE"></th><th style="width:260px" id="hT"></th><th style="width:150px;cursor:pointer;user-select:none" id="hD" onclick="sortDue()"></th><th style="width:96px"></th></tr></thead><tbody id="tb"></tbody></table>
+  <datalist id="dl"></datalist>
+</main>
+<div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><div style="margin-left:auto;display:flex;align-items:center;gap:8px"><div class="ptrack" title="Assigned"><i id="pfill"></i></div><span class="muted" id="prog"></span></div></div>
+<script>
+const DATA=${dataJson};
+const LSK="mceu_spoc_"+DATA.iterationId+"_"+DATA.scope;
+let lang=(function(){try{return localStorage.getItem("mceu_spoc_lang")||"fr";}catch(e){return "fr";}})();
+const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Choisis ton entité (en haut) : elle est appliquée automatiquement à TOUS les scénarios. Affecte ensuite un ou plusieurs testeurs (séparés par ;) à chaque test — tu peux déplier un test (▸) pour voir les étapes, utile pour choisir le bon testeur. Tu peux dupliquer un test (⧉) pour le rejouer/l'assigner à plusieurs, et retirer un scénario non pertinent (✕). Clique Enregistrer puis renvoie le .json au coordinateur.",hP:"PRC",hS:"Scénario",hE:"Entité",hT:"Testeur(s)",hD:"Date d'échéance",testerPh:"nom(s), séparés par ;",duePh:"ex. 2026-07-01",save:"⬇ Enregistrer (JSON)",saved:"enregistré ✓",assigned:"assignés",dup:"Dupliquer (rejouer / autre testeur)",delCopy:"Retirer cette copie",remove:"Marquer non pertinent (sera retiré)",restore:"Rétablir",copyTag:"copie",removedTag:"retiré",stepsN:"étapes ({n})",stepsFollow:"Étapes à suivre :",myEnt:"Mon entité :"},en:{title:"SPOC assignment sheet",intro:"Pick your entity (top): it is applied automatically to ALL scenarios. Then assign one or more testers (separated by ;) to each test — expand a test (▸) to view the steps, handy to pick the right tester. You can duplicate a test (⧉) to replay/assign it to several people, and remove a non-relevant scenario (✕). Click Save and send the .json back to the coordinator.",hP:"PRC",hS:"Scenario",hE:"Entity",hT:"Tester(s)",hD:"Due date",testerPh:"name(s), separated by ;",duePh:"e.g. 2026-07-01",save:"⬇ Save (JSON)",saved:"saved ✓",assigned:"assigned",dup:"Duplicate (replay / another tester)",delCopy:"Remove this copy",remove:"Mark not relevant (will be removed)",restore:"Restore",copyTag:"copy",removedTag:"removed",stepsN:"steps ({n})",stepsFollow:"Steps to follow:",myEnt:"My entity:"}};
+function T(k,n){var v=(I18N[lang]||I18N.fr)[k]||k;return n==null?v:v.replace("{n}",n);}
+function setLang(l){lang=l;try{localStorage.setItem("mceu_spoc_lang",l);}catch(e){}applyLang();render();}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function stepTagsHtml(s){var h="";if(s&&s.stream)h+=' <span class="steptag">'+esc(s.stream)+'</span>';if(s&&s.app)h+=' <span class="steptag app">'+esc(s.app)+'</span>';return h;}
+function stepTxt(s){return typeof s==="string"?s:((s&&s.t)||"");}
+let rows=[], expanded={}, myEnt="", sortDir=0;
+function setMyEnt(v){myEnt=v;try{localStorage.setItem("mceu_spoc_ent_"+DATA.iterationId,v);}catch(e){}rows.forEach(function(r){r.entity=v;});autosave();render();}
+function sortDue(){ sortDir = sortDir===1?-1:(sortDir===-1?0:1); render(); }
+function applyLang(){["ttl|title","intro|intro","hP|hP","hS|hS","hE|hE","hT|hT","btnSave|save","btnSaveTop|save","lblEnt|myEnt"].forEach(function(p){var a=p.split("|");document.getElementById(a[0]).textContent=T(a[1]);});document.getElementById("hD").innerHTML=T("hD")+' <span id="arD"></span>';document.getElementById("langSel").value=lang;}
+function render(){
+  var tb=document.getElementById("tb"); tb.innerHTML="";
+  var q=(document.getElementById("q").value||"").toLowerCase().trim(); var shown=0;
+  var list=rows.map(function(r,i){return {r:r,i:i};});
+  if(sortDir){ list.sort(function(a,b){var da=(a.r.due||""),db=(b.r.due||"");if(!da&&!db)return 0;if(!da)return 1;if(!db)return -1;return da<db?-sortDir:da>db?sortDir:0;}); }
+  list.forEach(function(o){ var r=o.r,i=o.i; if(q&&!((r.process+" "+r.scenario+" "+r.entity).toLowerCase().indexOf(q)>=0)) return; shown++;
+    var tr=document.createElement("tr"); if(r.removed) tr.className="removed";
+    var nSteps=(r.steps&&r.steps.length)||0;
+    var badges=(r.isDup?' <span class="badge" style="background:#a855f733;color:#c4b5fd">'+esc(T("copyTag"))+'</span>':'')+(r.removed?' <span class="badge" style="background:#ef444433;color:#fca5a5">'+esc(T("removedTag"))+'</span>':'');
+    var stepTog=nSteps?' <span class="steptoggle">'+(expanded[r.id]?'▾':'▸')+' '+esc(T("stepsN",nSteps))+'</span>':'';
+    var entOpts=DATA.entities.slice(); if(r.entity&&entOpts.indexOf(r.entity)<0)entOpts.push(r.entity);
+    var entSel='<select class="ein">'+entOpts.map(function(c){return '<option'+(c===r.entity?' selected':'')+'>'+esc(c)+'</option>';}).join("")+'</select>';
+    tr.innerHTML='<td class="pcell"><b>'+esc(r.process)+'</b>'+badges+stepTog+'</td><td class="pcell scen"'+(nSteps?' style="cursor:pointer" title="'+esc(T("stepsFollow"))+'"':'')+'>'+esc(r.scenario)+(nSteps?' <span class="steptoggle">'+(expanded[r.id]?'▾':'▸')+'</span>':'')+'</td><td>'+entSel+'</td>'+
+      '<td><input class="tin" list="dl" value="'+esc(r.tester)+'" placeholder="'+esc(T("testerPh"))+'"'+(r.removed?' disabled':'')+'/></td>'+
+      '<td class="duecell muted">'+esc(r.due||"—")+'</td>'+
+      '<td style="white-space:nowrap"><button class="dupb" title="'+esc(T("dup"))+'" style="padding:4px 9px">⧉</button> <button class="remb" title="'+esc(r.isDup?T("delCopy"):(r.removed?T("restore"):T("remove")))+'" style="padding:4px 9px;background:'+(r.removed?'#22c55e':'#ef4444')+';color:#fff">'+(r.removed?'↺':'✕')+'</button></td>';
+    var tin=tr.querySelector(".tin"); if(tin) tin.addEventListener("input",function(){rows[i].tester=this.value;autosave();updateProg();});
+    tr.querySelector(".ein").addEventListener("change",function(){rows[i].entity=this.value;autosave();});
+    if(nSteps){ var togFn=function(){expanded[r.id]=!expanded[r.id];render();};
+      var st=tr.querySelector(".pcell .steptoggle"); if(st) st.addEventListener("click",togFn);
+      var sc=tr.querySelector(".scen"); if(sc) sc.addEventListener("click",togFn); }
+    tr.querySelector(".dupb").addEventListener("click",function(){dupRow(i);});
+    tr.querySelector(".remb").addEventListener("click",function(){removeRow(i);});
+    tb.appendChild(tr);
+    if(nSteps&&expanded[r.id]){ var sr2=document.createElement("tr"); sr2.className="steprow";
+      sr2.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+r.steps.map(function(s){return '<li>'+esc(stepTxt(s))+stepTagsHtml(s)+'</li>';}).join("")+'</ol></td>';
+      tb.appendChild(sr2); }
+  });
+  var ar=document.getElementById("arD"); if(ar) ar.textContent=sortDir===1?"▲":sortDir===-1?"▼":"";
+  document.getElementById("cnt").textContent=q?(shown+" / "+rows.length):""; updateProg();
+}
+function updateProg(){var act=rows.filter(function(r){return !r.removed;});var done=act.filter(function(r){return (r.tester||"").trim();}).length;document.getElementById("prog").textContent=done+" / "+act.length+" "+T("assigned");var pf=document.getElementById("pfill");if(pf)pf.style.width=(act.length?Math.round(done/act.length*100):0)+"%";}
+function dupRow(i){ var r=rows[i]; var nr=Object.assign({},r,{id:"spoc"+Math.random().toString(36).slice(2,9),srcId:r.srcId||r.id,tester:"",isDup:true,removed:false,entity:myEnt||r.entity}); rows.splice(i+1,0,nr); autosave(); render(); }
+function removeRow(i){ var r=rows[i]; if(!r)return; if(r.isDup){ rows.splice(i,1); } else { r.removed=!r.removed; } autosave(); render(); }
+function exportPayload(){return {_type:"MCEU_SPOC_ASSIGNMENTS",iterationId:DATA.iterationId,scope:DATA.scope,rows:rows.map(function(r){return {ExecId:r.id,srcId:r.srcId||"",process:r.process,scenario:r.scenario,entity:r.entity,domain:r.domain,Tester:r.tester||"",DueDate:r.due||"",Remove:r.removed?true:false};})};}
+function autosave(){try{localStorage.setItem(LSK,JSON.stringify({rows:rows}));var m=document.getElementById("savedMsg");m.textContent=T("saved");setTimeout(function(){m.textContent="";},1200);}catch(e){}}
+function saveJSON(){var b=new Blob([JSON.stringify(exportPayload(),null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="assignments_"+DATA.scope+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();}
+function init(){
+  var saved=(function(){try{return JSON.parse(localStorage.getItem(LSK)||"null");}catch(e){return null;}})();
+  var sr=(saved&&saved.rows)||[];
+  rows = sr.length ? sr.slice() : DATA.rows.map(function(r){return Object.assign({},r);});
+  if(sr.length){ DATA.rows.forEach(function(r){ if(!rows.some(function(x){return x.id===r.id;})) rows.push(Object.assign({},r)); }); }
+  var savedEnt=null; try{savedEnt=localStorage.getItem("mceu_spoc_ent_"+DATA.iterationId);}catch(e){}
+  myEnt = savedEnt || (DATA.entities.indexOf(DATA.scope)>=0?DATA.scope:(DATA.entities[0]||""));
+  if(!sr.length && myEnt){ rows.forEach(function(r){r.entity=myEnt;}); }  /* fresh load: apply my entity to every scenario */
+  document.getElementById("myEnt").innerHTML=DATA.entities.map(function(c){return '<option'+(c===myEnt?' selected':'')+'>'+esc(c)+'</option>';}).join("");
+  document.getElementById("dl").innerHTML=DATA.testerNames.map(function(n){return '<option value="'+esc(n)+'"></option>';}).join("");
+  document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · "+DATA.scope;
+  applyLang(); render();
+}
+init();
+<\/script></body></html>`;
+}
+function applyAssignments(rows){
+  // Per-(process, scenario, entity, tester) merge within the active iteration. Each tester on a
+  // process/scenario is its own execution, so: several SPOC files (one per entity) build a
+  // cross-entity view; multiple testers on the same scenario coexist; and testers can be ADDED
+  // afterward without touching the others. New testers are created and tagged with their entity
+  // (country). Re-importing the same file just updates (idempotent, never blocking).
+  let upd=0,newT=0,miss=0,cloned=0,created=0,removedN=0;
+  const iter=activeIter();
+  const findTester=(nm,ent)=>{ let t=S.testers.find(x=>x.name===nm);
+    if(!t){ t={id:uid(),name:nm,email:"",country:ent||"",dept:""}; S.testers.push(t); newT++; }
+    else if(ent&&!t.country){ t.country=ent; }   /* attach entity to an existing untagged tester */
+    return t.id; };
+  const isRem=r=>r.Remove===true||r.Remove==="true"||r.Remove==="yes";
+  const sameSP=(x,proc,scen)=>x.iterationId===iter.id&&String(x.process||"").trim()===proc&&String(x.scenario||"").trim()===scen;
+  rows.slice().sort((a,b)=>(isRem(a)?1:0)-(isRem(b)?1:0)).forEach(r=>{
+    const id=String(r.ExecId||"").trim();
+    // a source execution (by ExecId / srcId / proc+scen) lets us inherit library link, steps, txnRef
+    let src = id?S.executions.find(x=>x.id===id):null;
+    if(!src&&r.srcId) src=S.executions.find(x=>x.id===String(r.srcId));
+    const proc=String(r.process||r.PRC||(src&&src.process)||"").trim();
+    const scen=String(r.scenario||r.Scenario||(src&&src.scenario)||"").trim();
+    if(!src&&(proc||scen)) src=S.executions.find(x=>x.process===proc&&x.scenario===scen);
+    const ent=String(r.entity||r.Entity||(src&&src.entity)||"").trim();
+    const dom=String(r.domain||r.Domain||(src&&src.domain)||"").trim();
+    const due=("DueDate" in r)?String(r.DueDate||"").trim():null;
+    if(isRem(r)){ const gone=S.executions.filter(x=>sameSP(x,proc,scen)&&(x.entity||"")===ent);
+      if(gone.length){ const ids=new Set(gone.map(x=>x.id)); S.executions=S.executions.filter(x=>!ids.has(x.id)); removedN+=gone.length; } return; }
+    if(!proc&&!scen){ miss++; return; }
+    const mkExec=tid=>{ const base=src||{};
+      const e=Object.assign({},base,{id:uid(),iterationId:iter.id,process:proc,scenario:scen,domain:dom,
+        libraryItemId:base.libraryItemId||null,steps:Array.isArray(base.steps)?base.steps.slice():[],
+        txnRef:!!base.txnRef,txnRefValue:"",recurrence:base.recurrence||"",adhoc:base.adhoc||false,
+        entity:ent,testerId:tid||"",status:"Not started",comment:"",failedSteps:{},screens:[],testDate:"",
+        updatedAt:new Date().toISOString()});
+      S.executions.push(e); created++; return e; };
+    // a first assignment can reuse an unassigned placeholder (blank-entity, or already this entity)
+    const claimPh=tid=>{ const ph=S.executions.find(x=>sameSP(x,proc,scen)&&!x.testerId&&(!(x.entity||"").trim()||(x.entity||"")===ent));
+      if(ph){ ph.entity=ent; ph.testerId=tid||""; return ph; } return null; };
+    const ids = ("Tester" in r) ? String(r.Tester||"").split(/[;\n]/).map(x=>x.trim()).filter(Boolean).map(nm=>findTester(nm,ent)) : null;
+    if(ids===null || ids.length===0){ // no tester provided -> keep/create one unassigned row so it still shows
+      let e=S.executions.find(x=>sameSP(x,proc,scen)&&(x.entity||"")===ent&&!x.testerId)||claimPh("")||mkExec("");
+      if(due!=null) e.testDate=due; e.updatedAt=new Date().toISOString(); upd++; return; }
+    ids.forEach((tid,idx)=>{
+      let e=S.executions.find(x=>sameSP(x,proc,scen)&&(x.entity||"")===ent&&x.testerId===tid);
+      if(!e) e=claimPh(tid);            // reuse an empty placeholder for the first tester
+      if(!e){ e=mkExec(tid); if(idx>0) cloned++; }
+      if(due!=null) e.testDate=due; e.updatedAt=new Date().toISOString(); upd++;
+    });
+  });
+  return {upd,newT,miss,cloned,created,removedN};
+}
+function importAssignmentsAny(input){ const f=input.files[0]; if(!f)return; if(/\.json$/i.test(f.name)) importSpocJSON(input); else importAssignments(input); }
+function importAssignments(input){
+  const f=input.files[0]; if(!f)return; const reader=new FileReader();
+  reader.onload=ev=>{ const wb=XLSX.read(ev.target.result,{type:"array"}); const rows=[];
+    wb.SheetNames.forEach(sn=>{ XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""}).forEach(r=>rows.push(r)); });
+    const res=applyAssignments(rows); renderAll(); save();
+    alert(`Assignments imported: ${res.upd} updated, ${res.created} new (duplicated), ${res.cloned} multi-tester, ${res.newT} new tester(s), ${res.removedN} removed`+(res.miss?`, ${res.miss} skipped`:``)+`.`);
+  };
+  reader.readAsArrayBuffer(f);
+}
+const spocAmbEnt=v=>{ const s=String(v||"").trim().toUpperCase(); return !s||s==="ALL"; };
+function importSpocJSON(input){
+  const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_SPOC_ASSIGNMENTS"){ alert("Not a SPOC assignment file."); return; }
+    const rows=p.rows||[];
+    const need=rows.some(x=>spocAmbEnt(x.entity||x.Entity));          // some lines carry no usable entity
+    const scope=String(p.scope||"").trim();
+    const scopeOk=scope&&S.config.entities.some(en=>en.code===scope); // file generated for a single real entity
+    if(need&&scopeOk){ finishSpocImport(rows,scope); return; }        // safety net: auto-fall back to the file scope
+    if(need){ promptSpocEntity(p,rows); return; }                     // still ambiguous -> ask (with a do-nothing way out)
+    finishSpocImport(rows,"");                                        // every line already has an entity
+  }catch(err){ alert("Invalid file."); } };
+  r.readAsText(f);
+}
+function promptSpocEntity(p,rows){
+  const n=rows.filter(x=>spocAmbEnt(x.entity||x.Entity)).length;
+  window.__spocPending={rows};
+  modal(`<h2>Which entity is this file for?</h2>
+    <p class="hint">${n} line(s) in this SPOC file have no entity${p.scope?` (file scope: <b>${esc(p.scope)}</b>)`:''}. Pick the entity to attach to those lines — or leave them as they are, or do nothing.</p>
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin:10px 0">
+      ${S.config.entities.map(en=>`<button class="primary" onclick="resolveSpocEntity('${en.code}')">${esc(en.label||en.code)}</button>`).join("")}
+    </div>
+    <div class="toolbar" style="margin-top:14px"><button onclick="resolveSpocEntity('__asis')">Leave as-is (import unchanged)</button><div class="spacer"></div><button onclick="resolveSpocEntity('__cancel')">Cancel — do nothing</button></div>`);
+}
+function resolveSpocEntity(choice){ const pend=window.__spocPending; closeModal(); window.__spocPending=null;
+  if(!pend||choice==="__cancel") return;                              // do nothing: no import, no change
+  finishSpocImport(pend.rows, choice==="__asis"?"":choice);
+}
+function finishSpocImport(rows,forced){
+  const rr=forced?rows.map(r=>spocAmbEnt(r.entity||r.Entity)?Object.assign({},r,{entity:forced,Entity:forced}):r):rows;
+  const res=applyAssignments(rr); renderAll(); save();
+  alert(`SPOC assignments imported: ${res.upd} updated, ${res.created} new (duplicated), ${res.cloned} multi-tester, ${res.newT} new tester(s), ${res.removedN} removed`+(res.miss?`, ${res.miss} skipped`:``)+(forced?`. Entity "${forced}" applied to lines that had none.`:``)+`.`);
+}
+function renderDashboard(){
+  const iter=activeIter(); const ex=iterExecs(); const a=aggregate(ex);
+  const pct=n=>a.total?Math.round(n/a.total*100):0;
+  const kpi=(n,l,c,key)=>`<div class="kpi" ${key?`style="cursor:pointer" title="Click to list these test cases" onclick="openExecList('${key}')"`:''}><div class="n" style="color:${c||'inherit'}">${n}</div><div class="l">${l}</div></div>`;
+  const byEntity=S.config.entities.map(en=>({en,sub:ex.filter(e=>e.entity===en.code)}));
+  const byTester={}; ex.forEach(e=>{(byTester[e.testerId]=byTester[e.testerId]||[]).push(e);});
+  const byDomain={}; ex.forEach(e=>{const d=e.domain||"(none)";(byDomain[d]=byDomain[d]||[]).push(e);});
+  const byProc={}; ex.forEach(e=>{const p=e.process||"(none)";(byProc[p]=byProc[p]||[]).push(e);});
+
+  $("#view-dashboard").innerHTML=`
+    <h2>Dashboard — ${esc(iter?iter.name:"—")}</h2>
+    <p class="sub">${esc(S.config.campaignName)} · live progress for the active iteration.</p>
+    <div class="cards">
+      ${kpi(a.total,"Assigned",null,'all')}${kpi(a.done+" ("+pct(a.done)+"%)","Executed",'#38bdf8','done')}
+      ${kpi(a.passed,"Passed",'#22c55e','Passed')}${kpi(a.failed,"Failed",'#ef4444','Failed')}
+      ${kpi(a.blocked,"Blocked",'#f59e0b','Blocked')}${kpi(a.notrun,"To do",'#94a3b8','todo')}
+    </div>
+    <div class="card"><b>Overall progress</b>${progressBar(ex)}
+      <div class="legend"><span><i style="background:#22c55e"></i>Passed</span><span><i style="background:#ef4444"></i>Failed</span><span><i style="background:#f59e0b"></i>Blocked</span><span><i style="background:#a855f7"></i>In progress</span><span><i style="background:#475569"></i>N/A</span></div>
+    </div>
+    <div class="split">
+      <div class="card"><b>By entity</b>
+        <table><thead><tr><th>Entity</th><th>Assigned</th><th>Progress</th><th>P/F/B</th></tr></thead><tbody>
+        ${byEntity.map(({en,sub})=>{const sa=aggregate(sub);return `<tr><td>${badge(en.code,en.color)} ${esc(en.label)}</td><td>${sub.length}</td><td style="min-width:140px">${progressBar(sub)}</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td></tr>`;}).join("")}
+        </tbody></table>
+      </div>
+      <div class="card"><b>By tester</b>
+        <table><thead><tr><th>Tester</th><th>Country</th><th>Assigned</th><th>Progress</th></tr></thead><tbody>
+        ${Object.keys(byTester).map(tid=>{const sub=byTester[tid];const t=tester(tid);return `<tr><td>${esc(testerName(tid))}</td><td>${t&&t.country?badge(t.country,entityMeta(t.country).color):'<span class="muted">—</span>'}</td><td>${sub.length}</td><td style="min-width:140px">${progressBar(sub)}</td></tr>`;}).join("")||'<tr><td colspan="4" class="muted">No assignment</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>
+    <div class="card"><b>By business domain</b>
+      <table><thead><tr><th>Domain</th><th>Assigned</th><th>Progress</th><th>Failed</th></tr></thead><tbody>
+      ${Object.keys(byDomain).sort().map(d=>{const sub=byDomain[d];const sa=aggregate(sub);return `<tr><td>${esc(d)}</td><td>${sub.length}</td><td style="min-width:160px">${progressBar(sub)}</td><td>${sa.failed?badge(sa.failed+" failed",'#ef4444'):'<span class="muted">0</span>'}</td></tr>`;}).join("")||'<tr><td colspan="4" class="muted">Import the library and build a campaign to see numbers.</td></tr>'}
+      </tbody></table>
+    </div>
+    <div class="card"><b>By process (PRC)</b> <span class="muted" style="font-size:12px">— click a row to list its test cases</span>
+      <table><thead><tr><th>PRC</th><th>Assigned</th><th>Progress</th><th>P/F/B</th></tr></thead><tbody>
+      ${Object.keys(byProc).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y))).map(p=>{const sub=byProc[p];const sa=aggregate(sub);return `<tr style="cursor:pointer" title="Click to list" onclick="openProcList('${jsq(p)}')"><td><b>${esc(p)}</b></td><td>${sub.length}</td><td style="min-width:160px">${progressBar(sub)}</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td></tr>`;}).join("")||'<tr><td colspan="4" class="muted">No execution yet.</td></tr>'}
+      </tbody></table>
+    </div>`;
+}
+
+/* =========================================================================
+   LIBRARY — reusable PRC x Scenario definitions
+   ========================================================================= */
+let libFilter={q:"",domain:"",process:""};
+let libExpanded=new Set();
+function toggleLibSteps(id){ id=String(id); if(libExpanded.has(id))libExpanded.delete(id); else libExpanded.add(id); renderLibrary(); }
+function sortedLib(list){ return list.slice().sort((a,b)=>(a.order||0)-(b.order||0)||naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))); }
+function renderLibrary(){
+  const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
+  const procs=[...new Set(S.library.filter(c=>!libFilter.domain||c.domain===libFilter.domain).map(c=>c.process))].sort();
+  let rows=S.library.filter(c=>
+    (!libFilter.domain||c.domain===libFilter.domain)&&(!libFilter.process||c.process===libFilter.process)&&
+    (!libFilter.q||((c.process||"")+" "+(c.scenario||"")).toLowerCase().includes(libFilter.q.toLowerCase())));
+  rows=sortedLib(rows);
+
+  $("#view-library").innerHTML=`
+    <h2>Library</h2>
+    <p class="sub">${S.library.length} reusable test definitions — deduplicated from the DevOps export on the <b>(PRC × Scenario)</b> combo (col H × col I). Edit, clone and reorder freely. This is the source of truth, independent from campaigns.</p>
+    ${S.library.length===0?`<div class="card empty">No library yet.<div style="margin-top:12px"><label class="pill" style="cursor:pointer">⬆ Import DevOps .xlsx<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label> &nbsp; <button onclick="newLibItem()">+ New definition</button></div><p class="hint" style="margin-top:8px">Default sheet: <code>Tester_View</code> (UAT5 step-level) — auto-detected. Old single-column format still works.</p></div>`:`
+    <div class="toolbar stickyhead">
+      <input placeholder="🔍 search PRC / scenario…" value="${esc(libFilter.q)}" oninput="libFilter.q=this.value;renderLibrary()" style="min-width:240px"/>
+      <select onchange="libFilter.domain=this.value;libFilter.process='';renderLibrary()"><option value="">All domains</option>${domains.map(d=>`<option ${libFilter.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
+      <select onchange="libFilter.process=this.value;renderLibrary()"><option value="">All PRC</option>${procs.map(p=>`<option ${libFilter.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
+      <div class="spacer"></div><span class="muted">${rows.length} shown</span>
+      <button class="sm" onclick="resetLibOrder()">↕ Reset order</button>
+      <button class="sm" onclick="newLibItem()">+ New PRC</button>
+      <button class="sm" onclick="pushLibToIteration()" title="Send the current Library selection to the active iteration (Campaign → Load &amp; dispatch)">➜ Push to iteration</button>
+      <button class="sm" onclick="exportLibrary()">⬇ Export .xlsx</button>
+      <label class="pill" style="cursor:pointer">⬆ Import .xlsx<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label>
+      <input id="impSheet" value="Tester_View" title="sheet name (UAT5 step-level = Tester_View)" style="width:110px"/>
+    </div>
+    <table>
+      <thead><tr><th style="width:120px">Order</th><th>PRC (process)</th><th>Scenario</th><th>Domain</th><th>Default tester</th><th style="width:110px"></th></tr></thead>
+      <tbody>
+      ${rows.map(c=>{const steps=c.steps||[];const open=libExpanded.has(String(c.id));return `<tr>
+        <td><div class="ord"><button onclick="moveLib('${c.id}',-1)">▲</button><input type="number" value="${c.order||0}" onchange="setLibOrder('${c.id}',this.value)"/><button onclick="moveLib('${c.id}',1)">▼</button></div></td>
+        <td><b>${esc(c.process)}</b></td>
+        <td>${esc(c.scenario)}${c.txnRef?'<span class="reftag">txn ref</span>':''}${steps.length?` <span class="steptoggle" onclick="toggleLibSteps('${c.id}')">${open?'▾':'▸'} ${steps.length} step${steps.length>1?'s':''}</span>`:''}</td>
+        <td>${esc(c.domain)}</td>
+        <td class="muted">${esc(testerNames(libTesterIds(c))||"—")}</td>
+        <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button></td>
+      </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(stepText(s))}${stepTagsHTML(s)}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
+      </tbody>
+    </table>`}`;
+}
+function libDisplayedIds(){ let rows=S.library.filter(c=>(!libFilter.domain||c.domain===libFilter.domain)&&(!libFilter.process||c.process===libFilter.process)&&(!libFilter.q||((c.process||"")+" "+(c.scenario||"")).toLowerCase().includes(libFilter.q.toLowerCase()))); return sortedLib(rows).map(c=>String(c.id)); }
+function setLibOrder(id,v){ const c=libById(id); if(c){c.order=parseInt(v)||0; persist();} }
+function moveLib(id,dir){ const ids=libDisplayedIds(); const idx=ids.indexOf(String(id)); const j=idx+dir;
+  if(idx<0||j<0||j>=ids.length)return; const a=libById(ids[idx]),b=libById(ids[j]); const t=a.order;a.order=b.order;b.order=t; persist(); }
+function resetLibOrder(){ let n=0; sortedLib(S.library).forEach(c=>c.order=++n); persist(); }
+function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterIds:[],notes:"",prereq:"",steps:[],txnRef:false}; S.library.push(c); save(); editLibItem(c.id); }
+function pushLibToIteration(){
+  loadSel.domain=libFilter.domain||""; loadSel.process=libFilter.process||"";
+  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
+  if(!target.length){ alert("No library definition matches the current filter."); return; }
+  modal(`<h2>Push to iteration — ${esc(activeIter().name)}</h2>
+    <p class="hint">${target.length} definition(s) from the current Library filter${loadSel.domain?` · domain ${esc(loadSel.domain)}`:''}${loadSel.process?` · ${esc(loadSel.process)}`:''}. Pick target entities — each test case is dispatched to its assigned testers × each entity (or override below). Duplicates are skipped.</p>
+    <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")||'<span class="muted">No entity configured (Admin).</span>'}</div></div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1"><label>Override tester (optional)</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— use assigned testers —',width:'100%'})}</div>
+      <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
+    </div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="pushLibConfirm()">Add ${target.length} definition(s)</button></div>`);
+}
+function pushLibConfirm(){ const r=loadIntoIteration(); if(r!==false) closeModal(); }
+function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)",steps:(o.steps||[]).slice(),defaultTesterIds:libTesterIds(o).slice()}; S.library.push(c); persist(); }
+function stepRowHtml(s){ const t=stepText(s); const stream=(s&&typeof s==="object"&&s.stream)||""; const app=(s&&typeof s==="object"&&s.app)||"";
+  return `<div class="steprow2" style="display:flex;gap:6px;margin-bottom:4px">
+    <input class="st_text" placeholder="step…" value="${esc(t)}" style="flex:2"/>
+    <input class="st_stream" placeholder="business stream" value="${esc(stream)}" style="flex:1"/>
+    <input class="st_app" placeholder="app" value="${esc(app)}" style="flex:1"/>
+    <button class="sm danger" title="Remove step" onclick="this.closest('.steprow2').remove()" style="width:30px">✕</button></div>`; }
+function addStepRow(){ const w=document.getElementById("l_stepwrap"); if(w) w.insertAdjacentHTML("beforeend", stepRowHtml({})); }
+function editLibItem(id){ const c=libById(id);
+  modal(`<h2>Edit library definition</h2>
+    <div class="row" style="margin-top:4px">
+      <div class="field" style="flex:1"><label>PRC (process)</label><input id="l_proc" value="${esc(c.process)}"/></div>
+      <div class="field"><label>Domain</label><input id="l_dom" value="${esc(c.domain)}"/></div>
+    </div>
+    <div class="field" style="margin-top:8px"><label>Scenario</label><input id="l_scen" value="${esc(c.scenario)}"/></div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1"><label>Default testers (you can pick several)</label>
+        <input id="l_tsearch" placeholder="🔍 filter testers…" oninput="filterTesterPicks()"/>
+        <div class="tlist" id="l_tlist">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>{const on=libTesterIds(c).includes(t.id);return `<label class="tpick" data-n="${esc((t.name+" "+(t.country||"")).toLowerCase())}"><input type="checkbox" class="ltchk" value="${t.id}" ${on?'checked':''}/> ${esc(t.name)}${t.country?' <span class="muted">('+esc(t.country)+')</span>':''}</label>`;}).join("")||'<span class="muted">No tester yet — add testers in Campaign.</span>'}</div>
+      </div>
+      <div class="field"><label>Order</label><input type="number" id="l_order" value="${c.order||0}"/></div>
+    </div>
+    <div class="field" style="margin-top:8px"><label>Steps to follow — texte · business stream · app</label>
+      <div style="display:flex;gap:6px;font-size:11px;color:var(--muted,#94a3b8);margin-bottom:2px"><span style="flex:2">Step (texte libre)</span><span style="flex:1">Business stream</span><span style="flex:1">Application</span><span style="width:30px"></span></div>
+      <div id="l_stepwrap">${(c.steps||[]).map(s=>stepRowHtml(s)).join("")}</div>
+      <button class="sm" onclick="addStepRow()">+ step</button>
+      <div class="hint">Le business stream s'affiche en bleu et l'application en ambre au testeur. Stream/app facultatifs.</div></div>
+    <div class="field" style="margin-top:8px"><label class="pill" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;width:fit-content"><input type="checkbox" id="l_txn" ${c.txnRef?'checked':''}/> Require a <b>transaction reference</b> (opens a reference field for the tester)</label></div>
+    <div class="field" style="margin-top:8px"><label>Données de test / pré-requis</label><textarea id="l_prereq" placeholder="Portefeuilles (n° + entité), flags (ex. traspasso), ISIN, instruments, PE, hedge funds à utiliser…">${esc(c.prereq||"")}</textarea><div class="hint">Affiché au testeur sous le scénario (🧪) pour qu'il sache quelles données utiliser. Centralisé via « 🧪 Test data reference ».</div></div>
+    <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="l_notes">${esc(c.notes||"")}</textarea></div>
+    <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delLibItem('${c.id}')">Delete</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveLibItem('${c.id}')">Save</button></div>`);
+}
+function filterTesterPicks(){ const q=($("#l_tsearch").value||"").toLowerCase().trim();
+  document.querySelectorAll("#l_tlist .tpick").forEach(el=>{ el.style.display=(!q||el.dataset.n.includes(q))?"flex":"none"; }); }
+function saveLibItem(id){ const c=libById(id);
+  c.process=$("#l_proc").value;c.domain=$("#l_dom").value;c.scenario=$("#l_scen").value;
+  c.defaultTesterIds=[...document.querySelectorAll("#l_tlist .ltchk:checked")].map(x=>x.value); delete c.defaultTesterId;
+  c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;c.prereq=$("#l_prereq").value;
+  c.steps=[...document.querySelectorAll("#l_stepwrap .steprow2")].map(r=>({
+      text:r.querySelector(".st_text").value.trim(),
+      stream:r.querySelector(".st_stream").value.trim(),
+      app:r.querySelector(".st_app").value.trim()
+    })).filter(s=>s.text||s.stream||s.app);
+  c.txnRef=$("#l_txn").checked;
+  closeModal(); persist(); }
+function delLibItem(id){ if(!confirm("Delete this definition?"))return; S.library=S.library.filter(c=>String(c.id)!==String(id)); closeModal(); persist(); }
+
+/* import xlsx -> upsert library on (process,scenario); reads optional Steps / TxnRef columns */
+function importDevops(input){
+  const file=input.files[0]; if(!file)return;
+  const sheetName=($("#impSheet")&&$("#impSheet").value)||"Tester_View";
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:"array"});
+    const sn=wb.SheetNames.includes(sheetName)?sheetName:(wb.SheetNames.includes("Tester_View")?"Tester_View":wb.SheetNames[0]);
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:""});
+    if(rows.length && ("Step / Action Required" in rows[0]) && ("Application" in rows[0])){ return importStepLevel(wb,rows,sn); }
+    const m=S.config.columnMapping;
+    const hasSteps=rows.length&&("Steps" in rows[0]);
+    const hasTxn=rows.length&&("TxnRef" in rows[0]);
+    const byKey=new Map(S.library.map(c=>[c.process+"||"+c.scenario,c]));
+    let maxO=S.library.reduce((mm,c)=>Math.max(mm,c.order||0),0);
+    let added=0,updated=0,newTesters=0,stepsSet=0; const seen=new Set();
+    rows.forEach(r=>{
+      const process=(r[m.process]||"").toString().trim();
+      const scenario=(r[m.scenario]||"").toString().trim();
+      if(!process&&!scenario) return;
+      const key=process+"||"+scenario;
+      const tnames=String(r[m.tester]||"").split(/[;\n]/).map(x=>x.trim()).filter(Boolean);
+      const tIds=tnames.map(nm=>{ let t=S.testers.find(x=>x.name===nm); if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newTesters++;} return t.id; });
+      const steps=hasSteps?String(r.Steps||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean):null;
+      const txn=hasTxn?/^(y|yes|true|1|x|oui)$/i.test(String(r.TxnRef||"").trim()):null;
+      const domain=(r[m.domain]||"").toString().trim();
+      let c=byKey.get(key);
+      if(c){
+        if(!seen.has(key)){ updated++; seen.add(key); }
+        if(domain) c.domain=domain;
+        c.defaultTesterIds=c.defaultTesterIds||[]; tIds.forEach(id=>{ if(!c.defaultTesterIds.includes(id)) c.defaultTesterIds.push(id); });
+        if(steps&&steps.length){ c.steps=steps; stepsSet++; }   /* never wipe steps from an empty/absent Steps column */
+        if(txn!==null) c.txnRef=txn;
+      } else {
+        c={id:uid(),order:++maxO,domain,process,scenario,defaultTesterIds:tIds,notes:"",prereq:"",steps:steps||[],txnRef:txn||false};
+        S.library.push(c); byKey.set(key,c); seen.add(key); added++; if(steps&&steps.length)stepsSet++;
+      }
+    });
+    let n=0; sortedLib(S.library).forEach(c=>c.order=++n);
+    save(); go("library");
+    alert(`Import (sheet "${sn}"): ${added} new, ${updated} updated`+(hasSteps?`, steps set on ${stepsSet}`:``)+`, ${newTesters} tester(s) created. Library total: ${S.library.length}.`);
+  };
+  reader.readAsArrayBuffer(file);
+}
+/* Step-level import (UAT5 Tester_View): 1 row = 1 step -> grouped into one library
+   item per (Process Ref, Scenario), structured steps {text,stream,app} + DevOps ids
+   (manager-only) joined from Technical_Mapping for later Azure DevOps return. */
+function importStepLevel(wb,rows,sn){
+  const S2=wb.SheetNames.includes("Technical_Mapping")?XLSX.utils.sheet_to_json(wb.Sheets["Technical_Mapping"],{defval:""}):[];
+  const idmap=new Map(), scmap=new Map(); const T=s=>String(s==null?"":s).trim();
+  S2.forEach(r=>{ const pr=T(r["Process Ref"]),sr=T(r["Scenario Ref"]),st=T(r["Step Ref"]);
+    idmap.set(pr+"|"+sr+"|"+st,{tcId:T(r["OriginalTestCaseId"]),tpId:T(r["OriginalTestPointId"])});
+    if(!scmap.has(pr+"|"+sr)) scmap.set(pr+"|"+sr,{scenarioPath:T(r["ScenarioPath"]),internalScenarioKey:T(r["InternalScenarioKey"]),suiteId:T(r["OriginalMaxTestSuiteId"]),scenarioRef:sr}); });
+  const groups=new Map();
+  rows.forEach(r=>{ const pr=T(r["Process Ref"]),pn=T(r["Process Name"]),sr=T(r["Scenario Ref"]),sc=T(r["Scenario"]),dom=T(r["Domain"]); if(!pr&&!sc) return;
+    const gk=pr+"|"+sr; let o=groups.get(gk); if(!o){o={pr,pn,sr,sc,dom,tester:T(r["Assigned Tester"]),steps:[]}; groups.set(gk,o);}
+    const ids=idmap.get(pr+"|"+sr+"|"+T(r["Step Ref"]))||{};
+    o.steps.push({order:parseInt(T(r["Step Ref"]),10)||(o.steps.length+1),text:T(r["Step / Action Required"]),stream:T(r["Step Implicated Stream"]),app:T(r["Application"]),tcId:ids.tcId||"",tpId:ids.tpId||""}); });
+  const byKey=new Map(S.library.map(c=>[c.process+"||"+c.scenario,c]));
+  let maxO=S.library.reduce((mm,c)=>Math.max(mm,c.order||0),0); let added=0,updated=0,newTesters=0;
+  groups.forEach(o=>{ o.steps.sort((a,b)=>a.order-b.order);
+    const steps=o.steps.map(s=>({text:s.text,stream:s.stream,app:s.app,tcId:s.tcId,tpId:s.tpId}));
+    const process=(o.pr+" "+o.pn).trim(), scenario=o.sc, key=process+"||"+scenario;
+    const devops=scmap.get(o.pr+"|"+o.sr)||{scenarioRef:o.sr};
+    const tIds=(o.tester?o.tester.split(/[;\n]/):[]).map(x=>x.trim()).filter(Boolean).map(nm=>{let t=S.testers.find(x=>x.name===nm);if(!t){t={id:uid(),name:nm,email:"",country:"",dept:""};S.testers.push(t);newTesters++;}return t.id;});
+    let c=byKey.get(key);
+    if(c){ updated++; if(o.dom)c.domain=o.dom; if(steps.length)c.steps=steps; c.devops=devops; c.defaultTesterIds=c.defaultTesterIds||[]; tIds.forEach(id=>{if(!c.defaultTesterIds.includes(id))c.defaultTesterIds.push(id);}); }
+    else { S.library.push({id:uid(),order:++maxO,domain:o.dom,process,scenario,defaultTesterIds:tIds,notes:"",prereq:"",steps,txnRef:false,devops}); byKey.set(key,1); added++; } });
+  let n=0; sortedLib(S.library).forEach(c=>c.order=++n);
+  save(); go("library");
+  alert(`Import step-level (sheet "${sn}"): ${added} new, ${updated} updated · ${groups.size} scénario(s), ${newTesters} tester(s) créé(s). Library total: ${S.library.length}.`);
+}
+
+/* =========================================================================
+   CAMPAIGN — iterations, testers(country), dispatch, tracking, tester HTML
+   ========================================================================= */
+let trkFilter={entity:"",tester:"",status:"",process:"",q:"",date:""};
+let trkSort={field:"process",dir:1};
+let tvFilter={entity:"",status:""}, tvExpanded=new Set();
+let loadSel={domain:"",process:""};
+let campSec={iter:true,testers:false,load:null,track:true}; /* remembered open/closed state per section */
+function setTrkSort(field){ if(trkSort.field===field) trkSort.dir=-trkSort.dir; else {trkSort.field=field;trkSort.dir=1;} renderCampaign(); }
+function trkKey(e,field){ switch(field){
+  case "scenario": return naturalKey(e.scenario);
+  case "entity":   return (e.entity||"");
+  case "tester":   return naturalKey(testerName(e.testerId));
+  case "status":   return (e.status||"");
+  case "testDate": return (e.testDate||"");
+  default:         return naturalKey((e.process||"")+" "+(e.scenario||"")); } }
+/* ---- bulk selection + pagination for the tracking table ---------------- */
+let trkSel=new Set(), trkPage=0, trkPageIds=[]; const TRK_PAGE=150;
+function trkGo(d){ trkPage=Math.max(0,trkPage+d); renderCampaign(); }
+function toggleTrkSel(id,on){ if(on)trkSel.add(id); else trkSel.delete(id);
+  const bb=document.getElementById("bulkBar"); if(bb){ bb.style.display=trkSel.size?"flex":"none"; const c=document.getElementById("bulkCount"); if(c)c.textContent=trkSel.size; } }
+function trkSelAllPage(on){ trkPageIds.forEach(id=> on?trkSel.add(id):trkSel.delete(id)); renderCampaign(); }
+function bulkClear(){ trkSel.clear(); renderCampaign(); }
+function findOrCreateTester(name){ name=(name||"").trim(); if(!name)return "";
+  let t=S.testers.find(x=>x.name===name); if(!t){t={id:uid(),name,email:"",country:"",dept:""};S.testers.push(t);} return t.id; }
+function setExecTester(id,name){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  e.testerId=findOrCreateTester(name); e.updatedAt=new Date().toISOString(); persist(); }
+function addTesterToExec(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  modal(`<h2>Add tester(s)</h2>
+    <p class="hint">${esc(e.process)} · ${esc(e.scenario)} · ${badge(e.entity,entityMeta(e.entity).color)}</p>
+    <div class="field"><label>Tester name(s) — separate several with ;</label>
+      <input id="addt_names" list="testerDL" placeholder="e.g. Smith Anna; Doe John" style="width:100%" autofocus/>
+      <div class="hint">A new name creates the tester (tagged with this entity). One execution is added per tester; testers already on this process are skipped.</div></div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="confirmAddTester('${e.id}')">Add</button></div>`);
+}
+function confirmAddTester(id){ const e=S.executions.find(x=>x.id===id); if(!e){ closeModal(); return; }
+  const names=String(($("#addt_names")||{}).value||"").split(/[;\n]/).map(x=>x.trim()).filter(Boolean);
+  if(!names.length){ closeModal(); return; }
+  const idx=S.executions.indexOf(e); let off=1, added=0;
+  names.forEach(nm=>{ const tid=findOrCreateTester(nm); if(!tid) return;
+    const t=S.testers.find(x=>x.id===tid); if(t&&e.entity&&!t.country) t.country=e.entity;   /* tag tester entity */
+    if(S.executions.some(x=>x.iterationId===e.iterationId&&(x.entity||"")===(e.entity||"")&&x.process===e.process&&x.scenario===e.scenario&&x.testerId===tid)) return;
+    const c=Object.assign({},e,{id:uid(),testerId:tid,status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()});
+    S.executions.splice(idx+off,0,c); off++; added++;
+  });
+  closeModal(); persist(); }
+function bulkAssign(){ if(!trkSel.size)return; const nm=(($("#bulkTester")||{}).value||"").trim();
+  if(!nm){ alert("Type a tester name first."); return; }
+  const v=findOrCreateTester(nm);
+  S.executions.forEach(e=>{ if(trkSel.has(e.id)){ e.testerId=v; e.updatedAt=new Date().toISOString(); } }); persist(); }
+function bulkSetDate(){ if(!trkSel.size)return; const v=($("#bulkDate")||{}).value||"";
+  S.executions.forEach(e=>{ if(trkSel.has(e.id)){ e.testDate=v; e.updatedAt=new Date().toISOString(); } }); persist(); }
+function bulkDelSel(){ if(!trkSel.size)return; if(!confirm("Delete "+trkSel.size+" selected execution(s)?"))return;
+  S.executions=S.executions.filter(e=>!trkSel.has(e.id)); trkSel.clear(); persist(); }
+function renderCampaign(){
+  const iter=activeIter(); const ex=iterExecs();
+  $("#view-campaign").innerHTML=`
+    <h2>Campaign — ${esc(iter?iter.name:"—")}</h2>
+    <p class="sub">Manage iterations and testers, load Library definitions into the active iteration, dispatch them across entities and testers, track execution, and generate per-tester pages.</p>
+
+    <details class="sec" ${campSec.iter?'open':''} ontoggle="campSec.iter=this.open"><summary>Iterations</summary>
+      <div class="card">
+        <table><thead><tr><th>Name</th><th>Start</th><th>End</th><th>Assigned</th><th>Progress</th><th></th></tr></thead><tbody>
+        ${S.iterations.map(it=>{const e=S.executions.filter(x=>x.iterationId===it.id);return `<tr><td><b>${esc(it.name)}</b> ${it.id===S.activeIterationId?'<span class="tag">active</span>':''}</td><td>${esc(it.startDate||"—")}</td><td>${esc(it.endDate||"—")}</td><td>${e.length}</td><td style="min-width:160px">${progressBar(e)}</td><td><button class="sm" onclick="editIter('${it.id}')">Edit</button> ${S.iterations.length>1?`<button class="sm danger" onclick="delIter('${it.id}')">✕</button>`:''}</td></tr>`;}).join("")}
+        </tbody></table>
+        <div class="cards" style="margin-top:10px"><button class="primary" onclick="newIter()">+ New iteration</button><button onclick="carryOver()">↪ New iteration carrying over Failed/Blocked</button></div>
+      </div>
+    </details>
+
+    <details class="sec" ${campSec.testers?'open':''} ontoggle="campSec.testers=this.open"><summary>Testers (${S.testers.length})</summary>
+      <div class="card">
+        <p class="hint">Each tester has a <b>Country (LU/FR/SP/UK)</b> to ease dispatch. Auto-created from the DevOps TesterName column on import.</p>
+        <table><thead><tr><th>Name</th><th>Email</th><th>Country</th><th>Department</th><th></th></tr></thead><tbody>
+        ${S.testers.map((t,i)=>`<tr>
+          <td><input value="${esc(t.name)}" onchange="S.testers[${i}].name=this.value;persist()"/></td>
+          <td><input value="${esc(t.email||'')}" onchange="S.testers[${i}].email=this.value;persist()"/></td>
+          <td><select onchange="S.testers[${i}].country=this.value;persist()"><option value="">—</option>${S.config.entities.map(en=>`<option ${t.country===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
+          <td><select onchange="S.testers[${i}].dept=this.value;persist()"><option value="">—</option>${S.config.departments.map(d=>`<option ${t.dept===d?'selected':''}>${esc(d)}</option>`).join("")}</select></td>
+          <td><button class="sm danger" onclick="delTester(${i})">✕</button></td></tr>`).join("")||'<tr><td colspan="5" class="muted">No tester yet.</td></tr>'}
+        </tbody></table>
+        <button class="sm" onclick="S.testers.push({id:uid(),name:'New tester',email:'',country:'',dept:''});persist()">+ Tester</button>
+      </div>
+    </details>
+
+    <details class="sec" ${(campSec.load==null?ex.length===0:campSec.load)?'open':''} ontoggle="campSec.load=this.open"><summary>Load Library → this iteration & dispatch</summary>
+      <div class="card">${renderLoadPanel()}</div>
+    </details>
+
+    <details class="sec" ${campSec.track?'open':''} ontoggle="campSec.track=this.open"><summary>Execution tracking (${ex.length})</summary>
+      <div class="card">
+        <div class="toolbar">
+          <input placeholder="🔍 search…" value="${esc(trkFilter.q)}" oninput="trkSearch(this.value)" style="min-width:180px"/>
+          <select onchange="trkFilter.entity=this.value;renderCampaign()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${trkFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>
+          ${tCombo('trkTester',trkFilter.tester,"trkFilter.tester=v;renderCampaign()",{emptyLabel:'All testers',placeholder:'🔍 all testers…',width:'180px'})}
+          <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
+          <select title="Filter by execution due date — then use Tester list (Outlook) to invite that date's testers" onchange="trkFilter.date=this.value;renderCampaign()"><option value="">All dates</option>${[...new Set(iterExecs().map(e=>e.testDate).filter(Boolean))].sort().map(d=>`<option ${trkFilter.date===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
+          <div class="spacer"></div>
+          <button onclick="genSpocPage()" title="Generate a standalone HTML page for the current filter so a SPOC can assign testers (then sends back the JSON)">⬇ SPOC page (HTML)</button>
+          <button onclick="exportAssignments()" title="Export the same as an Excel sheet (SPOC fills the Tester column)">⬇ …or Excel</button>
+          <label class="pill" style="cursor:pointer" title="Re-import a SPOC's filled assignment file (.json from the SPOC page, or .xlsx) — creates missing testers; several names separated by ; create one execution per tester">⬆ Import assignments<input type="file" accept=".xlsx,.xls,.json" style="display:none" onchange="importAssignmentsAny(this)"/></label>
+          <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
+          <button onclick="openTesterList()">📋 Tester list (Outlook)</button>
+          <button onclick="openGenTester()">⬇ Generate tester HTML</button>
+        </div>
+        <div id="trkTableWrap">${renderTrackingTable()}</div>
+      </div>
+    </details>`;
+}
+function trkSearch(v){ trkFilter.q=v; trkPage=0; const w=$("#trkTableWrap"); if(w) w.innerHTML=renderTrackingTable(); else renderCampaign(); }
+function renderLoadPanel(){
+  if(S.library.length===0) return '<p class="muted">Library is empty — import definitions first (Library tab).</p>';
+  const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
+  const procs=[...new Set(S.library.filter(c=>!loadSel.domain||c.domain===loadSel.domain).map(c=>c.process))].sort();
+  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
+  return `<p class="hint">Pick a full or partial set of the Library, choose target entities, then add to <b>${esc(activeIter().name)}</b>. By default each test case is dispatched to <b>its assigned testers × each entity</b>. Pick a single tester below to override and assign everything to that one tester. Duplicates are skipped.</p>
+    <div class="row">
+      <div class="field"><label>Domain</label><select onchange="loadSel.domain=this.value;loadSel.process='';renderCampaign()"><option value="">— all —</option>${domains.map(d=>`<option ${loadSel.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select></div>
+      <div class="field"><label>PRC</label><select onchange="loadSel.process=this.value;renderCampaign()"><option value="">— all (in domain) —</option>${procs.map(p=>`<option ${loadSel.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select></div>
+      <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
+      <div class="field"><label>Override tester (optional)</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— use assigned testers —',width:'200px'})}</div>
+      <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
+      <button class="primary" onclick="loadIntoIteration()">Add ${target.length} definition(s)</button>
+    </div>`;
+}
+function loadIntoIteration(){
+  const ents=[...document.querySelectorAll(".ldEnt:checked")].map(x=>x.value);
+  if(!ents.length){ alert("Select at least one target entity."); return false; }
+  const formTester=$("#ldTester").value, rec=$("#ldRec").value, iterId=S.activeIterationId;
+  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
+  let created=0;
+  target.forEach(c=>ents.forEach(ent=>{
+    const testerIds = formTester ? [formTester] : (libTesterIds(c).length?libTesterIds(c):[""]);
+    testerIds.forEach(testerId=>{
+      if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&e.entity===ent&&(e.testerId||"")===(testerId||""))) return;
+      S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
+        steps:(c.steps||[]).slice(),prereq:c.prereq||"",txnRef:!!c.txnRef,txnRefValue:"",entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
+      created++;
+    });
+  }));
+  persist(); alert(created+" execution(s) added to "+activeIter().name+".");
+  return created;
+}
+function renderTrackingTable(){
+  let ex=iterExecs().filter(e=>
+    (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
+    (!trkFilter.status||e.status===trkFilter.status)&&(!trkFilter.process||e.process===trkFilter.process)&&
+    (!trkFilter.date||(e.testDate||"")===trkFilter.date)&&
+    (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase())));
+  ex=ex.sort((a,b)=>{const ka=trkKey(a,trkSort.field),kb=trkKey(b,trkSort.field);return (ka<kb?-1:ka>kb?1:0)*trkSort.dir;});
+  if(ex.length===0) return '<div class="empty">No execution in this iteration yet — load Library definitions above.</div>';
+  const total=ex.length, pages=Math.ceil(total/TRK_PAGE);
+  if(trkPage>=pages) trkPage=0;
+  const pageEx=ex.slice(trkPage*TRK_PAGE,(trkPage+1)*TRK_PAGE);
+  trkPageIds=pageEx.map(e=>e.id);
+  const a0=trkPage*TRK_PAGE+1, b0=Math.min(total,(trkPage+1)*TRK_PAGE);
+  const allOnPage=trkPageIds.length&&trkPageIds.every(id=>trkSel.has(id));
+  const sa=f=>trkSort.field===f?(trkSort.dir===1?' ▲':' ▼'):'';
+  const sh=(label,field,extra)=>`<th style="cursor:pointer;user-select:none;${extra||''}" onclick="setTrkSort('${field}')">${label}${sa(field)}</th>`;
+  const bulk=`<div id="bulkBar" class="card" style="display:${trkSel.size?'flex':'none'};gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:10px 12px">
+    <b><span id="bulkCount">${trkSel.size}</span> selected</b>
+    <span class="muted">Tester:</span><input id="bulkTester" list="testerDL" placeholder="name (new ok)" style="width:180px"/><button class="sm" onclick="bulkAssign()">Assign</button>
+    <span class="muted" style="margin-left:8px">Due date:</span><input id="bulkDate" placeholder="e.g. 2026-06-20 / W25" style="width:150px"/><button class="sm" onclick="bulkSetDate()">Apply</button>
+    <div class="spacer"></div><button class="sm danger" onclick="bulkDelSel()">Delete</button><button class="sm" onclick="bulkClear()">Clear</button></div>`;
+  const pager=`<div class="toolbar" style="margin-bottom:8px"><span class="muted">${total} execution(s)${pages>1?` · page ${trkPage+1}/${pages} (${a0}–${b0})`:''}</span><div class="spacer"></div>${pages>1?`<button class="sm" onclick="trkGo(-1)">◀ Prev</button><button class="sm" onclick="trkGo(1)">Next ▶</button>`:''}</div>`;
+  const tdl=`<datalist id="testerDL">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>`<option value="${esc(t.name)}"></option>`).join("")}</datalist>`;
+  return tdl+bulk+pager+`<table><thead><tr><th style="width:26px"><input type="checkbox" ${allOnPage?'checked':''} title="Select page" onchange="trkSelAllPage(this.checked)"></th>${sh('PRC','process')}${sh('Scenario','scenario')}${sh('Entity','entity')}${sh('Tester','tester')}${sh('Status','status','width:130px')}${sh('Execution due date','testDate','width:150px')}<th>Business comment</th><th></th></tr></thead><tbody>
+    ${pageEx.map(e=>{const sm=statusMeta(e.status);const need=sm.requiresComment&&!e.comment;return `<tr>
+      <td><input type="checkbox" class="trkchk" ${trkSel.has(e.id)?'checked':''} onchange="toggleTrkSel('${e.id}',this.checked)"></td>
+      <td>${esc(e.process)}${e.adhoc?' '+badge('ad-hoc','#a855f7'):''}</td>
+      <td><textarea style="min-height:36px" title="Edit the scenario text — it is used as-is in the generated tester HTML" oninput="setExec('${e.id}','scenario',this.value)">${esc(e.scenario)}</textarea></td>
+      <td><select onchange="setExec('${e.id}','entity',this.value)">${S.config.entities.map(en=>`<option ${en.code===e.entity?'selected':''}>${esc(en.code)}</option>`).join("")}</select></td>
+      <td><input list="testerDL" value="${esc((tester(e.testerId)||{}).name||'')}" placeholder="name (new ok)" title="Type a name — a new tester is created automatically" onchange="setExecTester('${e.id}',this.value)" style="width:100%"/></td>
+      <td><select onchange="setExec('${e.id}','status',this.value)" style="border-color:${sm.color}66;color:${sm.color}">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></td>
+      <td><input type="text" value="${esc(e.testDate||'')}" placeholder="e.g. 2026-06-10 / W24 / TBD" title="Execution due date — free text, set by coordinator, read-only for the tester" onchange="setExec('${e.id}','testDate',this.value)"/></td>
+      <td><textarea style="min-height:36px;${need?'border-color:#ef4444':''}" placeholder="${sm.requiresComment?'required…':'optional'}" oninput="setExec('${e.id}','comment',this.value)">${esc(e.comment)}</textarea>${need?'<div class="hint" style="color:#ef4444">required</div>':''}</td>
+      <td>${((e.screens&&e.screens.length)||(e.failedSteps&&Object.keys(e.failedSteps).length))?`<button class="sm" title="View evidence" onclick="openEvidence('${e.id}')">📎${(e.screens&&e.screens.length)||''}</button> `:''}<button class="sm" title="Add tester(s) to this process" onclick="addTesterToExec('${e.id}')">＋👤</button> <button class="sm danger" onclick="delExec('${e.id}')">✕</button></td></tr>`;}).join("")}
+    </tbody></table>`;
+}
+function openEvidence(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  const steps=(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[])); const fs=e.failedSteps||{};
+  const flagged=Object.keys(fs).filter(k=>fs[k]).map(k=>steps[k]!=null?steps[k]:("step "+(parseInt(k)+1))).filter(Boolean);
+  const shots=(e.screens||[]).map(sc=>`<a href="${sc.data}" target="_blank" title="${esc(sc.name||'')}"><img src="${sc.data}" style="max-height:160px;border:1px solid var(--line);border-radius:8px"/></a>`).join(" ");
+  modal(`<h2>Evidence — ${esc(e.process)}</h2>
+    <p class="hint">${esc(e.scenario)} · ${badge(e.entity,entityMeta(e.entity).color)} · ${esc(testerName(e.testerId))} · ${badge(e.status,statusMeta(e.status).color)}</p>
+    <div class="field"><label>Problematic step(s)</label>${flagged.length?`<ol class="steplist">${flagged.map(s=>`<li>${esc(stepText(s))}${stepTagsHTML(s)}</li>`).join("")}</ol>`:'<span class="muted">none flagged</span>'}</div>
+    <div class="field" style="margin-top:8px"><label>Screenshots (${(e.screens||[]).length})</label><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">${shots||'<span class="muted">none</span>'}</div></div>
+    <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
+}
+function setExec(id,field,val){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  e[field]=val; e.updatedAt=new Date().toISOString();
+  if(field==="comment"||field==="scenario"){ save(); return; }   // don't re-render on each keystroke
+  persist(); }
+function delExec(id){ S.executions=S.executions.filter(x=>x.id!==id); persist(); }
+function delTester(i){ const t=S.testers[i];
+  if((S.executions.some(e=>e.testerId===t.id)||S.library.some(c=>libTesterIds(c).includes(t.id)))&&!confirm("This tester is referenced. Remove anyway?"))return;
+  S.testers.splice(i,1); persist(); }
+
+/* ===== Tester view: cross-service/entity projection + on-the-fly reassignment ===== */
+function tvToggle(tid){ if(tvExpanded.has(tid))tvExpanded.delete(tid); else tvExpanded.add(tid); renderTesterView(); }
+function reassignAll(fromTid){ const inp=$("#reassign_"+(fromTid||'none')); const name=((inp&&inp.value)||"").trim();
+  if(!name){ alert("Type a target tester first."); return; }
+  const toId=findOrCreateTester(name); if(toId===fromTid){ alert("Same tester — nothing to do."); return; }
+  const list=iterExecs().filter(e=>(e.testerId||"")===(fromTid||"")&&(!tvFilter.entity||e.entity===tvFilter.entity)&&(!tvFilter.status||e.status===tvFilter.status));
+  if(!list.length){ alert("No matching test to move."); return; }
+  if(!confirm("Reassign "+list.length+" test(s) from "+(fromTid?testerName(fromTid):'Unassigned')+" to "+name+"?")) return;
+  list.forEach(e=>{ e.testerId=toId; e.updatedAt=new Date().toISOString(); }); persist(); }
+function renderTesterView(){
+  const iter=activeIter(); const all=iterExecs();
+  // Section 1 — cross-service (domains) / cross-entity processes
+  const bp={};
+  all.forEach(e=>{ const p=e.process||"(none)"; const o=bp[p]||(bp[p]={ex:[],dom:new Set(),ent:new Set(),tst:new Set(),scn:new Set(),due:new Set()});
+    o.ex.push(e); if(e.domain)o.dom.add(e.domain); if(e.entity)o.ent.add(e.entity); if(e.testerId)o.tst.add(e.testerId); o.scn.add(e.scenario); if((e.testDate||"").trim())o.due.add(e.testDate.trim()); });
+  const cross=Object.entries(bp).filter(([p,o])=>o.dom.size>1||o.ent.size>1).sort((a,b)=>naturalKey(a[0]).localeCompare(naturalKey(b[0])));
+  const crossHtml = cross.length
+    ? `<table><thead><tr><th>Process</th><th>Scén.</th><th>Date(s) d'exécution</th><th>Services (domaines)</th><th>Entités</th><th>Testeurs</th><th style="min-width:150px">Progress</th></tr></thead><tbody>`
+      + cross.map(([p,o])=>`<tr>
+          <td><b>${esc(p)}</b> ${o.dom.size>1?badge('cross-service','#a855f7'):''}${o.ent.size>1?badge('cross-entité','#0ea5e9'):''}</td>
+          <td>${o.scn.size}</td>
+          <td>${[...o.due].sort().map(d=>esc(d)).join(', ')||'<span class="muted">—</span>'}</td>
+          <td>${[...o.dom].sort().map(d=>esc(d)).join(', ')||'<span class="muted">—</span>'}</td>
+          <td>${[...o.ent].sort().map(en=>badge(en,entityMeta(en).color)).join(' ')||'<span class="muted">—</span>'}</td>
+          <td>${o.tst.size}${o.tst.size>1?' '+badge('multi-testeurs','#22c55e'):''}</td>
+          <td>${progressBar(o.ex)}</td></tr>`).join("")
+      + `</tbody></table>`
+    : '<p class="muted">Aucun process cross-service ou cross-entité dans cette itération.</p>';
+  // Section 2 — by tester, with reassignment
+  const fex=all.filter(e=>(!tvFilter.entity||e.entity===tvFilter.entity)&&(!tvFilter.status||e.status===tvFilter.status));
+  const byT={}; fex.forEach(e=>{ (byT[e.testerId||""]=byT[e.testerId||""]||[]).push(e); });
+  const tdl=`<datalist id="testerDL">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>`<option value="${esc(t.name)}"></option>`).join("")}</datalist>`;
+  const entSel=`<select onchange="tvFilter.entity=this.value;renderTesterView()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${tvFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>`;
+  const stSel=`<select onchange="tvFilter.status=this.value;renderTesterView()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${tvFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>`;
+  const groups=Object.keys(byT).sort((a,b)=>{ if(a==="")return 1; if(b==="")return -1; return (testerName(a)||"").localeCompare(testerName(b)); });
+  const cards=groups.map(tid=>{ const list=byT[tid]; const ents=[...new Set(list.map(e=>e.entity).filter(Boolean))];
+    const nm=tid?testerName(tid):'— Unassigned —'; const open=tvExpanded.has(tid);
+    const detail = open ? `<div style="margin-top:6px;border-top:1px solid var(--line);padding-top:6px">`
+      + list.slice().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(e=>`<div style="display:flex;gap:8px;align-items:center;padding:3px 0">
+          <span style="flex:1">${esc(e.process)} · ${esc(e.scenario)} ${badge(e.entity,entityMeta(e.entity).color)} ${badge(e.status,statusMeta(e.status).color)}</span>
+          <input list="testerDL" placeholder="reassign to…" title="Type a tester to move this test" onchange="setExecTester('${e.id}',this.value)" style="width:180px"/></div>`).join("")
+      + `</div>` : '';
+    return `<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="sm" onclick="tvToggle('${tid}')">${open?'▾':'▸'}</button>
+        <b style="min-width:150px">${esc(nm)}</b> ${ents.map(en=>badge(en,entityMeta(en).color)).join(' ')}
+        <span class="muted">${list.length} test(s)</span>
+        <div style="flex:1;min-width:150px">${progressBar(list)}</div>
+        <span class="muted">Reassign all →</span>
+        <input list="testerDL" id="reassign_${esc(tid||'none')}" placeholder="target tester…" style="width:160px"/>
+        <button class="sm" onclick="reassignAll('${tid}')">Move all</button>
+      </div>${detail}</div>`; }).join("");
+  $("#view-testerview").innerHTML=`${tdl}
+    <h2>Tester view — ${esc(iter?iter.name:'—')}</h2>
+    <p class="sub">Projection des assignations et réaffectation à la volée (indisponibilités) — sans passer par l'Execution Tracking.</p>
+    <details class="sec" open><summary>Cross-service / cross-entity processes</summary><div class="card">
+      <p class="hint">Process couvrant plusieurs domaines (services) et/ou plusieurs entités — pratique là où des testeurs ont été ajoutés.</p>
+      ${crossHtml}</div></details>
+    <details class="sec" open><summary>By tester — reassign</summary><div class="card">
+      <div class="toolbar">${entSel}${stSel}<span class="muted">${groups.filter(g=>g).length} tester(s)${byT[""]?' + unassigned':''}</span></div>
+      ${cards||'<p class="muted">No assignment in this iteration.</p>'}</div></details>`;
+}
+
+/* iterations */
+function newIter(){ const name=prompt("Iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
+  const it={id:uid(),name,startDate:"",endDate:""}; S.iterations.push(it); S.activeIterationId=it.id; renderAll(); save(); }
+function editIter(id){ const it=S.iterations.find(x=>x.id===id);
+  modal(`<h2>Edit iteration</h2><div class="field"><label>Name</label><input id="it_name" value="${esc(it.name)}"/></div>
+    <div class="row" style="margin-top:10px"><div class="field"><label>Start</label><input type="date" id="it_start" value="${esc(it.startDate)}"/></div><div class="field"><label>End</label><input type="date" id="it_end" value="${esc(it.endDate)}"/></div></div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveIter('${id}')">Save</button></div>`); }
+function saveIter(id){ const it=S.iterations.find(x=>x.id===id); it.name=$("#it_name").value;it.startDate=$("#it_start").value;it.endDate=$("#it_end").value; closeModal(); renderAll(); save(); }
+function delIter(id){ if(!confirm("Delete this iteration and its executions?"))return; S.iterations=S.iterations.filter(x=>x.id!==id); S.executions=S.executions.filter(e=>e.iterationId!==id); if(S.activeIterationId===id)S.activeIterationId=S.iterations[0].id; renderAll(); save(); }
+function carryOver(){ const from=activeIter(); const name=prompt("New iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
+  const it={id:uid(),name,startDate:"",endDate:""}; S.iterations.push(it);
+  const src=S.executions.filter(e=>e.iterationId===from.id&&["Failed","Blocked","Not started"].includes(e.status));
+  src.forEach(e=>S.executions.push({...e,id:uid(),iterationId:it.id,status:"Not started",comment:"",testDate:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()}));
+  S.activeIterationId=it.id; renderAll(); save(); alert(src.length+" test(s) carried over to "+name+"."); }
+
+/* =========================================================================
+   PER-TESTER STANDALONE HTML
+   ========================================================================= */
+/* extract the testers assigned in the current iteration, ready to paste into Outlook */
+function openTesterList(){
+  const ids=[...new Set(trkFiltered().map(e=>e.testerId).filter(Boolean))];
+  const ts=ids.map(id=>tester(id)).filter(Boolean).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  if(!ts.length){ alert("No tester matches the current filters."); return; }
+  const names=ts.map(t=>t.name).join("; ");
+  const emails=ts.map(t=>t.email).filter(Boolean).join("; ");
+  const noMail=ts.filter(t=>!t.email).map(t=>t.name);
+  const scopeLbl=trkFilter.date?`due on ${esc(trkFilter.date)}`:`in ${esc(activeIter().name)}`;
+  modal(`<h2>Testers ${scopeLbl}</h2>
+    <p class="hint">${ts.length} tester(s) matching the current filters${trkFilter.date?` for <b>${esc(trkFilter.date)}</b>`:''}. Click a box to select all, or use the copy buttons, then paste into Outlook.</p>
+    <div class="field" style="margin-top:8px"><label>Names</label><textarea id="tl_names" style="min-height:54px" onclick="this.select()">${esc(names)}</textarea>
+      <div class="toolbar" style="margin-top:6px"><button class="sm" onclick="copyFrom('tl_names')">⧉ Copy names</button></div></div>
+    <div class="field" style="margin-top:4px"><label>Emails (Outlook “To” field)</label><textarea id="tl_emails" style="min-height:54px" onclick="this.select()">${esc(emails)}</textarea>
+      <div class="toolbar" style="margin-top:6px"><button class="sm" onclick="copyFrom('tl_emails')">⧉ Copy emails</button>${noMail.length?`<span class="hint" style="color:#f59e0b">No email for: ${esc(noMail.join(", "))}</span>`:''}</div></div>
+    <div class="toolbar" style="margin-top:10px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
+}
+function copyFrom(id){ const el=$("#"+id); if(!el)return; el.focus(); el.select();
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(el.value); } else { document.execCommand("copy"); } }
+  catch(e){ try{ document.execCommand("copy"); }catch(_){} } }
+function openGenTester(){
+  modal(`<h2>Generate tester sheet(s)</h2>
+    <p class="hint">Standalone HTML for <b>${esc(activeIter().name)}</b>. The tester fills statuses / comments / evidence and sends back the JSON (only their own selection). Import it via "Import tester results".</p>
+    <div class="row">
+      <div class="field" style="flex:1"><label>Single tester</label>${tCombo('gtTester',(S.testers[0]||{}).id||'',"",{hidden:'gtTester',allowEmpty:false,width:'100%'})}</div>
+      <div class="field"><label>Entity filter (optional)</label><select id="gtEntity"><option value="">— all —</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select></div>
+    </div>
+    <div class="toolbar" style="margin-top:14px"><button onclick="genAllTesterPages()" title="One combined file with every tester — each only sees and returns their own selection">⬇ Generate ALL testers (combined)</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="genTesterPage()">Generate this tester</button></div>`);
+}
+function slug(s){ return String(s||"").replace(/\W+/g,'_'); }
+function execToTest(e){ return {id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||"",
+  txnRef:(e.txnRef!=null?!!e.txnRef:!!((libById(e.libraryItemId)||{}).txnRef)),txnRefValue:e.txnRefValue||"",
+  failedSteps:e.failedSteps||{},screens:e.screens||[],
+  prereq:e.prereq||(libById(e.libraryItemId)||{}).prereq||"",
+  steps:normSteps(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]))}; }
+function basePayload(iter,testers){ return {campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,
+  entities:S.config.entities.map(x=>x.code),statuses:S.config.statuses,links:(S.config.links||[]).filter(l=>l&&(l.label||l.url)),testers}; }
+function genTesterPage(){
+  const testerId=$("#gtTester").value, entFilter=$("#gtEntity").value, iter=activeIter();
+  const t=tester(testerId)||{name:"Tester"};
+  const tests=S.executions.filter(e=>e.iterationId===iter.id&&e.testerId===testerId&&(!entFilter||e.entity===entFilter))
+    .sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(execToTest);
+  if(!tests.length){ alert("No test assigned to this tester for this iteration/entity."); return; }
+  download(`UAT_${slug(iter.name)}_${slug(t.name)}.html`, buildTesterHTML(basePayload(iter,[{id:testerId,name:t.name,tests}])), "text/html");
+  closeModal();
+}
+function genAllTesterPages(){
+  const iter=activeIter();
+  const ids=[...new Set(S.executions.filter(e=>e.iterationId===iter.id&&e.testerId).map(e=>e.testerId))];
+  const testers=ids.map(id=>({id,name:(tester(id)||{}).name||"(unknown)",
+      tests:S.executions.filter(e=>e.iterationId===iter.id&&e.testerId===id).sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(execToTest)}))
+    .filter(x=>x.tests.length).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  if(!testers.length){ alert("No assignment in this iteration yet."); return; }
+  download(`UAT_${slug(iter.name)}_ALL_testers.html`, buildTesterHTML(basePayload(iter,testers)), "text/html");
+  closeModal();
+}
+function buildTesterHTML(payload){
+  const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c");
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>UAT — ${esc(payload.testers.length===1?payload.testers[0].name:"All testers")} — ${esc(payload.iteration)}</title>
+<style>
+body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px}
+header{background:#16233b;padding:12px 18px;position:sticky;top:0;display:flex;gap:16px;align-items:center;border-bottom:1px solid #334155;z-index:5}
+header h1{font-size:16px;margin:0}.muted{color:#94a3b8}
+main{padding:18px;max-width:1200px;margin:0 auto}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
+th{color:#94a3b8;position:sticky;top:56px;background:#0f172a}
+select,textarea,input{background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-family:inherit}
+textarea{width:100%;min-height:38px}
+button{background:#0ea5e9;color:#06283b;border:0;border-radius:6px;padding:9px 16px;font-weight:600;cursor:pointer}
+button.sec{background:#273449;color:#e2e8f0;border:1px solid #334155;font-weight:400}
+.req{border-color:#ef4444!important}.badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#334155}
+.bar{position:sticky;bottom:0;background:#16233b;border-top:1px solid #334155;padding:10px 18px;display:flex;gap:10px;align-items:center}
+.saved{color:#22c55e;font-size:12px}
+.stepToggle{color:#38bdf8;cursor:pointer;font-size:12px;user-select:none;white-space:nowrap}
+.steprow>td{background:#0b1220}
+ol.steps{margin:4px 0;padding-left:22px}
+ol.steps li{margin:3px 0}
+.duedate{white-space:nowrap}
+.reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.steptag.app{background:#f59e0b33;color:#fcd34d;border-color:#f59e0b}
+.txnlbl{font-size:12px;color:#94a3b8;margin-top:4px;display:inline-block}
+input.txnin{margin-top:3px;width:260px;max-width:100%}
+input.txnin.req{border-color:#ef4444}
+.links{background:#0b1220;border:1px solid #334155;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+.links a{color:#38bdf8}
+.whoami{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.whoami select{min-width:260px}
+th.sortable{cursor:pointer;user-select:none}
+.issuebox{padding:2px 0}
+.tpick2{display:block;padding:2px 0;cursor:pointer}
+.dropz{border:1px dashed #475569;border-radius:8px;padding:14px;text-align:center;color:#94a3b8;cursor:pointer;background:#0b1220}
+.dropz.over{border-color:#38bdf8;color:#e2e8f0}
+.shots{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.shot{position:relative;display:inline-block}
+.shot img{max-height:74px;border:1px solid #334155;border-radius:6px;display:block}
+.rmshot{position:absolute;top:-8px;right:-8px;background:#ef4444;color:#fff;border:0;border-radius:50%;width:20px;height:20px;padding:0;font-weight:700;cursor:pointer}
+.wcombo{position:relative;display:inline-block}
+.wcombo input{min-width:280px}
+.wlist{position:absolute;z-index:20;left:0;right:0;top:100%;margin-top:2px;background:#1e293b;border:1px solid #334155;border-radius:6px;max-height:260px;overflow:auto;display:none;box-shadow:0 10px 26px rgba(0,0,0,.5)}
+.wopt{padding:7px 10px;cursor:pointer;white-space:nowrap}
+.wopt:hover{background:#0ea5e9;color:#06283b}
+</style></head><body>
+<header><h1 id="sheetTitle">UAT Test Sheet</h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option><option value="es">ES</option></select><button id="btnSaveTop" onclick="saveJSON()" style="padding:6px 12px"></button></header>
+<main>
+  <div class="whoami" id="whoamiBar"><label class="muted" id="lblWho" for="whoami"></label><div class="wcombo"><input id="whoami" autocomplete="off"/><div class="wlist" id="whoamiList"></div></div></div>
+  <div class="links" id="links"></div>
+  <p class="muted" id="intro"></p>
+  <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+    <label class="muted" id="lblProc" for="procFilter"></label>
+    <select id="procFilter" onchange="render()"></select>
+    <span class="muted" id="shownCount"></span>
+  </div>
+  <table id="tbl"><thead><tr><th id="thPRC" class="sortable" onclick="sortBy('process')"></th><th id="thScn"></th><th id="thEnt"></th><th id="thSt" style="width:140px"></th><th id="thDue" class="sortable" style="width:160px" onclick="sortBy('testDate')"></th><th id="thCom"></th></tr></thead><tbody id="tb"></tbody></table>
+  <p style="margin-top:14px"><button class="sec" id="btnAdhoc" onclick="addAdhoc()"></button></p>
+</main>
+<div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
+<script>
+const DATA=${dataJson};
+let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="", sortDir=0;
+const I18N={
+ fr:{title:"Feuille de test UAT",selectName:"Sélectionne ton nom :",namePh:"tape ton nom…",
+   intro:"Renseigne un <b>Statut</b> pour chaque test. Un commentaire est <b>obligatoire</b> pour Failed/Blocked. Déplie un test (▸&nbsp;étapes) pour voir les étapes à suivre ; saisis la <b>référence de transaction</b> quand c'est demandé. Pour un test <b>Failed/Blocked</b>, coche l'étape qui pose problème et glisse-dépose une ou des <b>captures d'écran</b> comme preuve. Ton travail est enregistré automatiquement ; clique <b>Enregistrer mes résultats (JSON)</b> puis renvoie le fichier au coordinateur.",
+   proc:"Processus",allShort:"— Tous —",allProc:"— Tous les processus ({n}) —",shown:"affichés",
+   hPRC:"PRC",hScn:"Scénario",hEnt:"Entité",hSt:"Statut",hDue:"Date d'échéance",hCom:"Commentaire",
+   addAdhoc:"+ Ajouter un test ad-hoc",save:"⬇ Enregistrer mes résultats (JSON)",links:"Liens utiles :",
+   stepsN:"étapes ({n})",stepsFollow:"Étapes à suivre :",prereqLabel:"Données de test / pré-requis",tickSteps:"Coche la/les étape(s) en échec :",noSteps:"Aucune étape prédéfinie à signaler.",
+   evidence:"Preuve — glisse-dépose une ou des captures ici, ou clique pour parcourir :",dropHere:"Dépose une capture ici / clique pour parcourir",
+   txnRef:"Référence de transaction",required:"obligatoire",txnPh:"saisir la référence de transaction…",cReq:"obligatoire…",cOpt:"optionnel",
+   done:"faits",saved:"enregistré ✓",full:"⚠ stockage plein (captures trop lourdes) — enregistre le JSON",pickFirst:"Sélectionne d'abord ton nom.",noRes:"aucun résultat",remove:"retirer",
+   cNoCom:"{n} test(s) Failed/Blocked sans commentaire. Enregistrer quand même ?",cNoTxn:"{n} test(s) exécuté(s) sans référence de transaction. Enregistrer quand même ?"},
+ en:{title:"UAT Test Sheet",selectName:"Select your name:",namePh:"type your name…",
+   intro:"Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test (▸&nbsp;steps) to view the steps to follow; enter the <b>transaction reference</b> when required. For a <b>Failed/Blocked</b> test, tick the problematic step and drag-and-drop <b>screenshot(s)</b> as evidence. Your work is auto-saved; click <b>Save results (JSON)</b> and send the file back to the coordinator.",
+   proc:"Process",allShort:"— All —",allProc:"— All processes ({n}) —",shown:"shown",
+   hPRC:"PRC",hScn:"Scenario",hEnt:"Entity",hSt:"Status",hDue:"Execution due date",hCom:"Comment",
+   addAdhoc:"+ Add ad-hoc test",save:"⬇ Save results (JSON)",links:"Useful links:",
+   stepsN:"steps ({n})",stepsFollow:"Steps to follow:",prereqLabel:"Test data / prerequisites",tickSteps:"Tick the problematic step(s):",noSteps:"No predefined steps to flag.",
+   evidence:"Evidence — drag & drop screenshot(s) here, or click to browse:",dropHere:"Drop screenshot here / click to browse",
+   txnRef:"Transaction reference",required:"required",txnPh:"enter transaction reference…",cReq:"required…",cOpt:"optional",
+   done:"done",saved:"saved ✓",full:"⚠ storage full (screenshots too large) — save the JSON",pickFirst:"Select your name first.",noRes:"no match",remove:"remove",
+   cNoCom:"{n} test(s) Failed/Blocked without a comment. Save anyway?",cNoTxn:"{n} executed test(s) require a transaction reference that is still empty. Save anyway?"},
+ es:{title:"Hoja de pruebas UAT",selectName:"Selecciona tu nombre:",namePh:"escribe tu nombre…",
+   intro:"Indica un <b>Estado</b> para cada prueba. Un comentario es <b>obligatorio</b> para Failed/Blocked. Despliega una prueba (▸&nbsp;pasos) para ver los pasos a seguir; introduce la <b>referencia de transacción</b> cuando se solicite. Para una prueba <b>Failed/Blocked</b>, marca el paso problemático y arrastra y suelta una o varias <b>capturas de pantalla</b> como prueba. Tu trabajo se guarda automáticamente; haz clic en <b>Guardar mis resultados (JSON)</b> y envía el archivo al coordinador.",
+   proc:"Proceso",allShort:"— Todos —",allProc:"— Todos los procesos ({n}) —",shown:"mostrados",
+   hPRC:"PRC",hScn:"Escenario",hEnt:"Entidad",hSt:"Estado",hDue:"Fecha límite de ejecución",hCom:"Comentario",
+   addAdhoc:"+ Añadir prueba ad-hoc",save:"⬇ Guardar mis resultados (JSON)",links:"Enlaces útiles:",
+   stepsN:"pasos ({n})",stepsFollow:"Pasos a seguir:",prereqLabel:"Datos de prueba / requisitos",tickSteps:"Marca el/los paso(s) con error:",noSteps:"No hay pasos predefinidos que señalar.",
+   evidence:"Prueba — arrastra y suelta una o varias capturas aquí, o haz clic para explorar:",dropHere:"Suelta una captura aquí / haz clic para explorar",
+   txnRef:"Referencia de transacción",required:"obligatorio",txnPh:"introduce la referencia de transacción…",cReq:"obligatorio…",cOpt:"opcional",
+   done:"hechos",saved:"guardado ✓",full:"⚠ almacenamiento lleno (capturas demasiado grandes) — guarda el JSON",pickFirst:"Selecciona primero tu nombre.",noRes:"sin coincidencias",remove:"quitar",
+   cNoCom:"{n} prueba(s) Failed/Blocked sin comentario. ¿Guardar de todos modos?",cNoTxn:"{n} prueba(s) ejecutada(s) requieren una referencia de transacción aún vacía. ¿Guardar de todos modos?"}
+};
+let lang=(function(){try{return localStorage.getItem("mceu_tester_lang")||"fr";}catch(e){return "fr";}})();
+function T(k,n){let v=(I18N[lang]||I18N.fr)[k]||k; return n==null?v:v.replace("{n}",n);}
+function setLang(l){ lang=l; try{localStorage.setItem("mceu_tester_lang",l);}catch(e){} applyLang(); buildLinks(); buildProcFilter(); render(); }
+function applyLang(){
+  document.getElementById("sheetTitle").textContent=T("title");
+  document.getElementById("lblWho").textContent=T("selectName");
+  const wi=document.getElementById("whoami"); if(wi) wi.placeholder=T("namePh");
+  document.getElementById("intro").innerHTML=T("intro");
+  document.getElementById("lblProc").textContent=T("proc");
+  document.getElementById("btnAdhoc").textContent=T("addAdhoc");
+  document.getElementById("btnSave").textContent=T("save");
+  document.getElementById("btnSaveTop").textContent=T("save");
+  document.getElementById("thPRC").innerHTML=T("hPRC")+' <span id="arP"></span>';
+  document.getElementById("thScn").textContent=T("hScn");
+  document.getElementById("thEnt").textContent=T("hEnt");
+  document.getElementById("thSt").textContent=T("hSt");
+  document.getElementById("thDue").innerHTML=T("hDue")+' <span id="arD"></span>';
+  document.getElementById("thCom").textContent=T("hCom");
+  const ls=document.getElementById("langSel"); if(ls) ls.value=lang;
+}
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function stepTxt(s){return typeof s==="string"?s:((s&&s.t)||"");}
+function stepTagsHtml(s){var h="";if(s&&s.stream)h+=' <span class="steptag">'+esc(s.stream)+'</span>';if(s&&s.app)h+=' <span class="steptag app">'+esc(s.app)+'</span>';return h;}
+function nat(s){return String(s||"").toLowerCase().replace(/\\d+/g,m=>m.padStart(10,"0"));}
+function lsk(id){return "mceu_tester_"+DATA.iterationId+"_"+id;}
+function reqComment(st){const m=DATA.statuses.find(s=>s.value===st);return m&&m.requiresComment;}
+function buildLinks(){const L=(DATA.links||[]).filter(x=>x&&(x.label||x.url));const el=document.getElementById("links");
+  if(!L.length){el.style.display="none";return;}
+  el.innerHTML="<b>"+esc(T("links"))+"</b> "+L.map(x=>x.url?('<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.label||x.url)+'</a>'):esc(x.label||"")).filter(Boolean).join(" &nbsp;·&nbsp; ");}
+function buildWho(){ if(DATA.testers.length<=1){ document.getElementById("whoamiBar").style.display="none"; return; }
+  const inp=document.getElementById("whoami");
+  inp.addEventListener("focus",()=>paintWho(""));
+  inp.addEventListener("input",()=>paintWho(inp.value));
+  inp.addEventListener("blur",()=>setTimeout(()=>{document.getElementById("whoamiList").style.display="none";},150));}
+function paintWho(q){ q=(q||"").toLowerCase().trim();
+  const box=document.getElementById("whoamiList");
+  const list=DATA.testers.filter(t=>!q||t.name.toLowerCase().includes(q));
+  box.innerHTML=list.map(x=>'<div class="wopt" data-id="'+esc(x.id)+'">'+esc(x.name)+' <span class="muted">('+x.tests.length+')</span></div>').join("")||'<div class="wopt muted">'+esc(T("noRes"))+'</div>';
+  box.style.display="block";
+  box.querySelectorAll(".wopt[data-id]").forEach(el=>el.addEventListener("mousedown",()=>{ const id=el.dataset.id; const t=DATA.testers.find(x=>x.id===id); document.getElementById("whoami").value=t?t.name:""; box.style.display="none"; loadTester(id); }));}
+function buildProcFilter(){const procs=[...new Set(rows.map(t=>t.process).filter(Boolean))].sort();
+  const fb=document.getElementById("filterBar"), pf=document.getElementById("procFilter");
+  if(procs.length>1){ pf.innerHTML='<option value="">'+esc(T("allProc",procs.length))+'</option>'+procs.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join(""); fb.style.display="flex"; }
+  else { pf.innerHTML='<option value="">'+esc(T("allShort"))+'</option>'; fb.style.display="none"; }}
+function loadTester(id){ curId=id; const tt=DATA.testers.find(x=>x.id===id); const hdr=document.getElementById("hdr");
+  if(!tt){ rows=[];adhoc=[]; hdr.textContent=DATA.campaign+" · "+DATA.iteration; buildProcFilter(); render(); return; }
+  hdr.textContent=DATA.campaign+" · "+DATA.iteration+" · "+tt.name;
+  const saved=JSON.parse(localStorage.getItem(lsk(id))||"null");
+  rows=tt.tests.map(t=>{const s=saved&&saved.results&&saved.results.find(r=>r.id===t.id);
+    return Object.assign({},t,{status:s?s.status:t.status,comment:s?s.comment:t.comment,txnRefValue:(s&&s.txnRefValue)||t.txnRefValue||"",failedSteps:(s&&s.failedSteps)||t.failedSteps||{},screens:(s&&s.screens)||t.screens||[]});});
+  adhoc=(saved&&saved.adhoc)||[];
+  buildProcFilter(); render(); }
+function sk(t){ return sortField==="process"?nat((t.process||"")+" "+(t.scenario||"")):(t.testDate||""); }
+function sortBy(f){ if(sortField===f){ sortDir=sortDir===1?-1:0; if(!sortDir)sortField=""; } else { sortField=f; sortDir=1; } render(); }
+function toggleSteps(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); render(); }
+function render(){
+  const tb=document.getElementById("tb"); tb.innerHTML="";
+  const pf=document.getElementById("procFilter"); const f=pf?pf.value:"";
+  let shown=0; const list=[];
+  rows.forEach((t,i)=>{ if(!f||t.process===f){ list.push({t,i,isAd:false}); shown++; } });
+  adhoc.forEach((t,i)=>list.push({t,i,isAd:true}));
+  if(sortField){ const df=sortField==="testDate"; list.sort((a,b)=>{ let ka=sk(a.t),kb=sk(b.t);
+    if(df){ if(!ka&&!kb)return 0; if(!ka)return 1; if(!kb)return -1; }
+    return ka<kb?-sortDir:ka>kb?sortDir:0; }); }
+  list.forEach(it=>{ tb.appendChild(rowEl(it.t,it.i,it.isAd));
+    if(!it.isAd && it.t.steps && it.t.steps.length && expanded.has(it.t.id)) tb.appendChild(stepRowEl(it.t));
+    if(reqComment(it.t.status)) tb.appendChild(issueRowEl(it.t,it.isAd)); });
+  document.getElementById("arP").textContent=sortField==="process"?(sortDir===1?"▲":"▼"):"";
+  document.getElementById("arD").textContent=sortField==="testDate"?(sortDir===1?"▲":"▼"):"";
+  const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" "+T("shown")):"";
+  updateProg();
+}
+function rowEl(t,i,isAd){
+  const tr=document.createElement("tr");
+  const opts=DATA.statuses.map(s=>'<option '+(s.value===t.status?'selected':'')+'>'+s.value+'</option>').join("");
+  const entOpts=DATA.entities.map(e=>'<option '+(e===t.entity?'selected':'')+'>'+e+'</option>').join("");
+  const nSteps=(!isAd && t.steps)?t.steps.length:0;
+  const stepTog=nSteps?' <span class="stepToggle">'+(expanded.has(t.id)?'▾':'▸')+' '+T("stepsN",nSteps)+'</span>':'';
+  const needTxn=(!isAd && t.txnRef && t.status && t.status!=="Not started" && !((t.txnRefValue||"").trim()));
+  const txnBlock=(!isAd && t.txnRef)?'<div class="txnlbl">'+esc(T("txnRef"))+' <span class="reftag">'+esc(T("required"))+'</span></div><input data-k="txnRefValue" class="txnin'+(needTxn?' req':'')+'" value="'+esc(t.txnRefValue||"")+'" placeholder="'+esc(T("txnPh"))+'"/>':'';
+  tr.innerHTML='<td>'+(isAd?'<input value="'+esc(t.process||"")+'" data-k="process" style="width:120px"/> <span class="badge">ad-hoc</span>':esc(t.process))+'</td>'+
+    '<td>'+(isAd?'<input value="'+esc(t.scenario||"")+'" data-k="scenario" style="width:100%"/>':(esc(t.scenario)+stepTog+txnBlock))+'</td>'+
+    '<td>'+(isAd?'<select data-k="entity">'+entOpts+'</select>':('<span class="badge">'+esc(t.entity||"")+'</span>'))+'</td>'+
+    '<td><select data-k="status">'+opts+'</select></td>'+
+    '<td class="duedate">'+(t.testDate?esc(t.testDate):'<span class="muted">—</span>')+'</td>'+
+    '<td><textarea data-k="comment" placeholder="'+(reqComment(t.status)?esc(T("cReq")):esc(T("cOpt")))+'">'+esc(t.comment||"")+'</textarea></td>';
+  const arr=isAd?adhoc:rows;
+  const tgl=tr.querySelector(".stepToggle"); if(tgl) tgl.addEventListener("click",()=>toggleSteps(t.id));
+  tr.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("input",()=>{ arr[i][el.dataset.k]=el.value;
+    if(el.dataset.k==="status"){ autosave(); render(); return; }
+    autosave(); updateProg(); }));
+  return tr;
+}
+function stepRowEl(t){ const tr=document.createElement("tr"); tr.className="steprow";
+  tr.innerHTML='<td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">'+esc(T("stepsFollow"))+'</div><ol class="steps">'+t.steps.map(s=>'<li>'+esc(stepTxt(s))+stepTagsHtml(s)+'</li>').join("")+'</ol></td>';
+  return tr; }
+function issueRowEl(t,isAd){ const tr=document.createElement("tr"); tr.className="steprow";
+  t.failedSteps=t.failedSteps||{}; t.screens=t.screens||[];
+  const steps=(!isAd && t.steps)?t.steps:[];
+  const stepsHtml=steps.length?('<div class="muted" style="font-size:12px;margin:2px 0">'+esc(T("tickSteps"))+'</div>'+steps.map((s,si)=>'<label class="tpick2"><input type="checkbox" class="fchk" data-si="'+si+'" '+(t.failedSteps[si]?'checked':'')+'/> '+esc(stepTxt(s))+stepTagsHtml(s)+'</label>').join("")):'<div class="muted" style="font-size:12px">'+esc(T("noSteps"))+'</div>';
+  const shots=t.screens.map((sc,si)=>'<span class="shot"><img src="'+sc.data+'" alt=""/><button class="rmshot" data-si="'+si+'" title="'+esc(T("remove"))+'">✕</button></span>').join("");
+  tr.innerHTML='<td></td><td colspan="5"><div class="issuebox">'+stepsHtml+
+    '<div class="muted" style="font-size:12px;margin:8px 0 2px">'+esc(T("evidence"))+'</div>'+
+    '<div class="dropz">'+esc(T("dropHere"))+'</div>'+
+    '<input type="file" accept="image/*" multiple class="shotin" style="display:none"/>'+
+    '<div class="shots">'+shots+'</div></div></td>';
+  tr.querySelectorAll(".fchk").forEach(el=>el.addEventListener("change",()=>{ if(el.checked)t.failedSteps[el.dataset.si]=true; else delete t.failedSteps[el.dataset.si]; autosave(); }));
+  const dz=tr.querySelector(".dropz"), fin=tr.querySelector(".shotin");
+  dz.addEventListener("click",()=>fin.click());
+  dz.addEventListener("dragover",e=>{e.preventDefault();dz.classList.add("over");});
+  dz.addEventListener("dragleave",()=>dz.classList.remove("over"));
+  dz.addEventListener("drop",e=>{e.preventDefault();dz.classList.remove("over");addShots(t,e.dataTransfer.files);});
+  fin.addEventListener("change",()=>addShots(t,fin.files));
+  tr.querySelectorAll(".rmshot").forEach(el=>el.addEventListener("click",()=>{ t.screens.splice(parseInt(el.dataset.si),1); autosave(); render(); }));
+  return tr;
+}
+function addShots(t,files){ t.screens=t.screens||[];
+  [].slice.call(files).filter(f=>f.type&&f.type.indexOf("image/")===0).forEach(f=>{ const r=new FileReader();
+    r.onload=function(){ const img=new Image();
+      img.onload=function(){ const max=1280; let w=img.width,h=img.height;
+        if(w>max||h>max){ const k=Math.min(max/w,max/h); w=Math.round(w*k); h=Math.round(h*k); }
+        let data; try{ const cv=document.createElement("canvas"); cv.width=w; cv.height=h; cv.getContext("2d").drawImage(img,0,0,w,h); data=cv.toDataURL("image/jpeg",0.7); }catch(e){ data=r.result; }
+        t.screens.push({name:f.name,data:data}); autosave(); render(); };
+      img.onerror=function(){ t.screens.push({name:f.name,data:r.result}); autosave(); render(); };
+      img.src=r.result; };
+    r.readAsDataURL(f); }); }
+function addAdhoc(){ if(!curId){alert("Sélectionne d'abord ton nom.");return;} adhoc.push({process:"",scenario:"",entity:DATA.entities[0]||"",status:DATA.statuses[0].value,comment:"",testDate:""}); render(); }
+function updateProg(){ const done=rows.filter(r=>r.status&&r.status!=="Not started").length; document.getElementById("prog").textContent=curId?(done+" / "+rows.length+" faits"):""; }
+function payloadOut(){ const tt=DATA.testers.find(x=>x.id===curId)||{};
+  return {_type:"MCEU_TESTER_RESULTS",iterationId:DATA.iterationId,testerId:curId,testerName:tt.name||"",
+    results:rows.map(r=>({id:r.id,status:r.status,comment:r.comment,testDate:r.testDate,txnRefValue:r.txnRefValue||"",failedSteps:r.failedSteps||{},screens:r.screens||[]})),
+    adhoc:adhoc.filter(a=>a.process||a.scenario).map(a=>({process:a.process,scenario:a.scenario,entity:a.entity,status:a.status,comment:a.comment,testDate:a.testDate||""}))};}
+function autosave(){ if(!curId)return; try{ localStorage.setItem(lsk(curId),JSON.stringify(payloadOut())); const m=document.getElementById("savedMsg"); m.textContent=T("saved"); setTimeout(()=>{m.textContent="";},1500);}catch(e){ const m=document.getElementById("savedMsg"); m.textContent=T("full"); } }
+function saveJSON(){ if(!curId){alert(T("pickFirst"));return;}
+  const bad=rows.concat(adhoc).filter(r=>reqComment(r.status)&&!(r.comment||"").trim());
+  if(bad.length && !confirm(T("cNoCom",bad.length)))return;
+  const miss=rows.filter(r=>r.txnRef&&r.status&&r.status!=="Not started"&&!((r.txnRefValue||"").trim())).length;
+  if(miss && !confirm(T("cNoTxn",miss)))return;
+  const tt=DATA.testers.find(x=>x.id===curId)||{name:"tester"};
+  const b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="results_"+(tt.name||"tester").replace(/\\W+/g,'_')+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();
+}
+function init(){ applyLang(); buildLinks(); buildWho();
+  if(DATA.testers.length===1){ const inp=document.getElementById("whoami"); if(inp)inp.value=DATA.testers[0].name; loadTester(DATA.testers[0].id); }
+  else { render(); }
+}
+init();
+<\/script></body></html>`;
+}
+function importTesterResults(input){
+  const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_TESTER_RESULTS"){alert("Not a tester results file.");return;}
+    let upd=0,add=0;
+    (p.results||[]).forEach(res=>{ const ex=S.executions.find(x=>x.id===res.id);
+      if(ex){ ex.status=res.status; ex.comment=res.comment||""; ex.testDate=res.testDate||ex.testDate; if(res.txnRefValue!=null)ex.txnRefValue=res.txnRefValue; if(res.failedSteps)ex.failedSteps=res.failedSteps; if(res.screens)ex.screens=res.screens; ex.updatedAt=new Date().toISOString(); upd++; } });
+    (p.adhoc||[]).forEach(a=>{ S.executions.push({id:uid(),iterationId:p.iterationId,libraryItemId:null,process:a.process||"(ad-hoc)",scenario:a.scenario||"",domain:"",
+      entity:a.entity||"",testerId:p.testerId,status:a.status||"Not started",comment:a.comment||"",recurrence:"",testDate:a.testDate||"",adhoc:true,updatedAt:new Date().toISOString()}); add++; });
+    renderAll(); save(); alert(`Results merged for ${esc(p.testerName||"tester")}: ${upd} updated, ${add} ad-hoc added.`);
+  }catch(err){ alert("Invalid file."); } };
+  r.readAsText(f);
+}
+
+/* =========================================================================
+   ADMIN — config + import/export
+   ========================================================================= */
+function renderAdmin(){
+  const m=S.config.columnMapping;
+  $("#view-admin").innerHTML=`
+    <h2>Admin</h2>
+    <p class="sub">Configuration, plus all import/export operations.</p>
+
+    <div class="card"><b>Campaign</b>
+      <div class="field" style="margin-top:8px;max-width:420px"><label>Campaign name</label><input value="${esc(S.config.campaignName)}" onchange="S.config.campaignName=this.value;persist()"/></div>
+    </div>
+
+    <div class="split">
+      <div class="card"><b>Entities (countries)</b>
+        <table><thead><tr><th>Code</th><th>Label</th><th>Color</th><th></th></tr></thead><tbody>
+        ${S.config.entities.map((en,i)=>`<tr><td><input value="${esc(en.code)}" style="width:60px" onchange="S.config.entities[${i}].code=this.value;persist()"/></td><td><input value="${esc(en.label)}" onchange="S.config.entities[${i}].label=this.value;persist()"/></td><td><input type="color" value="${en.color}" onchange="S.config.entities[${i}].color=this.value;persist()"/></td><td><button class="sm danger" onclick="S.config.entities.splice(${i},1);persist()">✕</button></td></tr>`).join("")}
+        </tbody></table><button class="sm" onclick="S.config.entities.push({code:'XX',label:'New',color:'#38bdf8'});persist()">+ Entity</button>
+      </div>
+      <div class="card"><b>Statuses</b>
+        <table><thead><tr><th>Value</th><th>Color</th><th>Comment req.</th><th></th></tr></thead><tbody>
+        ${S.config.statuses.map((s,i)=>`<tr><td><input value="${esc(s.value)}" onchange="S.config.statuses[${i}].value=this.value;persist()"/></td><td><input type="color" value="${s.color}" onchange="S.config.statuses[${i}].color=this.value;persist()"/></td><td style="text-align:center"><input type="checkbox" ${s.requiresComment?'checked':''} onchange="S.config.statuses[${i}].requiresComment=this.checked;persist()"/></td><td><button class="sm danger" onclick="S.config.statuses.splice(${i},1);persist()">✕</button></td></tr>`).join("")}
+        </tbody></table><button class="sm" onclick="S.config.statuses.push({value:'New',color:'#64748b',requiresComment:false});persist()">+ Status</button>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="card"><b>Departments</b><div class="field" style="margin-top:8px"><textarea onchange="S.config.departments=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.departments.join("\n"))}</textarea><div class="hint">One per line.</div></div></div>
+      <div class="card"><b>Recurrences</b><div class="field" style="margin-top:8px"><textarea onchange="S.config.recurrences=this.value.split('\\n').map(x=>x.trim()).filter(Boolean);persist()">${esc(S.config.recurrences.join("\n"))}</textarea><div class="hint">One per line.</div></div></div>
+    </div>
+
+    <div class="card"><b>Useful links</b>
+      <p class="hint">Shown at the top of every generated tester sheet (application under test, documentation, contacts…).</p>
+      <table><thead><tr><th style="width:30%">Label</th><th>URL</th><th></th></tr></thead><tbody>
+      ${(S.config.links||[]).map((lk,i)=>`<tr><td><input value="${esc(lk.label||'')}" onchange="S.config.links[${i}].label=this.value;persist()"/></td><td><input value="${esc(lk.url||'')}" placeholder="https://…" onchange="S.config.links[${i}].url=this.value;persist()"/></td><td><button class="sm danger" onclick="S.config.links.splice(${i},1);persist()">✕</button></td></tr>`).join("")||'<tr><td colspan="3" class="muted">No link yet.</td></tr>'}
+      </tbody></table>
+      <button class="sm" onclick="(S.config.links=S.config.links||[]).push({label:'',url:''});persist()">+ Link</button>
+    </div>
+
+    <div class="card"><b>DevOps import column mapping</b>
+      <p class="hint">Library upsert is keyed on <code>process</code> × <code>scenario</code>; <code>tester</code> accepts several names separated by <code>;</code>. An optional <code>Steps</code> column (one step per line in the cell) and a <code>TxnRef</code> column (yes/no) are read on import and written by “Export .xlsx”, so you can edit steps in Excel and re-import.</p>
+      <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      ${Object.keys(m).map(k=>`<div class="field"><label>${esc(k)}</label><input value="${esc(m[k])}" onchange="S.config.columnMapping['${k}']=this.value;persist()"/></div>`).join("")}
+      </div>
+    </div>
+
+    <div class="card"><b>Import / Export</b>
+      <div class="cards" style="margin-top:8px">
+        <label class="pill" style="cursor:pointer">⬆ Import DevOps .xlsx (Library)<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label>
+        <input id="impSheet" value="Tester_View" title="sheet name (UAT5 step-level = Tester_View)" style="width:110px"/>
+        <button class="primary" onclick="exportJSON()">⬇ Full backup (JSON)</button>
+        <label class="pill" style="cursor:pointer">⬆ Restore backup<input type="file" accept=".json" style="display:none" onchange="importJSON(this)"/></label>
+        <button class="primary" onclick="exportLibrary()">⬇ Library (.xlsx)</button>
+        <button class="primary" onclick="exportReport()">⬇ Excel report</button>
+      </div>
+    </div>
+
+    <div class="card"><b>Reset</b>
+      <button class="danger" onclick="if(confirm('Erase everything and start over?')){localStorage.removeItem(LS_KEY);location.reload();}">Reset application</button>
+    </div>`;
+}
+
+/* =========================================================================
+   IMPORT / EXPORT
+   ========================================================================= */
+function download(name,content,type){ const b=new Blob([content],{type:type||"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+function exportJSON(){ S.meta=S.meta||{}; S.meta.lastBackup=new Date().toISOString(); save();
+  download(`MCEU_UAT_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(S,null,2)); }
+function importJSON(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ S=migrate(JSON.parse(e.target.result)); renderAll(); save(); alert("Backup restored."); }catch(err){ alert("Invalid file."); } }; r.readAsText(f); }
+function exportReport(){
+  const data=S.executions.map(e=>{const it=S.iterations.find(i=>i.id===e.iterationId)||{};const t=tester(e.testerId)||{};
+    const fs=e.failedSteps||{};const steps=e.steps||[];
+    const failed=Object.keys(fs).filter(k=>fs[k]).map(k=>steps[k]||("step "+(parseInt(k)+1))).join(" ; ");
+    return {Iteration:it.name||"",PRC:e.process||"",Scenario:e.scenario||"",Domain:e.domain||"",Entity:e.entity,
+      Tester:t.name||"",TesterCountry:t.country||"",Status:e.status,Recurrence:e.recurrence||"",TestDate:e.testDate||"",
+      BusinessComment:e.comment||"",TransactionRef:e.txnRefValue||"",FailedSteps:failed,Screenshots:(e.screens||[]).length||"",AdHoc:e.adhoc?"yes":""};});
+  const ws=XLSX.utils.json_to_sheet(data.length?data:[{Info:"No execution"}]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"UAT Report");
+  XLSX.writeFile(wb,`MCEU_UAT_report_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+/* Export the Library (PRC × Scenario definitions) to .xlsx using the same
+   column headers as the DevOps import — so added PRCs round-trip back in. */
+function exportLibrary(){
+  const m=S.config.columnMapping;
+  const rows=S.library.slice().sort((a,b)=>(a.order||0)-(b.order||0)||naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(c=>{
+    const r={};
+    r[m.domain]=c.domain||""; r[m.process]=c.process||""; r[m.scenario]=c.scenario||"";
+    r[m.tester]=libTesterIds(c).map(id=>{const t=tester(id);return t?t.name:null;}).filter(Boolean).join("; ");
+    r.Steps=(c.steps||[]).map(stepText).join("\n"); r.TxnRef=c.txnRef?"yes":""; r.Order=c.order||0; r.Notes=c.notes||"";
+    return r; });
+  const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{[m.process]:"",[m.scenario]:""}]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"LUX");
+  XLSX.writeFile(wb,`MCEU_UAT_library_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+/* startup */
+renderAll(); go("dashboard");
+{ const el=document.getElementById("saveStamp"); if(el) el.textContent=APP_VERSION; }
+</script>
+</body>
+</html>
