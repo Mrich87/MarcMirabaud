@@ -330,10 +330,16 @@ function buildSpocHTML(payload){
 body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px}
 header{background:#16233b;padding:12px 18px;position:sticky;top:0;display:flex;gap:16px;align-items:center;border-bottom:1px solid #334155;z-index:5}
 header h1{font-size:16px;margin:0}.muted{color:#94a3b8}
-main{padding:18px;max-width:1100px;margin:0 auto}
+main{padding:18px;max-width:1200px;margin:0 auto}
 table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
 th{color:#94a3b8;position:sticky;top:56px;background:#0f172a}
 input{background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-family:inherit;width:100%}
+select,textarea{background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-family:inherit}
+.reftag{display:inline-block;background:#a855f733;color:#c4b5fd;border:1px solid #a855f7;border-radius:10px;padding:0 6px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.steptag.app{background:#f59e0b33;color:#fcd34d;border-color:#f59e0b}
+.ptrack{width:120px;height:8px;background:#0b1220;border:1px solid #334155;border-radius:6px;overflow:hidden}
+.ptrack>i{display:block;height:100%;background:#22c55e;width:0;transition:width .2s}
 button{background:#0ea5e9;color:#06283b;border:0;border-radius:6px;padding:9px 16px;font-weight:600;cursor:pointer}
 .bar{position:sticky;bottom:0;background:#16233b;border-top:1px solid #334155;padding:10px 18px;display:flex;gap:10px;align-items:center}
 .saved{color:#22c55e;font-size:12px}.badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#334155}
@@ -350,7 +356,7 @@ select.ein{width:auto;min-width:88px}
   <table><thead><tr><th id="hP"></th><th id="hS"></th><th id="hE"></th><th style="width:260px" id="hT"></th><th style="width:150px;cursor:pointer;user-select:none" id="hD" onclick="sortDue()"></th><th style="width:96px"></th></tr></thead><tbody id="tb"></tbody></table>
   <datalist id="dl"></datalist>
 </main>
-<div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
+<div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><div style="margin-left:auto;display:flex;align-items:center;gap:8px"><div class="ptrack" title="Assigned"><i id="pfill"></i></div><span class="muted" id="prog"></span></div></div>
 <script>
 const DATA=${dataJson};
 const LSK="mceu_spoc_"+DATA.iterationId+"_"+DATA.scope;
@@ -359,7 +365,7 @@ const I18N={fr:{title:"Feuille d'assignation SPOC",intro:"Choisis ton entité (e
 function T(k,n){var v=(I18N[lang]||I18N.fr)[k]||k;return n==null?v:v.replace("{n}",n);}
 function setLang(l){lang=l;try{localStorage.setItem("mceu_spoc_lang",l);}catch(e){}applyLang();render();}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
-function stepTagsHtml(s){var h="";if(s&&s.stream)h+=' <span class="badge" style="margin-left:6px;background:#0ea5e933;color:#7dd3fc">'+esc(s.stream)+'</span>';if(s&&s.app)h+=' <span class="badge" style="margin-left:6px;background:#f59e0b33;color:#fcd34d">'+esc(s.app)+'</span>';return h;}
+function stepTagsHtml(s){var h="";if(s&&s.stream)h+=' <span class="steptag">'+esc(s.stream)+'</span>';if(s&&s.app)h+=' <span class="steptag app">'+esc(s.app)+'</span>';return h;}
 function stepTxt(s){return typeof s==="string"?s:((s&&s.t)||"");}
 let rows=[], expanded={}, myEnt="", sortDir=0;
 function setMyEnt(v){myEnt=v;try{localStorage.setItem("mceu_spoc_ent_"+DATA.iterationId,v);}catch(e){}rows.forEach(function(r){r.entity=v;});autosave();render();}
@@ -396,7 +402,7 @@ function render(){
   var ar=document.getElementById("arD"); if(ar) ar.textContent=sortDir===1?"▲":sortDir===-1?"▼":"";
   document.getElementById("cnt").textContent=q?(shown+" / "+rows.length):""; updateProg();
 }
-function updateProg(){var act=rows.filter(function(r){return !r.removed;});var done=act.filter(function(r){return (r.tester||"").trim();}).length;document.getElementById("prog").textContent=done+" / "+act.length+" "+T("assigned");}
+function updateProg(){var act=rows.filter(function(r){return !r.removed;});var done=act.filter(function(r){return (r.tester||"").trim();}).length;document.getElementById("prog").textContent=done+" / "+act.length+" "+T("assigned");var pf=document.getElementById("pfill");if(pf)pf.style.width=(act.length?Math.round(done/act.length*100):0)+"%";}
 function dupRow(i){ var r=rows[i]; var nr=Object.assign({},r,{id:"spoc"+Math.random().toString(36).slice(2,9),srcId:r.srcId||r.id,tester:"",isDup:true,removed:false,entity:myEnt||r.entity}); rows.splice(i+1,0,nr); autosave(); render(); }
 function removeRow(i){ var r=rows[i]; if(!r)return; if(r.isDup){ rows.splice(i,1); } else { r.removed=!r.removed; } autosave(); render(); }
 function exportPayload(){return {_type:"MCEU_SPOC_ASSIGNMENTS",iterationId:DATA.iterationId,scope:DATA.scope,rows:rows.map(function(r){return {ExecId:r.id,srcId:r.srcId||"",process:r.process,scenario:r.scenario,entity:r.entity,domain:r.domain,Tester:r.tester||"",DueDate:r.due||"",Remove:r.removed?true:false};})};}
