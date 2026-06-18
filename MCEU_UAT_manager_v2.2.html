@@ -1363,6 +1363,8 @@ ol.steps li{margin:3px 0}
 .steptag{display:inline-block;background:#0ea5e933;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:10px;padding:0 7px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
 .steptag.app{background:#f59e0b33;color:#fcd34d;border-color:#f59e0b}
 .prereqbox{margin-top:4px;background:#f59e0b1a;border:1px solid #f59e0b;border-left-width:3px;border-radius:6px;padding:4px 8px;font-size:12px;color:#fcd34d}
+.schip{background:#0b1220;border:1px solid #334155;color:#e2e8f0;border-radius:16px;padding:3px 11px;font-size:12px;cursor:pointer}
+.schip.on{background:#0ea5e9;color:#06283b;border-color:#0ea5e9;font-weight:600}
 .txnlbl{font-size:12px;color:#94a3b8;margin-top:4px;display:inline-block}
 input.txnin{margin-top:3px;width:260px;max-width:100%}
 input.txnin.req{border-color:#ef4444}
@@ -1390,6 +1392,7 @@ th.sortable{cursor:pointer;user-select:none}
   <div class="whoami" id="whoamiBar"><label class="muted" id="lblWho" for="whoami"></label><div class="wcombo"><input id="whoami" autocomplete="off"/><div class="wlist" id="whoamiList"></div></div></div>
   <div class="links" id="links"></div>
   <p class="muted" id="intro"></p>
+  <div id="summaryBar" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px"></div>
   <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
     <label class="muted" id="lblProc" for="procFilter"></label>
     <select id="procFilter" onchange="render()"></select>
@@ -1401,11 +1404,12 @@ th.sortable{cursor:pointer;user-select:none}
 <div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
 <script>
 const DATA=${dataJson};
-let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="", sortDir=0;
+let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="", sortDir=0, statusFilter="";
 const I18N={
  fr:{title:"Feuille de test UAT",selectName:"Sélectionne ton nom :",namePh:"tape ton nom…",
    intro:"Renseigne un <b>Statut</b> pour chaque test. Un commentaire est <b>obligatoire</b> pour Failed/Blocked. Déplie un test (▸&nbsp;étapes) pour voir les étapes à suivre ; saisis la <b>référence de transaction</b> quand c'est demandé. Pour un test <b>Failed/Blocked</b>, coche l'étape qui pose problème et glisse-dépose une ou des <b>captures d'écran</b> comme preuve. Ton travail est enregistré automatiquement ; clique <b>Enregistrer mes résultats (JSON)</b> puis renvoie le fichier au coordinateur.",
    proc:"Processus",allShort:"— Tous —",allProc:"— Tous les processus ({n}) —",shown:"affichés",
+   sTotal:"Total",sMissC:"Sans commentaire",sMissE:"Sans preuve",sMissT:"Sans réf. transaction",fAll:"Tous",fbShort:"Failed / Blocked",cNoEv:"{n} test(s) Failed/Blocked sans preuve (capture). Enregistrer quand même ?",
    hPRC:"PRC",hScn:"Scénario",hEnt:"Entité",hSt:"Statut",hDue:"Date d'échéance",hCom:"Commentaire",
    addAdhoc:"+ Ajouter un test ad-hoc",save:"⬇ Enregistrer mes résultats (JSON)",links:"Liens utiles :",
    stepsN:"étapes ({n})",stepsFollow:"Étapes à suivre :",prereqLabel:"Données de test / pré-requis",tickSteps:"Coche la/les étape(s) en échec :",noSteps:"Aucune étape prédéfinie à signaler.",
@@ -1416,6 +1420,7 @@ const I18N={
  en:{title:"UAT Test Sheet",selectName:"Select your name:",namePh:"type your name…",
    intro:"Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test (▸&nbsp;steps) to view the steps to follow; enter the <b>transaction reference</b> when required. For a <b>Failed/Blocked</b> test, tick the problematic step and drag-and-drop <b>screenshot(s)</b> as evidence. Your work is auto-saved; click <b>Save results (JSON)</b> and send the file back to the coordinator.",
    proc:"Process",allShort:"— All —",allProc:"— All processes ({n}) —",shown:"shown",
+   sTotal:"Total",sMissC:"Missing comment",sMissE:"Missing evidence",sMissT:"Missing txn ref",fAll:"All",fbShort:"Failed / Blocked",cNoEv:"{n} Failed/Blocked test(s) without evidence (screenshot). Save anyway?",
    hPRC:"PRC",hScn:"Scenario",hEnt:"Entity",hSt:"Status",hDue:"Execution due date",hCom:"Comment",
    addAdhoc:"+ Add ad-hoc test",save:"⬇ Save results (JSON)",links:"Useful links:",
    stepsN:"steps ({n})",stepsFollow:"Steps to follow:",prereqLabel:"Test data / prerequisites",tickSteps:"Tick the problematic step(s):",noSteps:"No predefined steps to flag.",
@@ -1426,6 +1431,7 @@ const I18N={
  es:{title:"Hoja de pruebas UAT",selectName:"Selecciona tu nombre:",namePh:"escribe tu nombre…",
    intro:"Indica un <b>Estado</b> para cada prueba. Un comentario es <b>obligatorio</b> para Failed/Blocked. Despliega una prueba (▸&nbsp;pasos) para ver los pasos a seguir; introduce la <b>referencia de transacción</b> cuando se solicite. Para una prueba <b>Failed/Blocked</b>, marca el paso problemático y arrastra y suelta una o varias <b>capturas de pantalla</b> como prueba. Tu trabajo se guarda automáticamente; haz clic en <b>Guardar mis resultados (JSON)</b> y envía el archivo al coordinador.",
    proc:"Proceso",allShort:"— Todos —",allProc:"— Todos los procesos ({n}) —",shown:"mostrados",
+   sTotal:"Total",sMissC:"Sin comentario",sMissE:"Sin evidencia",sMissT:"Sin ref. transacción",fAll:"Todos",fbShort:"Failed / Blocked",cNoEv:"{n} prueba(s) Failed/Blocked sin evidencia (captura). ¿Guardar de todos modos?",
    hPRC:"PRC",hScn:"Escenario",hEnt:"Entidad",hSt:"Estado",hDue:"Fecha límite de ejecución",hCom:"Comentario",
    addAdhoc:"+ Añadir prueba ad-hoc",save:"⬇ Guardar mis resultados (JSON)",links:"Enlaces útiles:",
    stepsN:"pasos ({n})",stepsFollow:"Pasos a seguir:",prereqLabel:"Datos de prueba / requisitos",tickSteps:"Marca el/los paso(s) con error:",noSteps:"No hay pasos predefinidos que señalar.",
@@ -1489,12 +1495,40 @@ function loadTester(id){ curId=id; const tt=DATA.testers.find(x=>x.id===id); con
 function sk(t){ return sortField==="process"?nat((t.process||"")+" "+(t.scenario||"")):(t.testDate||""); }
 function sortBy(f){ if(sortField===f){ sortDir=sortDir===1?-1:0; if(!sortDir)sortField=""; } else { sortField=f; sortDir=1; } render(); }
 function toggleSteps(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); render(); }
+function tHasEv(t){ return !!((t.screens&&t.screens.length)||(t.failedSteps&&Object.keys(t.failedSteps).length)); }
+function tFB(t){ return t.status==="Failed"||t.status==="Blocked"; }
+function matchSF(t){ if(!statusFilter)return true;
+  if(statusFilter==="fb")return tFB(t);
+  if(statusFilter==="nocomment")return tFB(t)&&!(t.comment||"").trim();
+  if(statusFilter==="noevidence")return tFB(t)&&!tHasEv(t);
+  if(statusFilter==="misstxn")return t.txnRef&&t.status&&t.status!=="Not started"&&!((t.txnRefValue||"").trim());
+  return t.status===statusFilter; }
+function computeSummary(){ const s={total:rows.length,ns:0,ip:0,passed:0,failed:0,blocked:0,na:0,noComment:0,noTxn:0,noEvidence:0,anyTxn:false};
+  rows.forEach(t=>{ const st=t.status;
+    if(st==="Passed")s.passed++; else if(st==="Failed")s.failed++; else if(st==="Blocked")s.blocked++; else if(st==="In progress")s.ip++; else if(st==="N/A")s.na++; else s.ns++;
+    if(tFB(t)&&!(t.comment||"").trim())s.noComment++;
+    if(tFB(t)&&!tHasEv(t))s.noEvidence++;
+    if(t.txnRef){ s.anyTxn=true; if(st&&st!=="Not started"&&!((t.txnRefValue||"").trim()))s.noTxn++; } });
+  return s; }
+function setSF(v){ statusFilter=(statusFilter===v?"":v); render(); }
+function updateSummary(){ const el=document.getElementById("summaryBar"); if(!el)return;
+  if(!curId){ el.style.display="none"; return; } el.style.display="flex";
+  const s=computeSummary();
+  const chip=(lbl,n,val,color)=>'<button class="schip'+(statusFilter===val?' on':'')+'" onclick="setSF('+JSON.stringify(val)+')"'+((color&&n)?' style="border-color:'+color+';color:'+color+'"':'')+'>'+esc(lbl)+' <b>'+n+'</b></button>';
+  let h=chip(T("sTotal"),s.total,"");
+  const sm={"Not started":s.ns,"In progress":s.ip,"Passed":s.passed,"Failed":s.failed,"Blocked":s.blocked,"N/A":s.na};
+  DATA.statuses.forEach(st=>{ h+=chip(st.value,(st.value in sm)?sm[st.value]:0,st.value,st.color); });
+  h+=chip(T("fbShort"),s.failed+s.blocked,"fb","#ef4444");
+  h+=chip(T("sMissC"),s.noComment,"nocomment","#f59e0b");
+  h+=chip(T("sMissE"),s.noEvidence,"noevidence","#f59e0b");
+  if(s.anyTxn) h+=chip(T("sMissT"),s.noTxn,"misstxn","#f59e0b");
+  el.innerHTML=h; }
 function render(){
   const tb=document.getElementById("tb"); tb.innerHTML="";
   const pf=document.getElementById("procFilter"); const f=pf?pf.value:"";
   let shown=0; const list=[];
-  rows.forEach((t,i)=>{ if(!f||t.process===f){ list.push({t,i,isAd:false}); shown++; } });
-  adhoc.forEach((t,i)=>list.push({t,i,isAd:true}));
+  rows.forEach((t,i)=>{ if((!f||t.process===f)&&matchSF(t)){ list.push({t,i,isAd:false}); shown++; } });
+  adhoc.forEach((t,i)=>{ if(matchSF(t)) list.push({t,i,isAd:true}); });
   if(sortField){ const df=sortField==="testDate"; list.sort((a,b)=>{ let ka=sk(a.t),kb=sk(b.t);
     if(df){ if(!ka&&!kb)return 0; if(!ka)return 1; if(!kb)return -1; }
     return ka<kb?-sortDir:ka>kb?sortDir:0; }); }
@@ -1503,8 +1537,8 @@ function render(){
     if(reqComment(it.t.status)) tb.appendChild(issueRowEl(it.t,it.isAd)); });
   document.getElementById("arP").textContent=sortField==="process"?(sortDir===1?"▲":"▼"):"";
   document.getElementById("arD").textContent=sortField==="testDate"?(sortDir===1?"▲":"▼"):"";
-  const sc=document.getElementById("shownCount"); if(sc) sc.textContent=f?(shown+" / "+rows.length+" "+T("shown")):"";
-  updateProg();
+  const sc=document.getElementById("shownCount"); if(sc) sc.textContent=(f||statusFilter)?(shown+" / "+rows.length+" "+T("shown")):"";
+  updateProg(); updateSummary();
 }
 function rowEl(t,i,isAd){
   const tr=document.createElement("tr");
@@ -1572,6 +1606,8 @@ function saveJSON(){ if(!curId){alert(T("pickFirst"));return;}
   if(bad.length && !confirm(T("cNoCom",bad.length)))return;
   const miss=rows.filter(r=>r.txnRef&&r.status&&r.status!=="Not started"&&!((r.txnRefValue||"").trim())).length;
   if(miss && !confirm(T("cNoTxn",miss)))return;
+  const noEv=rows.concat(adhoc).filter(r=>tFB(r)&&!tHasEv(r)).length;
+  if(noEv && !confirm(T("cNoEv",noEv)))return;
   const tt=DATA.testers.find(x=>x.id===curId)||{name:"tester"};
   const b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="results_"+(tt.name||"tester").replace(/\\W+/g,'_')+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();
