@@ -296,6 +296,7 @@ function openExecList(key){ const titleMap={all:"All assigned",done:"Executed",t
   showExecModal((titleMap[key]||key)+" — "+esc(activeIter().name), iterExecs().filter(e=>execMatch(e,key))); }
 function openProcList(proc){ showExecModal(esc(proc)+" — "+esc(activeIter().name), iterExecs().filter(e=>(e.process||"(none)")===proc)); }
 function openTesterExecs(tid){ showExecModal((testerName(tid)||"Unassigned")+" — "+esc(activeIter().name), iterExecs().filter(e=>(e.testerId||"")===(tid||""))); }
+function openNeedRetest(){ showExecModal("Tests requiring retest — "+esc(activeIter().name), iterExecs().filter(e=>isOpenIssue(e)&&(e.retestStatus||"")!=="Retested - Passed")); }
 function openProcDrill(proc){
   const ex=iterExecs().filter(e=>(e.process||"(none)")===proc);
   if(!ex.length){ showExecModal(esc(proc),ex); return; }
@@ -736,6 +737,11 @@ function renderDashboard(){
   const byDomain={}; ex.forEach(e=>{const d=e.domain||"(none)";(byDomain[d]=byDomain[d]||[]).push(e);});
   const byProc={}; ex.forEach(e=>{const p=e.process||"(none)";(byProc[p]=byProc[p]||[]).push(e);});
 
+  const procArr=Object.entries(byProc).map(([p,sub])=>({p,sub,a:aggregate(sub)}));
+  const topFailed=procArr.filter(x=>x.a.failed>0).sort((x,y)=>y.a.failed-x.a.failed).slice(0,5);
+  const topBlocked=procArr.filter(x=>x.a.blocked>0).sort((x,y)=>y.a.blocked-x.a.blocked).slice(0,5);
+  const needRetest=ex.filter(e=>isOpenIssue(e)&&(e.retestStatus||"")!=="Retested - Passed");
+  const procRow2=(x,key,color)=>`<tr style="cursor:pointer" title="Process drill-down" onclick="openProcDrill('${jsq(x.p)}')"><td><b>${esc(x.p)}</b></td><td style="color:${color};font-weight:600">${x.a[key]}</td><td style="min-width:120px">${progressBar(x.sub)}</td></tr>`;
   $("#view-dashboard").innerHTML=`
     <div class="toolbar"><h2 style="margin:0">Dashboard — ${esc(iter?iter.name:"—")}</h2><div class="spacer"></div><button class="sm" onclick="exportMgmtPack()" title="Excel workbook: Dashboard, Tester Workload, Issues Register, Process Progress, Missing Data, Raw Execution Data">⬇ Management pack</button></div>
     <p class="sub">${esc(S.config.campaignName)} · live progress for the active iteration.</p>
@@ -753,6 +759,17 @@ function renderDashboard(){
       <div style="margin-top:8px"><span class="muted">Open issues (Failed/Blocked): </span><b style="color:#ef4444">${ex.filter(isOpenIssue).length}</b> · <a href="#" onclick="resFilter.only='fb';go('results');return false">open Results (Failed/Blocked) →</a></div>
     </div></details>
     <details class="sec" open><summary>Tester workload warnings</summary><div class="card">${renderWorkloadWarnings()}</div></details>
+    <details class="sec"><summary>Follow-up &amp; retests</summary>
+      <div class="split">
+        <div class="card"><b>Top failed processes</b>
+          <table><tbody>${topFailed.map(x=>procRow2(x,'failed','#ef4444')).join("")||'<tr><td class="muted">None 🎉</td></tr>'}</tbody></table></div>
+        <div class="card"><b>Top blocked processes</b>
+          <table><tbody>${topBlocked.map(x=>procRow2(x,'blocked','#f59e0b')).join("")||'<tr><td class="muted">None 🎉</td></tr>'}</tbody></table></div>
+      </div>
+      <div class="card"><b>Tests requiring retest</b> <span class="muted" style="font-size:12px">— Failed/Blocked not yet 'Retested - Passed'</span>
+        <div class="cards" style="margin-top:6px"><div class="kpi" style="cursor:pointer" title="Click to list" onclick="openNeedRetest()"><div class="n" style="color:${needRetest.length?'#f59e0b':'#64748b'}">${needRetest.length}</div><div class="l">To retest</div></div></div>
+      </div>
+    </details>
     <div class="split">
       <div class="card"><b>By entity</b>
         <table><thead><tr><th>Entity</th><th>Assigned</th><th>Progress</th><th>P/F/B</th></tr></thead><tbody>
