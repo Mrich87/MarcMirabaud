@@ -612,9 +612,29 @@ function setLibOrder(id,v){ const c=libById(id); if(c){c.order=parseInt(v)||0; p
 function moveLib(id,dir){ const ids=libDisplayedIds(); const idx=ids.indexOf(String(id)); const j=idx+dir;
   if(idx<0||j<0||j>=ids.length)return; const a=libById(ids[idx]),b=libById(ids[j]); const t=a.order;a.order=b.order;b.order=t; persist(); }
 function resetLibOrder(){ let n=0; sortedLib(S.library).forEach(c=>c.order=++n); persist(); }
-function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterIds:[],notes:"",steps:[],txnRef:false}; S.library.push(c); save(); editLibItem(c.id); }
-function pushLibToIteration(){ loadSel.domain=libFilter.domain||""; loadSel.process=libFilter.process||""; campSec.load=true; go('campaign'); }
+function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterIds:[],notes:"",prereq:"",steps:[],txnRef:false}; S.library.push(c); save(); editLibItem(c.id); }
+function pushLibToIteration(){
+  loadSel.domain=libFilter.domain||""; loadSel.process=libFilter.process||"";
+  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
+  if(!target.length){ alert("No library definition matches the current filter."); return; }
+  modal(`<h2>Push to iteration — ${esc(activeIter().name)}</h2>
+    <p class="hint">${target.length} definition(s) from the current Library filter${loadSel.domain?` · domain ${esc(loadSel.domain)}`:''}${loadSel.process?` · ${esc(loadSel.process)}`:''}. Pick target entities — each test case is dispatched to its assigned testers × each entity (or override below). Duplicates are skipped.</p>
+    <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")||'<span class="muted">No entity configured (Admin).</span>'}</div></div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1"><label>Override tester (optional)</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— use assigned testers —',width:'100%'})}</div>
+      <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
+    </div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="pushLibConfirm()">Add ${target.length} definition(s)</button></div>`);
+}
+function pushLibConfirm(){ const r=loadIntoIteration(); if(r!==false) closeModal(); }
 function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)",steps:(o.steps||[]).slice(),defaultTesterIds:libTesterIds(o).slice()}; S.library.push(c); persist(); }
+function stepRowHtml(s){ const t=stepText(s); const stream=(s&&typeof s==="object"&&s.stream)||""; const app=(s&&typeof s==="object"&&s.app)||"";
+  return `<div class="steprow2" style="display:flex;gap:6px;margin-bottom:4px">
+    <input class="st_text" placeholder="step…" value="${esc(t)}" style="flex:2"/>
+    <input class="st_stream" placeholder="business stream" value="${esc(stream)}" style="flex:1"/>
+    <input class="st_app" placeholder="app" value="${esc(app)}" style="flex:1"/>
+    <button class="sm danger" title="Remove step" onclick="this.closest('.steprow2').remove()" style="width:30px">✕</button></div>`; }
+function addStepRow(){ const w=document.getElementById("l_stepwrap"); if(w) w.insertAdjacentHTML("beforeend", stepRowHtml({})); }
 function editLibItem(id){ const c=libById(id);
   modal(`<h2>Edit library definition</h2>
     <div class="row" style="margin-top:4px">
@@ -629,8 +649,13 @@ function editLibItem(id){ const c=libById(id);
       </div>
       <div class="field"><label>Order</label><input type="number" id="l_order" value="${c.order||0}"/></div>
     </div>
-    <div class="field" style="margin-top:8px"><label>Steps to follow (one per line)</label><textarea id="l_steps" style="min-height:96px" placeholder="Step 1&#10;Step 2&#10;…">${esc((c.steps||[]).map(stepText).join("\n"))}</textarea><div class="hint">Pre-filled by the coordinator; the tester can expand the test case to view them. Stream/app tags (if any) are kept when you edit the text in place.</div></div>
+    <div class="field" style="margin-top:8px"><label>Steps to follow — texte · business stream · app</label>
+      <div style="display:flex;gap:6px;font-size:11px;color:var(--muted,#94a3b8);margin-bottom:2px"><span style="flex:2">Step (texte libre)</span><span style="flex:1">Business stream</span><span style="flex:1">Application</span><span style="width:30px"></span></div>
+      <div id="l_stepwrap">${(c.steps||[]).map(s=>stepRowHtml(s)).join("")}</div>
+      <button class="sm" onclick="addStepRow()">+ step</button>
+      <div class="hint">Le business stream s'affiche en bleu et l'application en ambre au testeur. Stream/app facultatifs.</div></div>
     <div class="field" style="margin-top:8px"><label class="pill" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;width:fit-content"><input type="checkbox" id="l_txn" ${c.txnRef?'checked':''}/> Require a <b>transaction reference</b> (opens a reference field for the tester)</label></div>
+    <div class="field" style="margin-top:8px"><label>Données de test / pré-requis</label><textarea id="l_prereq" placeholder="Portefeuilles (n° + entité), flags (ex. traspasso), ISIN, instruments, PE, hedge funds à utiliser…">${esc(c.prereq||"")}</textarea><div class="hint">Affiché au testeur sous le scénario (🧪) pour qu'il sache quelles données utiliser. Centralisé via « 🧪 Test data reference ».</div></div>
     <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="l_notes">${esc(c.notes||"")}</textarea></div>
     <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delLibItem('${c.id}')">Delete</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveLibItem('${c.id}')">Save</button></div>`);
 }
@@ -639,9 +664,12 @@ function filterTesterPicks(){ const q=($("#l_tsearch").value||"").toLowerCase().
 function saveLibItem(id){ const c=libById(id);
   c.process=$("#l_proc").value;c.domain=$("#l_dom").value;c.scenario=$("#l_scen").value;
   c.defaultTesterIds=[...document.querySelectorAll("#l_tlist .ltchk:checked")].map(x=>x.value); delete c.defaultTesterId;
-  c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;
-  { const _old=(c.steps||[]); c.steps=$("#l_steps").value.split("\n").map(x=>x.trim()).filter(Boolean)
-      .map((t,i)=>{ const o=_old[i]; return (o&&typeof o==="object") ? Object.assign({},o,{text:t}) : t; }); }
+  c.order=parseInt($("#l_order").value)||0;c.notes=$("#l_notes").value;c.prereq=$("#l_prereq").value;
+  c.steps=[...document.querySelectorAll("#l_stepwrap .steprow2")].map(r=>({
+      text:r.querySelector(".st_text").value.trim(),
+      stream:r.querySelector(".st_stream").value.trim(),
+      app:r.querySelector(".st_app").value.trim()
+    })).filter(s=>s.text||s.stream||s.app);
   c.txnRef=$("#l_txn").checked;
   closeModal(); persist(); }
 function delLibItem(id){ if(!confirm("Delete this definition?"))return; S.library=S.library.filter(c=>String(c.id)!==String(id)); closeModal(); persist(); }
@@ -679,7 +707,7 @@ function importDevops(input){
         if(steps&&steps.length){ c.steps=steps; stepsSet++; }   /* never wipe steps from an empty/absent Steps column */
         if(txn!==null) c.txnRef=txn;
       } else {
-        c={id:uid(),order:++maxO,domain,process,scenario,defaultTesterIds:tIds,notes:"",steps:steps||[],txnRef:txn||false};
+        c={id:uid(),order:++maxO,domain,process,scenario,defaultTesterIds:tIds,notes:"",prereq:"",steps:steps||[],txnRef:txn||false};
         S.library.push(c); byKey.set(key,c); seen.add(key); added++; if(steps&&steps.length)stepsSet++;
       }
     });
@@ -816,7 +844,7 @@ function renderLoadPanel(){
 }
 function loadIntoIteration(){
   const ents=[...document.querySelectorAll(".ldEnt:checked")].map(x=>x.value);
-  if(!ents.length){ alert("Select at least one target entity."); return; }
+  if(!ents.length){ alert("Select at least one target entity."); return false; }
   const formTester=$("#ldTester").value, rec=$("#ldRec").value, iterId=S.activeIterationId;
   const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
   let created=0;
@@ -825,11 +853,12 @@ function loadIntoIteration(){
     testerIds.forEach(testerId=>{
       if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&e.entity===ent&&(e.testerId||"")===(testerId||""))) return;
       S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
-        steps:(c.steps||[]).slice(),txnRef:!!c.txnRef,txnRefValue:"",entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
+        steps:(c.steps||[]).slice(),prereq:c.prereq||"",txnRef:!!c.txnRef,txnRefValue:"",entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
       created++;
     });
   }));
   persist(); alert(created+" execution(s) added to "+activeIter().name+".");
+  return created;
 }
 function renderTrackingTable(){
   let ex=iterExecs().filter(e=>
@@ -899,14 +928,15 @@ function renderTesterView(){
   const iter=activeIter(); const all=iterExecs();
   // Section 1 — cross-service (domains) / cross-entity processes
   const bp={};
-  all.forEach(e=>{ const p=e.process||"(none)"; const o=bp[p]||(bp[p]={ex:[],dom:new Set(),ent:new Set(),tst:new Set(),scn:new Set()});
-    o.ex.push(e); if(e.domain)o.dom.add(e.domain); if(e.entity)o.ent.add(e.entity); if(e.testerId)o.tst.add(e.testerId); o.scn.add(e.scenario); });
+  all.forEach(e=>{ const p=e.process||"(none)"; const o=bp[p]||(bp[p]={ex:[],dom:new Set(),ent:new Set(),tst:new Set(),scn:new Set(),due:new Set()});
+    o.ex.push(e); if(e.domain)o.dom.add(e.domain); if(e.entity)o.ent.add(e.entity); if(e.testerId)o.tst.add(e.testerId); o.scn.add(e.scenario); if((e.testDate||"").trim())o.due.add(e.testDate.trim()); });
   const cross=Object.entries(bp).filter(([p,o])=>o.dom.size>1||o.ent.size>1).sort((a,b)=>naturalKey(a[0]).localeCompare(naturalKey(b[0])));
   const crossHtml = cross.length
-    ? `<table><thead><tr><th>Process</th><th>Scén.</th><th>Services (domaines)</th><th>Entités</th><th>Testeurs</th><th style="min-width:150px">Progress</th></tr></thead><tbody>`
+    ? `<table><thead><tr><th>Process</th><th>Scén.</th><th>Date(s) d'exécution</th><th>Services (domaines)</th><th>Entités</th><th>Testeurs</th><th style="min-width:150px">Progress</th></tr></thead><tbody>`
       + cross.map(([p,o])=>`<tr>
           <td><b>${esc(p)}</b> ${o.dom.size>1?badge('cross-service','#a855f7'):''}${o.ent.size>1?badge('cross-entité','#0ea5e9'):''}</td>
           <td>${o.scn.size}</td>
+          <td>${[...o.due].sort().map(d=>esc(d)).join(', ')||'<span class="muted">—</span>'}</td>
           <td>${[...o.dom].sort().map(d=>esc(d)).join(', ')||'<span class="muted">—</span>'}</td>
           <td>${[...o.ent].sort().map(en=>badge(en,entityMeta(en).color)).join(' ')||'<span class="muted">—</span>'}</td>
           <td>${o.tst.size}${o.tst.size>1?' '+badge('multi-testeurs','#22c55e'):''}</td>
@@ -998,6 +1028,7 @@ function slug(s){ return String(s||"").replace(/\W+/g,'_'); }
 function execToTest(e){ return {id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||"",
   txnRef:(e.txnRef!=null?!!e.txnRef:!!((libById(e.libraryItemId)||{}).txnRef)),txnRefValue:e.txnRefValue||"",
   failedSteps:e.failedSteps||{},screens:e.screens||[],
+  prereq:e.prereq||(libById(e.libraryItemId)||{}).prereq||"",
   steps:normSteps(e.steps&&e.steps.length?e.steps:((libById(e.libraryItemId)||{}).steps||[]))}; }
 function basePayload(iter,testers){ return {campaign:S.config.campaignName,iteration:iter.name,iterationId:iter.id,
   entities:S.config.entities.map(x=>x.code),statuses:S.config.statuses,links:(S.config.links||[]).filter(l=>l&&(l.label||l.url)),testers}; }
@@ -1091,7 +1122,7 @@ const I18N={
    proc:"Processus",allShort:"— Tous —",allProc:"— Tous les processus ({n}) —",shown:"affichés",
    hPRC:"PRC",hScn:"Scénario",hEnt:"Entité",hSt:"Statut",hDue:"Date d'échéance",hCom:"Commentaire",
    addAdhoc:"+ Ajouter un test ad-hoc",save:"⬇ Enregistrer mes résultats (JSON)",links:"Liens utiles :",
-   stepsN:"étapes ({n})",stepsFollow:"Étapes à suivre :",tickSteps:"Coche la/les étape(s) en échec :",noSteps:"Aucune étape prédéfinie à signaler.",
+   stepsN:"étapes ({n})",stepsFollow:"Étapes à suivre :",prereqLabel:"Données de test / pré-requis",tickSteps:"Coche la/les étape(s) en échec :",noSteps:"Aucune étape prédéfinie à signaler.",
    evidence:"Preuve — glisse-dépose une ou des captures ici, ou clique pour parcourir :",dropHere:"Dépose une capture ici / clique pour parcourir",
    txnRef:"Référence de transaction",required:"obligatoire",txnPh:"saisir la référence de transaction…",cReq:"obligatoire…",cOpt:"optionnel",
    done:"faits",saved:"enregistré ✓",full:"⚠ stockage plein (captures trop lourdes) — enregistre le JSON",pickFirst:"Sélectionne d'abord ton nom.",noRes:"aucun résultat",remove:"retirer",
@@ -1101,7 +1132,7 @@ const I18N={
    proc:"Process",allShort:"— All —",allProc:"— All processes ({n}) —",shown:"shown",
    hPRC:"PRC",hScn:"Scenario",hEnt:"Entity",hSt:"Status",hDue:"Execution due date",hCom:"Comment",
    addAdhoc:"+ Add ad-hoc test",save:"⬇ Save results (JSON)",links:"Useful links:",
-   stepsN:"steps ({n})",stepsFollow:"Steps to follow:",tickSteps:"Tick the problematic step(s):",noSteps:"No predefined steps to flag.",
+   stepsN:"steps ({n})",stepsFollow:"Steps to follow:",prereqLabel:"Test data / prerequisites",tickSteps:"Tick the problematic step(s):",noSteps:"No predefined steps to flag.",
    evidence:"Evidence — drag & drop screenshot(s) here, or click to browse:",dropHere:"Drop screenshot here / click to browse",
    txnRef:"Transaction reference",required:"required",txnPh:"enter transaction reference…",cReq:"required…",cOpt:"optional",
    done:"done",saved:"saved ✓",full:"⚠ storage full (screenshots too large) — save the JSON",pickFirst:"Select your name first.",noRes:"no match",remove:"remove",
@@ -1111,7 +1142,7 @@ const I18N={
    proc:"Proceso",allShort:"— Todos —",allProc:"— Todos los procesos ({n}) —",shown:"mostrados",
    hPRC:"PRC",hScn:"Escenario",hEnt:"Entidad",hSt:"Estado",hDue:"Fecha límite de ejecución",hCom:"Comentario",
    addAdhoc:"+ Añadir prueba ad-hoc",save:"⬇ Guardar mis resultados (JSON)",links:"Enlaces útiles:",
-   stepsN:"pasos ({n})",stepsFollow:"Pasos a seguir:",tickSteps:"Marca el/los paso(s) con error:",noSteps:"No hay pasos predefinidos que señalar.",
+   stepsN:"pasos ({n})",stepsFollow:"Pasos a seguir:",prereqLabel:"Datos de prueba / requisitos",tickSteps:"Marca el/los paso(s) con error:",noSteps:"No hay pasos predefinidos que señalar.",
    evidence:"Prueba — arrastra y suelta una o varias capturas aquí, o haz clic para explorar:",dropHere:"Suelta una captura aquí / haz clic para explorar",
    txnRef:"Referencia de transacción",required:"obligatorio",txnPh:"introduce la referencia de transacción…",cReq:"obligatorio…",cOpt:"opcional",
    done:"hechos",saved:"guardado ✓",full:"⚠ almacenamiento lleno (capturas demasiado grandes) — guarda el JSON",pickFirst:"Selecciona primero tu nombre.",noRes:"sin coincidencias",remove:"quitar",
