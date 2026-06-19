@@ -523,7 +523,10 @@ function renderDashboard(){
   const pct=n=>a.total?Math.round(n/a.total*100):0;
   const kpi=(n,l,c,key)=>`<div class="kpi" ${key?`style="cursor:pointer" title="Click to list these test cases" onclick="openExecList('${key}')"`:''}><div class="n" style="color:${c||'inherit'}">${n}</div><div class="l">${l}</div></div>`;
   const homeEnt=e=>{ const t=tester(e.testerId); return (t&&t.country)||e.entity||""; };
-  const byEntity=S.config.entities.map(en=>({en,sub:ex.filter(e=>homeEnt(e)===en.code)}));
+  const memberCodes=S.config.entities.map(x=>x.code).filter(c=>c!=="MCEU");   /* MCEU = umbrella over all other entities */
+  const byEntity=S.config.entities.map(en=>({en,sub: en.code==="MCEU"
+    ? ex.filter(e=>{const hh=homeEnt(e); return hh==="MCEU"||memberCodes.indexOf(hh)>=0;})
+    : ex.filter(e=>homeEnt(e)===en.code)}));
   const byTester={}; ex.forEach(e=>{(byTester[e.testerId]=byTester[e.testerId]||[]).push(e);});
   const byDomain={}; ex.forEach(e=>{const d=e.domain||"(none)";(byDomain[d]=byDomain[d]||[]).push(e);});
   const byProc={}; ex.forEach(e=>{const p=e.process||"(none)";(byProc[p]=byProc[p]||[]).push(e);});
@@ -540,7 +543,7 @@ function renderDashboard(){
       <div class="legend"><span><i style="background:#22c55e"></i>Passed</span><span><i style="background:#ef4444"></i>Failed</span><span><i style="background:#f59e0b"></i>Blocked</span><span><i style="background:#a855f7"></i>In progress</span><span><i style="background:#475569"></i>N/A</span></div>
     </div>
     <div class="split">
-      <div class="card"><b>By entity</b> <span class="muted" style="font-size:12px">— by tester home entity (nationality); falls back to the test's entity if unassigned</span>
+      <div class="card"><b>By entity</b> <span class="muted" style="font-size:12px">— by tester home entity (nationality); MCEU aggregates all entities</span>
         <table><thead><tr><th>Entity</th><th>Assigned</th><th>Progress</th><th>P/F/B</th></tr></thead><tbody>
         ${byEntity.map(({en,sub})=>{const sa=aggregate(sub);return `<tr><td>${badge(en.code,en.color)} ${esc(en.label)}</td><td>${sub.length}</td><td style="min-width:140px">${progressBar(sub)}</td><td><span style="color:#22c55e">${sa.passed}</span>/<span style="color:#ef4444">${sa.failed}</span>/<span style="color:#f59e0b">${sa.blocked}</span></td></tr>`;}).join("")}
         </tbody></table>
