@@ -558,7 +558,7 @@ function genSpocPage(){
   download(`MCEU_SPOC_${slug(iter.name)}_${scope}.html`, buildSpocHTML(payload), "text/html");
 }
 function buildSpocHTML(payload){
-  const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c").replace(/ /g,"\\u2028").replace(/ /g,"\\u2029");
+  const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>SPOC — ${esc(payload.scope)} — ${esc(payload.iteration)}</title>
 <style>
@@ -1424,7 +1424,7 @@ function genAllTesterPages(){
   closeModal();
 }
 function buildTesterHTML(payload){
-  const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c").replace(/ /g,"\\u2028").replace(/ /g,"\\u2029");
+  const dataJson=JSON.stringify(payload).replace(/</g,"\\u003c");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UAT — ${esc(payload.testers.length===1?payload.testers[0].name:"All testers")} — ${esc(payload.iteration)}</title>
 <style>
