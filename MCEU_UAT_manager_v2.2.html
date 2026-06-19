@@ -885,8 +885,8 @@ function openPushModal(){
   if(!target.length){ alert("No library definition matches the current selection."); return; }
   const scope = pushScopeId ? `“${esc(target[0].scenario)}”` : `${target.length} definition(s) from the current Library filter`;
   modal(`<h2>Push to iteration — ${esc(activeIter().name)}</h2>
-    <p class="hint">${scope}. Pick target entities — each test case is dispatched to its assigned testers × each entity (or override below). Duplicates are skipped.</p>
-    <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")||'<span class="muted">No entity configured (Admin).</span>'}</div></div>
+    <p class="hint">${scope}. Entities are <b>optional</b>: leave them empty and each test case takes the <b>nationality of its tester(s)</b> (one execution per tester). Or pick entities to dispatch to its assigned testers × each entity. Duplicates are skipped.</p>
+    <div class="field"><label>Target entities <span class="muted" style="font-weight:400">(optional — leave empty to use each tester's nationality)</span></label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")||'<span class="muted">No entity configured (Admin).</span>'}</div></div>
     <div class="row" style="margin-top:8px">
       <div class="field" style="flex:1"><label>Override tester (optional)</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— use assigned testers —',width:'100%'})}</div>
       <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
@@ -1130,11 +1130,11 @@ function renderLoadPanel(){
   const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
   const procs=[...new Set(S.library.filter(c=>!loadSel.domain||c.domain===loadSel.domain).map(c=>c.process))].sort();
   const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
-  return `<p class="hint">Pick a full or partial set of the Library, choose target entities, then add to <b>${esc(activeIter().name)}</b>. By default each test case is dispatched to <b>its assigned testers × each entity</b>. Pick a single tester below to override and assign everything to that one tester. Duplicates are skipped.</p>
+  return `<p class="hint">Pick a full or partial set of the Library, then add to <b>${esc(activeIter().name)}</b>. Entities are <b>optional</b>: if none are picked, each test case takes the <b>nationality of its tester(s)</b> (one execution per tester). Otherwise it is dispatched to its assigned testers × each picked entity. Pick a single tester below to override. Duplicates are skipped.</p>
     <div class="row">
       <div class="field"><label>Domain</label><select onchange="loadSel.domain=this.value;loadSel.process='';renderCampaign()"><option value="">— all —</option>${domains.map(d=>`<option ${loadSel.domain===d?'selected':''}>${esc(d)}</option>`).join("")}</select></div>
       <div class="field"><label>PRC</label><select onchange="loadSel.process=this.value;renderCampaign()"><option value="">— all (in domain) —</option>${procs.map(p=>`<option ${loadSel.process===p?'selected':''}>${esc(p)}</option>`).join("")}</select></div>
-      <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
+      <div class="field"><label>Target entities <span class="muted" style="font-weight:400">(optional — empty = each tester's nationality)</span></label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")}</div></div>
       <div class="field"><label>Override tester (optional)</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— use assigned testers —',width:'200px'})}</div>
       <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
       <button class="primary" onclick="loadIntoIteration()">Add ${target.length} definition(s)</button>
@@ -1142,20 +1142,21 @@ function renderLoadPanel(){
 }
 function loadIntoIteration(){
   const ents=[...document.querySelectorAll(".ldEnt:checked")].map(x=>x.value);
-  if(!ents.length){ alert("Select at least one target entity."); return false; }
   const formTester=$("#ldTester").value, rec=$("#ldRec").value, iterId=S.activeIterationId;
   const target=pushTarget();
   let created=0;
-  target.forEach(c=>ents.forEach(ent=>{
+  const mk=(c,ent,testerId)=>{
+    if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&(e.entity||"")===(ent||"")&&(e.testerId||"")===(testerId||""))) return;
+    S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
+      steps:(c.steps||[]).slice(),prereq:c.prereq||"",txnRef:!!c.txnRef,txnRefValue:"",entity:ent||"",testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
+    created++;
+  };
+  target.forEach(c=>{
     const testerIds = formTester ? [formTester] : (libTesterIds(c).length?libTesterIds(c):[""]);
-    testerIds.forEach(testerId=>{
-      if(S.executions.some(e=>e.iterationId===iterId&&e.libraryItemId===c.id&&e.entity===ent&&(e.testerId||"")===(testerId||""))) return;
-      S.executions.push({id:uid(),iterationId:iterId,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain,
-        steps:(c.steps||[]).slice(),prereq:c.prereq||"",txnRef:!!c.txnRef,txnRefValue:"",entity:ent,testerId,status:"Not started",comment:"",recurrence:rec||"",testDate:"",adhoc:false,updatedAt:new Date().toISOString()});
-      created++;
-    });
-  }));
-  persist(); alert(created+" execution(s) added to "+activeIter().name+".");
+    if(ents.length){ ents.forEach(ent=>testerIds.forEach(tid=>mk(c,ent,tid))); }
+    else { testerIds.forEach(tid=>mk(c,(tester(tid)||{}).country||"",tid)); }   /* no entity picked -> use each tester's nationality */
+  });
+  persist(); alert(created+" execution(s) added to "+activeIter().name+(ents.length?"":" (entity taken from each tester's nationality)")+".");
   return created;
 }
 function renderTrackingTable(){
