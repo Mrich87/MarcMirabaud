@@ -997,12 +997,32 @@ function renderTesterView(){
         <input list="testerDL" id="reassign_${esc(tid||'none')}" placeholder="target tester…" style="width:160px"/>
         <button class="sm" onclick="reassignAll('${tid}')">Move all</button>
       </div>${detail}</div>`; }).join("");
+  // Section 3 — by process (assign)
+  const bpf={}; fex.forEach(e=>{ const p=e.process||"(none)"; (bpf[p]=bpf[p]||[]).push(e); });
+  const procCards=Object.keys(bpf).sort((a,b)=>naturalKey(a).localeCompare(naturalKey(b))).map(p=>{ const list=bpf[p]; const a=aggregate(list);
+    const ents=[...new Set(list.map(e=>e.entity).filter(Boolean))]; const tids=[...new Set(list.map(e=>e.testerId).filter(Boolean))]; const unass=list.filter(e=>!e.testerId).length;
+    const key="proc::"+p; const open=tvExpanded.has(key);
+    const detail = open ? `<div style="margin-top:6px;border-top:1px solid var(--line);padding-top:6px">`
+      + list.slice().sort((x,y)=>naturalKey(x.scenario).localeCompare(naturalKey(y.scenario))).map(e=>`<div style="display:flex;gap:8px;align-items:center;padding:3px 0">
+          <span style="flex:1">${esc(e.scenario)} ${badge(e.entity,entityMeta(e.entity).color)} ${badge(e.status,statusMeta(e.status).color)}</span>
+          <input list="testerDL" value="${esc(testerName(e.testerId))}" placeholder="assign…" title="Assign / reassign tester" onchange="setExecTester('${e.id}',this.value)" style="width:170px"/></div>`).join("")
+      + `</div>` : '';
+    return `<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="sm" onclick="tvToggle('proc::${jsq(p)}')">${open?'▾':'▸'}</button>
+        <b style="min-width:160px">${esc(p)}</b> ${ents.map(en=>badge(en,entityMeta(en).color)).join(' ')}
+        <span class="muted">${list.length} test(s) · ${tids.length} tester(s)${unass?' · ':''}</span>${unass?badge(unass+' unassigned','#ef4444'):''}
+        <div style="flex:1;min-width:150px">${progressBar(list)}</div>
+        <span><span style="color:#22c55e">${a.passed}</span>/<span style="color:#ef4444">${a.failed}</span>/<span style="color:#f59e0b">${a.blocked}</span></span>
+      </div>${detail}</div>`; }).join("");
   $("#view-testerview").innerHTML=`${tdl}
     <h2>Tester view — ${esc(iter?iter.name:'—')}</h2>
     <p class="sub">Projection des assignations et réaffectation à la volée (indisponibilités) — sans passer par l'Execution Tracking.</p>
     <details class="sec" open><summary>Cross-service / cross-entity processes</summary><div class="card">
       <p class="hint">Process couvrant plusieurs domaines (services) et/ou plusieurs entités — pratique là où des testeurs ont été ajoutés.</p>
       ${crossHtml}</div></details>
+    <details class="sec" open><summary>By process — assign</summary><div class="card">
+      <div class="toolbar">${entSel}${stSel}<span class="muted">${Object.keys(bpf).length} process(es)</span></div>
+      ${procCards||'<p class="muted">No assignment in this iteration.</p>'}</div></details>
     <details class="sec" open><summary>By tester — reassign</summary><div class="card">
       <div class="toolbar">${entSel}${stSel}<span class="muted">${groups.filter(g=>g).length} tester(s)${byT[""]?' + unassigned':''}</span></div>
       ${cards||'<p class="muted">No assignment in this iteration.</p>'}</div></details>`;
