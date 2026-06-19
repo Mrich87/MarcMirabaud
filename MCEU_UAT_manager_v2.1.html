@@ -948,6 +948,15 @@ function delTester(i){ const t=S.testers[i];
 
 /* ===== Tester view: cross-service/entity projection + on-the-fly reassignment ===== */
 function tvToggle(tid){ if(tvExpanded.has(tid))tvExpanded.delete(tid); else tvExpanded.add(tid); renderTesterView(); }
+let tvSel=new Set();
+function tvToggleSel(id,on){ if(on)tvSel.add(id); else tvSel.delete(id); renderTesterView(); }
+function tvDupExec(e){ const idx=S.executions.indexOf(e); const c=Object.assign({},e,{id:uid(),testerId:"",status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()}); S.executions.splice(idx+1,0,c); return c; }
+function tvDuplicate(id){ const e=S.executions.find(x=>x.id===id); if(!e)return; tvDupExec(e); persist(); }
+function tvSetEntity(id,val){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.entity=val; e.updatedAt=new Date().toISOString(); persist(); }
+function tvBulkDup(){ if(!tvSel.size)return; [...tvSel].forEach(id=>{ const e=S.executions.find(x=>x.id===id); if(e)tvDupExec(e); }); tvSel.clear(); persist(); }
+function tvBulkEntity(val){ if(!val||!tvSel.size)return; S.executions.forEach(e=>{ if(tvSel.has(e.id)){ e.entity=val; e.updatedAt=new Date().toISOString(); } }); persist(); }
+function tvBulkAssign(){ const inp=$("#tvbulkt"); const name=((inp&&inp.value)||"").trim(); if(!name||!tvSel.size)return; const tid=findOrCreateTester(name); S.executions.forEach(e=>{ if(tvSel.has(e.id)){ e.testerId=tid; e.updatedAt=new Date().toISOString(); } }); tvSel.clear(); persist(); }
+function tvEntOpts(cur){ const opts=S.config.entities.map(en=>en.code); if(cur&&opts.indexOf(cur)<0)opts.push(cur); return '<option value=""'+(!cur?' selected':'')+'>—</option>'+opts.map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join(''); }
 function reassignAll(fromTid){ const inp=$("#reassign_"+(fromTid||'none')); const name=((inp&&inp.value)||"").trim();
   if(!name){ alert("Type a target tester first."); return; }
   const toId=findOrCreateTester(name); if(toId===fromTid){ alert("Same tester — nothing to do."); return; }
@@ -1004,8 +1013,11 @@ function renderTesterView(){
     const key="proc::"+p; const open=tvExpanded.has(key);
     const detail = open ? `<div style="margin-top:6px;border-top:1px solid var(--line);padding-top:6px">`
       + list.slice().sort((x,y)=>naturalKey(x.scenario).localeCompare(naturalKey(y.scenario))).map(e=>`<div style="display:flex;gap:8px;align-items:center;padding:3px 0">
-          <span style="flex:1">${esc(e.scenario)} ${badge(e.entity,entityMeta(e.entity).color)} ${badge(e.status,statusMeta(e.status).color)}</span>
-          <input list="testerDL" value="${esc(testerName(e.testerId))}" placeholder="assign…" title="Assign / reassign tester" onchange="setExecTester('${e.id}',this.value)" style="width:170px"/></div>`).join("")
+          <input type="checkbox" ${tvSel.has(e.id)?'checked':''} onchange="tvToggleSel('${e.id}',this.checked)"/>
+          <span style="flex:1">${esc(e.scenario)} ${badge(e.status,statusMeta(e.status).color)}</span>
+          <select title="Entity" onchange="tvSetEntity('${e.id}',this.value)" style="width:auto">${tvEntOpts(e.entity)}</select>
+          <input list="testerDL" value="${esc(testerName(e.testerId))}" placeholder="assign…" title="Assign / reassign tester" onchange="setExecTester('${e.id}',this.value)" style="width:160px"/>
+          <button class="sm" title="Duplicate this scenario" onclick="tvDuplicate('${e.id}')">⧉</button></div>`).join("")
       + `</div>` : '';
     return `<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="sm" onclick="tvToggle('proc::${jsq(p)}')">${open?'▾':'▸'}</button>
@@ -1021,7 +1033,13 @@ function renderTesterView(){
       <p class="hint">Process couvrant plusieurs domaines (services) et/ou plusieurs entités — pratique là où des testeurs ont été ajoutés.</p>
       ${crossHtml}</div></details>
     <details class="sec" open><summary>By process — assign</summary><div class="card">
-      <div class="toolbar">${entSel}${stSel}<span class="muted">${Object.keys(bpf).length} process(es)</span></div>
+      <div class="toolbar">${entSel}${stSel}<span class="muted">${Object.keys(bpf).length} process(es)</span><span class="hint" style="margin-left:8px">Tick scenarios to act in bulk · ⧉ duplicates a scenario.</span></div>
+      ${tvSel.size?`<div class="toolbar" style="background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:8px;align-items:center">
+        <b>${tvSel.size} selected</b>
+        <button class="sm" onclick="tvBulkDup()" title="Duplicate the selected scenarios">⧉ Duplicate</button>
+        <span class="muted">Entity:</span><select onchange="tvBulkEntity(this.value)"><option value="">—</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select>
+        <span class="muted">Assign:</span><input list="testerDL" id="tvbulkt" placeholder="tester…" style="width:140px"/><button class="sm" onclick="tvBulkAssign()">Apply</button>
+        <div class="spacer"></div><button class="sm" onclick="tvSel.clear();renderTesterView()">Clear</button></div>`:''}
       ${procCards||'<p class="muted">No assignment in this iteration.</p>'}</div></details>
     <details class="sec" open><summary>By tester — reassign</summary><div class="card">
       <div class="toolbar">${entSel}${stSel}<span class="muted">${groups.filter(g=>g).length} tester(s)${byT[""]?' + unassigned':''}</span></div>
