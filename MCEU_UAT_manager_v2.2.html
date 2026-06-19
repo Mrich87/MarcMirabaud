@@ -1762,6 +1762,8 @@ function renderAdmin(){
         <label class="pill" style="cursor:pointer">⬆ Restore backup<input type="file" accept=".json" style="display:none" onchange="importJSON(this)"/></label>
         <button class="primary" onclick="exportLibrary()">⬇ Library (.xlsx)</button>
         <button class="primary" onclick="exportReport()">⬇ Excel report</button>
+        <button onclick="exportTesters()">⬇ Testers (CSV)</button>
+        <label class="pill" style="cursor:pointer" title="Add testers from a CSV/JSON or a Full backup — merges by name, never duplicates, does not touch Library or executions">⬆ Import testers<input type="file" accept=".csv,.json" style="display:none" onchange="importTesters(this)"/></label>
       </div>
     </div>
 
@@ -1775,6 +1777,27 @@ function renderAdmin(){
    ========================================================================= */
 function download(name,content,type){ const b=new Blob([content],{type:type||"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+function exportTesters(){ const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
+  const rows=S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>[t.name||"",t.email||"",t.country||"",t.dept||""].map(q).join(","));
+  download("MCEU_testers_"+new Date().toISOString().slice(0,10)+".csv","Name,Email,Country,Dept\n"+rows.join("\n"),"text/csv"); }
+function importTesters(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ const txt=e.target.result; let list=[];
+    try{
+      if(/\.json$/i.test(f.name)||/^\s*[\[{]/.test(txt)){ const o=JSON.parse(txt); const arr=Array.isArray(o)?o:(o.testers||[]);
+        list=arr.map(t=>({name:(t.name||"").trim(),email:(t.email||"").trim(),country:(t.country||"").trim(),dept:(t.dept||"").trim()})); }
+      else { const lines=txt.split(/\r?\n/).filter(x=>x.trim()); if(!lines.length){ alert("Empty file."); return; }
+        const sp=l=>{const o=[];let c="",q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(q){if(ch==='"'){if(l[i+1]==='"'){c+='"';i++;}else q=false;}else c+=ch;}else{if(ch==='"')q=true;else if(ch===','){o.push(c);c="";}else c+=ch;}}o.push(c);return o;};
+        const hdr=sp(lines[0]).map(h=>h.trim().toLowerCase()); const ci=n=>hdr.findIndex(h=>h===n||h.indexOf(n)>=0);
+        const iN=ci("name"),iE=ci("email"),iC=ci("country"),iD=ci("dept");
+        if(iN<0){ alert("CSV must have a 'Name' column."); return; }
+        list=lines.slice(1).map(sp).map(c=>({name:(c[iN]||"").trim(),email:(iE>=0?c[iE]||"":"").trim(),country:(iC>=0?c[iC]||"":"").trim(),dept:(iD>=0?c[iD]||"":"").trim()})); }
+    }catch(err){ alert("Invalid file (expected CSV, a testers JSON, or a Full backup)."); return; }
+    let add=0,upd=0;
+    list.forEach(t=>{ if(!t.name)return; const ex=S.testers.find(x=>(x.name||"").trim().toLowerCase()===t.name.toLowerCase());
+      if(ex){ let ch=false; if(!ex.email&&t.email){ex.email=t.email;ch=true;} if(!ex.country&&t.country){ex.country=t.country;ch=true;} if(!ex.dept&&t.dept){ex.dept=t.dept;ch=true;} if(ch)upd++; }
+      else { S.testers.push({id:uid(),name:t.name,email:t.email||"",country:t.country||"",dept:t.dept||""}); add++; } });
+    persist(); alert("Testers imported: "+add+" added, "+upd+" updated (merged by name). Library & executions untouched."); };
+  r.readAsText(f); }
 function exportJSON(){ S.meta=S.meta||{}; S.meta.lastBackup=new Date().toISOString(); save();
   download(`MCEU_UAT_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(S,null,2)); }
 function importJSON(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
