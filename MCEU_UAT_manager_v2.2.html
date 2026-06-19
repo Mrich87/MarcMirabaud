@@ -89,6 +89,8 @@
   .tpick{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer}
   .tpick:hover{background:rgba(255,255,255,.04)}
   .tlist{max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;margin-top:4px}
+  .tlist2{column-count:2;column-gap:16px;max-height:260px}
+  .tlist2 .tpick{break-inside:avoid}
 </style>
 </head>
 <body>
@@ -828,6 +830,20 @@ function renderDashboard(){
    ========================================================================= */
 let libFilter={q:"",domain:"",process:""};
 let libExpanded=new Set();
+let libSel=new Set();
+function libToggle(id,on){ if(on)libSel.add(id); else libSel.delete(id); renderLibrary(); }
+function libSelAll(on){ const ids=libDisplayedIds(); if(on)ids.forEach(id=>libSel.add(id)); else ids.forEach(id=>libSel.delete(id)); renderLibrary(); }
+function libBulkClear(){ libSel.clear(); renderLibrary(); }
+function libBulkRef(on){ S.library.forEach(c=>{ if(libSel.has(String(c.id))) c.txnRef=on; }); persist(); }
+function libBulkSetTesters(){ if(!libSel.size)return;
+  modal(`<h2>Set testers — ${libSel.size} scenario(s)</h2>
+    <p class="hint">Pick testers, then <b>Replace</b> (overwrite) or <b>Add</b> (merge) on the selected scenarios.</p>
+    ${testerPickerHtml(new Set())}
+    <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="sm" onclick="libBulkApplyTesters('add')">Add</button><button class="primary" onclick="libBulkApplyTesters('replace')">Replace</button></div>`);
+  libTCount(); }
+function libBulkApplyTesters(mode){ const ids=[...document.querySelectorAll("#l_tlist .ltchk:checked")].map(x=>x.value);
+  S.library.forEach(c=>{ if(!libSel.has(String(c.id)))return; const cur=mode==="add"?libTesterIds(c).slice():[]; ids.forEach(id=>{ if(!cur.includes(id))cur.push(id); }); c.defaultTesterIds=cur; delete c.defaultTesterId; });
+  closeModal(); persist(); }
 function toggleLibSteps(id){ id=String(id); if(libExpanded.has(id))libExpanded.delete(id); else libExpanded.add(id); renderLibrary(); }
 function sortedLib(list){ return list.slice().sort((a,b)=>(a.order||0)-(b.order||0)||naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))); }
 function renderLibrary(){
@@ -855,17 +871,23 @@ function renderLibrary(){
       <label class="pill" style="cursor:pointer">⬆ Import .xlsx<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDevops(this)"/></label>
       <input id="impSheet" value="Tester_View" title="sheet name (UAT5 step-level = Tester_View)" style="width:110px"/>
     </div>
+    ${libSel.size?`<div class="toolbar" style="background:#0b1220;border:1px solid var(--line);border-radius:6px;padding:6px 10px;margin-bottom:8px;gap:8px">
+      <b>${libSel.size} selected</b>
+      <button class="sm" onclick="libBulkSetTesters()" title="Assign these testers to all selected scenarios (copy testers in bulk)">Set testers…</button>
+      <span class="muted">Require transaction ref:</span><button class="sm" onclick="libBulkRef(true)">Yes</button><button class="sm" onclick="libBulkRef(false)">No</button>
+      <div class="spacer"></div><button class="sm" onclick="libBulkClear()">Clear selection</button></div>`:''}
     <table>
-      <thead><tr><th style="width:120px">Order</th><th>PRC (process)</th><th>Scenario</th><th>Domain</th><th>Default tester</th><th style="width:110px"></th></tr></thead>
+      <thead><tr><th style="width:26px"><input type="checkbox" title="Select all shown" ${libDisplayedIds().length&&libDisplayedIds().every(id=>libSel.has(id))?'checked':''} onchange="libSelAll(this.checked)"></th><th style="width:120px">Order</th><th>PRC (process)</th><th>Scenario</th><th>Domain</th><th>Default tester</th><th style="width:110px"></th></tr></thead>
       <tbody>
       ${rows.map(c=>{const steps=c.steps||[];const open=libExpanded.has(String(c.id));return `<tr>
+        <td><input type="checkbox" class="libchk" ${libSel.has(String(c.id))?'checked':''} onchange="libToggle('${c.id}',this.checked)"></td>
         <td><div class="ord"><button onclick="moveLib('${c.id}',-1)">▲</button><input type="number" value="${c.order||0}" onchange="setLibOrder('${c.id}',this.value)"/><button onclick="moveLib('${c.id}',1)">▼</button></div></td>
         <td><b>${esc(c.process)}</b></td>
         <td>${esc(c.scenario)}${c.txnRef?'<span class="reftag">txn ref</span>':''}${steps.length?` <span class="steptoggle" onclick="toggleLibSteps('${c.id}')">${open?'▾':'▸'} ${steps.length} step${steps.length>1?'s':''}</span>`:''}</td>
         <td>${esc(c.domain)}</td>
         <td class="muted">${esc(testerNames(libTesterIds(c))||"—")}</td>
         <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button> <button class="sm" onclick="pushOneToIteration('${c.id}')" title="Push this scenario to the active iteration">➜</button></td>
-      </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(stepText(s))}${stepTagsHTML(s)}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
+      </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="6"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(stepText(s))}${stepTagsHTML(s)}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
       </tbody>
     </table>`}`;
 }
@@ -896,11 +918,15 @@ function openPushModal(){
 function pushLibConfirm(){ const r=loadIntoIteration(); if(r!==false){ pushScopeId=null; closeModal(); } }
 function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)",steps:(o.steps||[]).slice(),defaultTesterIds:libTesterIds(o).slice()}; S.library.push(c); persist(); }
 function stepRowHtml(s){ const t=stepText(s); const stream=(s&&typeof s==="object"&&s.stream)||""; const app=(s&&typeof s==="object"&&s.app)||"";
-  return `<div class="steprow2" style="display:flex;gap:6px;margin-bottom:4px">
+  return `<div class="steprow2" style="display:flex;gap:6px;margin-bottom:4px;align-items:center">
+    <span style="display:flex;flex-direction:column"><button class="sm" title="Move up" onclick="moveStepRow(this,-1)" style="padding:0 5px;line-height:1.1">▲</button><button class="sm" title="Move down" onclick="moveStepRow(this,1)" style="padding:0 5px;line-height:1.1">▼</button></span>
     <input class="st_text" placeholder="step…" value="${esc(t)}" style="flex:2"/>
     <input class="st_stream" placeholder="business stream" value="${esc(stream)}" style="flex:1"/>
     <input class="st_app" placeholder="app" value="${esc(app)}" style="flex:1"/>
     <button class="sm danger" title="Remove step" onclick="this.closest('.steprow2').remove()" style="width:30px">✕</button></div>`; }
+function moveStepRow(btn,dir){ const row=btn.closest('.steprow2'); if(!row)return; const w=row.parentNode;
+  if(dir<0 && row.previousElementSibling){ w.insertBefore(row,row.previousElementSibling); }
+  else if(dir>0 && row.nextElementSibling){ w.insertBefore(row.nextElementSibling,row); } }
 function addStepRow(){ const w=document.getElementById("l_stepwrap"); if(w) w.insertAdjacentHTML("beforeend", stepRowHtml({})); }
 function editLibItem(id){ const c=libById(id);
   modal(`<h2>Edit library definition</h2>
@@ -911,8 +937,11 @@ function editLibItem(id){ const c=libById(id);
     <div class="field" style="margin-top:8px"><label>Scenario</label><input id="l_scen" value="${esc(c.scenario)}"/></div>
     <div class="row" style="margin-top:8px">
       <div class="field" style="flex:1"><label>Default testers (you can pick several)</label>
-        <input id="l_tsearch" placeholder="🔍 filter testers…" oninput="filterTesterPicks()"/>
-        <div class="tlist" id="l_tlist">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>{const on=libTesterIds(c).includes(t.id);return `<label class="tpick" data-n="${esc((t.name+" "+(t.country||"")).toLowerCase())}"><input type="checkbox" class="ltchk" value="${t.id}" ${on?'checked':''}/> ${esc(t.name)}${t.country?' <span class="muted">('+esc(t.country)+')</span>':''}</label>`;}).join("")||'<span class="muted">No tester yet — add testers in Campaign.</span>'}</div>
+        <select onchange="libCopyFromScenario(this.value);this.value=''" title="Copy the testers of another scenario into this one" style="margin-bottom:4px">
+          <option value="">📋 Copy testers from another scenario…</option>
+          ${S.library.filter(x=>x.id!==c.id&&libTesterIds(x).length).sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(x=>`<option value="${x.id}">${esc(x.process)} · ${esc(x.scenario)} (${libTesterIds(x).length})</option>`).join("")}
+        </select>
+        ${testerPickerHtml(new Set(libTesterIds(c)))}
       </div>
       <div class="field"><label>Order</label><input type="number" id="l_order" value="${c.order||0}"/></div>
     </div>
@@ -925,7 +954,18 @@ function editLibItem(id){ const c=libById(id);
     <div class="field" style="margin-top:8px"><label>Test data / prerequisites</label><textarea id="l_prereq" placeholder="Portfolios (no. + entity), flags (e.g. traspaso), ISIN, instruments, PE, hedge funds to use…">${esc(c.prereq||"")}</textarea><div class="hint">Shown to the tester under the scenario (🧪) so they know which data to use. Centralized via “🧪 Test data reference”.</div></div>
     <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="l_notes">${esc(c.notes||"")}</textarea></div>
     <div class="toolbar" style="margin-top:14px"><button class="danger" onclick="delLibItem('${c.id}')">Delete</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveLibItem('${c.id}')">Save</button></div>`);
+  libTCount();
 }
+function testerPickerHtml(selSet){ selSet=selSet||new Set();
+  return `<input id="l_tsearch" placeholder="🔍 filter testers…" oninput="filterTesterPicks()"/>
+    <div class="toolbar" style="margin:4px 0;font-size:12px;gap:6px"><span class="muted" id="l_tcount"></span><div class="spacer"></div>
+      <button class="sm" type="button" onclick="libTSelect(true)">Select shown</button>
+      <button class="sm" type="button" onclick="libTSelect(false)">Clear</button></div>
+    <div class="tlist tlist2" id="l_tlist" onchange="libTCount()">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>{const on=selSet.has(t.id);return `<label class="tpick" data-n="${esc((t.name+" "+(t.country||"")).toLowerCase())}"><input type="checkbox" class="ltchk" value="${t.id}" ${on?'checked':''}/> ${esc(t.name)}${t.country?' <span class="muted">('+esc(t.country)+')</span>':''}</label>`;}).join("")||'<span class="muted">No tester yet — add testers in Campaign.</span>'}</div>`; }
+function libTCount(){ const el=$("#l_tcount"); if(el) el.textContent=document.querySelectorAll("#l_tlist .ltchk:checked").length+" selected"; }
+function libTSelect(on){ document.querySelectorAll("#l_tlist .tpick").forEach(el=>{ const cb=el.querySelector(".ltchk"); if(!cb)return; if(on){ if(el.style.display!=="none") cb.checked=true; } else cb.checked=false; }); libTCount(); }
+function libCopyFromScenario(id){ if(!id)return; const o=libById(id); if(!o)return; const ids=new Set(libTesterIds(o));
+  document.querySelectorAll("#l_tlist .ltchk").forEach(cb=>{ cb.checked=ids.has(cb.value); }); libTCount(); }
 function filterTesterPicks(){ const q=($("#l_tsearch").value||"").toLowerCase().trim();
   document.querySelectorAll("#l_tlist .tpick").forEach(el=>{ el.style.display=(!q||el.dataset.n.includes(q))?"flex":"none"; }); }
 function saveLibItem(id){ const c=libById(id);
