@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suivi RH — Circonscription</title>
+<style>
+:root{
+  --bg:#0f172a;--panel:#1e293b;--panel2:#273449;--line:#334155;
+  --txt:#e2e8f0;--muted:#94a3b8;--accent:#38bdf8;--accent2:#0ea5e9;
+  --ok:#22c55e;--fail:#ef4444;--warn:#f59e0b;--na:#64748b;--prog:#a855f7;
+  --chip:#0b1220;
+}
+*{box-sizing:border-box;margin:0}
+body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+header{background:linear-gradient(90deg,#0b1220,#16233b);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+header h1{font-size:17px;font-weight:600}
+header .brand{color:var(--accent)}
+nav{display:flex;gap:2px;background:#0b1220;padding:6px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+nav button{background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;padding:9px 18px;color:var(--muted);font-size:14px;cursor:pointer}
+nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+nav button:hover{color:var(--txt)}
+main{padding:20px;max-width:1500px;margin:0 auto}
+.view{display:none}.view.active{display:block}
+select,input,textarea{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px;font-family:inherit}
+textarea{width:100%;min-height:60px;resize:vertical}
+button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent2);border-color:var(--accent2);color:#06283b;font-weight:600}
+button.primary:hover{background:var(--accent)}
+button.danger{border-color:var(--fail);color:#fca5a5}
+button.sm{padding:3px 8px;font-size:12px}
+h2{font-size:18px;margin-bottom:4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.kpis{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 18px;min-width:130px;flex:1}
+.kpi .n{font-size:28px;font-weight:700}
+.kpi .l{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel);z-index:1;cursor:pointer;user-select:none}
+th:hover{color:var(--txt)}
+tr:hover td{background:rgba(255,255,255,.02)}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge-nouveau{background:#38bdf822;color:#38bdf8;border:1px solid #38bdf855}
+.badge-encours{background:#a855f722;color:#c4b5fd;border:1px solid #a855f755}
+.badge-enattente{background:#f59e0b22;color:#fbbf24;border:1px solid #f59e0b55}
+.badge-resolu{background:#22c55e22;color:#4ade80;border:1px solid #22c55e55}
+.badge-cloture{background:#64748b22;color:#94a3b8;border:1px solid #64748b55}
+.badge-haute{background:#ef444422;color:#fca5a5;border:1px solid #ef444455}
+.badge-moyenne{background:#f59e0b22;color:#fbbf24;border:1px solid #f59e0b55}
+.badge-basse{background:#22c55e22;color:#4ade80;border:1px solid #22c55e55}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar .spacer{flex:1}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100}
+.modal-bg.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;max-width:750px;width:94%;max-height:90vh;overflow:auto}
+.modal h3{margin-bottom:16px;font-size:16px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-grid .full{grid-column:1/-1}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:12px;color:var(--muted)}
+.hist-item{border-left:2px solid var(--accent);padding:6px 12px;margin-bottom:8px;background:var(--chip);border-radius:0 6px 6px 0}
+.hist-date{font-size:11px;color:var(--muted)}
+.mail-drop{border:2px dashed var(--line);border-radius:8px;padding:20px;text-align:center;color:var(--muted);cursor:pointer;transition:border-color .2s}
+.mail-drop.over{border-color:var(--accent)}
+.mail-item{background:var(--chip);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin-top:8px;display:flex;justify-content:space-between;align-items:center}
+.mail-item .mail-subject{font-weight:600;font-size:13px}
+.mail-item .mail-date{font-size:11px;color:var(--muted)}
+.group-header{background:var(--panel2);padding:10px 14px;border-radius:8px;margin:16px 0 8px;font-weight:600;display:flex;align-items:center;gap:8px}
+.group-header .count{background:var(--accent2);color:#06283b;border-radius:12px;padding:1px 8px;font-size:11px}
+.pbar{height:10px;background:#0b1220;border-radius:6px;overflow:hidden;display:flex;min-width:120px;margin-top:4px}
+.pbar span{display:block;height:100%}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+.clickable{cursor:pointer;color:var(--accent);text-decoration:none}
+.clickable:hover{text-decoration:underline}
+.tag{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:11px;margin:1px}
+@media(max-width:700px){.form-grid{grid-template-columns:1fr}.kpis{flex-direction:column}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="brand">📋</span> Suivi RH — Circonscription</h1>
+  <div style="margin-left:auto;font-size:12px;color:var(--muted)" id="countInfo"></div>
+</header>
+
+<nav id="mainNav"></nav>
+<main id="mainContent"></main>
+
+<div class="modal-bg" id="modalSituation">
+  <div class="modal" id="modalContent"></div>
+</div>
+<div class="modal-bg" id="modalMail">
+  <div class="modal" id="modalMailContent"></div>
+</div>
+<div class="modal-bg" id="modalEcole">
+  <div class="modal" id="modalEcoleContent"></div>
+</div>
+
+<script>
+const TYPES_RH = [
+  "Absence longue durée","Remplacement","Conflit","Signalement",
+  "Mutation","Formation","Disciplinaire","Harcèlement",
+  "Conditions de travail","Autre"
+];
+const STATUTS = ["Nouveau","En cours","En attente","Résolu","Clôturé"];
+const PRIORITES = ["Haute","Moyenne","Basse"];
+const FONCTIONS = ["Enseignant(e)","Directeur/trice","ATSEM","AESH","AED","Autre"];
+const TABS = [
+  {id:"dashboard",label:"Tableau de bord"},
+  {id:"ecoles",label:"Par école"},
+  {id:"types",label:"Par type"},
+  {id:"toutes",label:"Toutes les situations"},
+  {id:"admin",label:"Écoles"}
+];
+
+let state = JSON.parse(localStorage.getItem("rh_circo_state")||"null") || {
+  ecoles: [],
+  situations: [],
+  nextId: 1,
+  nextEcoleId: 1
+};
+
+function save(){ localStorage.setItem("rh_circo_state", JSON.stringify(state)); }
+function $(s,p){ return (p||document).querySelector(s); }
+function $$(s,p){ return [...(p||document).querySelectorAll(s)]; }
+function esc(s){ const d=document.createElement("div"); d.textContent=s||""; return d.innerHTML; }
+function fmtDate(d){ return d ? new Date(d).toLocaleDateString("fr-FR") : "—"; }
+function slugify(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z]/g,""); }
+function badgeStat(s){ return `<span class="badge badge-${slugify(s)}">${esc(s)}</span>`; }
+function badgePrio(p){ return `<span class="badge badge-${slugify(p)}">${esc(p)}</span>`; }
+function ecoleName(id){ const e=state.ecoles.find(x=>x.id===id); return e ? e.nom : "—"; }
+function ecoleObj(id){ return state.ecoles.find(x=>x.id===id); }
+
+let currentTab = "dashboard";
+let sortCol = null, sortDir = 1;
+let filters = {ecole:"",type:"",statut:"",priorite:"",search:""};
+
+function buildNav(){
+  const nav = $("#mainNav");
+  nav.innerHTML = TABS.map(t =>
+    `<button onclick="switchTab('${t.id}')" class="${currentTab===t.id?'active':''}">${t.label}</button>`
+  ).join("");
+}
+
+function switchTab(t){ currentTab=t; sortCol=null; sortDir=1; buildNav(); render(); }
+
+function render(){
+  const m = $("#mainContent");
+  const fn = {dashboard:renderDashboard, ecoles:renderEcoles, types:renderTypes, toutes:renderToutes, admin:renderAdmin};
+  (fn[currentTab]||fn.dashboard)();
+  const open = state.situations.filter(s=>s.statut!=="Clôturé"&&s.statut!=="Résolu").length;
+  $("#countInfo").textContent = `${state.situations.length} situation(s) · ${open} ouverte(s) · ${state.ecoles.length} école(s)`;
+}
+
+// ── Dashboard ──
+function renderDashboard(){
+  const sits = state.situations;
+  const open = sits.filter(s=>s.statut!=="Clôturé"&&s.statut!=="Résolu");
+  const byStatut = {}; STATUTS.forEach(s=>byStatut[s]=0); sits.forEach(s=>byStatut[s.statut]=(byStatut[s.statut]||0)+1);
+  const byType = {}; TYPES_RH.forEach(t=>byType[t]=0); sits.forEach(s=>byType[s.type]=(byType[s.type]||0)+1);
+  const haute = open.filter(s=>s.priorite==="Haute").length;
+
+  const colors = {Nouveau:"var(--accent)",["En cours"]:"var(--prog)",["En attente"]:"var(--warn)",Résolu:"var(--ok)",Clôturé:"var(--na)"};
+  const total = sits.length||1;
+
+  $("#mainContent").innerHTML = `
+    <h2>Tableau de bord</h2>
+    <p class="sub">Vue d'ensemble des situations RH de la circonscription</p>
+    <div class="kpis">
+      <div class="kpi"><div class="n">${sits.length}</div><div class="l">Total situations</div></div>
+      <div class="kpi"><div class="n" style="color:var(--accent)">${open.length}</div><div class="l">Ouvertes</div></div>
+      <div class="kpi"><div class="n" style="color:var(--fail)">${haute}</div><div class="l">Priorité haute</div></div>
+      <div class="kpi"><div class="n" style="color:var(--ok)">${byStatut["Résolu"]||0}</div><div class="l">Résolues</div></div>
+      <div class="kpi"><div class="n">${state.ecoles.length}</div><div class="l">Écoles</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <h3 style="margin-bottom:12px">Répartition par statut</h3>
+        <div class="pbar" style="height:18px;border-radius:8px">
+          ${STATUTS.map(s=>`<span style="width:${(byStatut[s]/total*100)}%;background:${colors[s]}" title="${s}: ${byStatut[s]}"></span>`).join("")}
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px">
+          ${STATUTS.map(s=>`<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${colors[s]};vertical-align:middle;margin-right:4px"></span>${s}: ${byStatut[s]}</span>`).join("")}
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:12px">Par type</h3>
+        ${TYPES_RH.filter(t=>byType[t]>0).map(t=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="flex:1;font-size:13px">${t}</span>
+            <span style="font-weight:600">${byType[t]}</span>
+            <div class="pbar" style="width:100px"><span style="width:${byType[t]/Math.max(...Object.values(byType),1)*100}%;background:var(--accent)"></span></div>
+          </div>
+        `).join("")||'<div class="empty">Aucune situation</div>'}
+      </div>
+    </div>
+    ${haute>0?`
+    <div class="card" style="border-color:var(--fail)">
+      <h3 style="color:var(--fail);margin-bottom:10px">⚠ Situations priorité haute ouvertes (${haute})</h3>
+      <table><tr><th>École</th><th>Type</th><th>Personne</th><th>Statut</th><th>Depuis</th></tr>
+      ${open.filter(s=>s.priorite==="Haute").map(s=>`<tr>
+        <td>${esc(ecoleName(s.ecoleId))}</td><td>${esc(s.type)}</td>
+        <td>${esc(s.personne)}</td><td>${badgeStat(s.statut)}</td>
+        <td>${fmtDate(s.dateDebut)}</td>
+      </tr>`).join("")}
+      </table>
+    </div>`:""}
+  `;
+}
+
+// ── Par école ──
+function renderEcoles(){
+  const grouped = {};
+  state.ecoles.forEach(e=>grouped[e.id]=[]);
+  state.situations.forEach(s=>{ if(grouped[s.ecoleId]) grouped[s.ecoleId].push(s); });
+
+  const ecoleFilter = filters.ecole;
+  const list = state.ecoles
+    .filter(e=> !ecoleFilter || e.id===+ecoleFilter)
+    .sort((a,b)=>a.nom.localeCompare(b.nom));
+
+  $("#mainContent").innerHTML = `
+    <h2>Situations par école</h2>
+    <p class="sub">Regroupement des situations RH par établissement</p>
+    <div class="toolbar">
+      <select onchange="filters.ecole=this.value;render()">
+        <option value="">Toutes les écoles</option>
+        ${state.ecoles.sort((a,b)=>a.nom.localeCompare(b.nom)).map(e=>`<option value="${e.id}" ${filters.ecole==e.id?'selected':''}>${esc(e.nom)}</option>`).join("")}
+      </select>
+      <span class="spacer"></span>
+      <button class="primary" onclick="openSituationModal()">+ Nouvelle situation</button>
+    </div>
+    ${list.length===0?'<div class="empty">Aucune école configurée. Ajoutez-en dans l\'onglet Écoles.</div>':""}
+    ${list.map(e=>{
+      const sits = grouped[e.id]||[];
+      const open = sits.filter(s=>s.statut!=="Clôturé"&&s.statut!=="Résolu").length;
+      return `
+      <div class="group-header">
+        ${esc(e.nom)} ${e.commune?`<span style="color:var(--muted);font-weight:400">— ${esc(e.commune)}</span>`:""}
+        <span class="count">${sits.length} situation(s)</span>
+        ${open?`<span class="count" style="background:var(--warn)">${open} ouverte(s)</span>`:""}
+      </div>
+      ${sits.length?`<div class="card" style="padding:0;overflow:auto">
+        <table><tr><th>Type</th><th>Personne</th><th>Statut</th><th>Priorité</th><th>Date début</th><th>Actions</th></tr>
+        ${sits.map(s=>`<tr>
+          <td>${esc(s.type)}</td>
+          <td>${esc(s.personne)} <span class="tag">${esc(s.fonction)}</span></td>
+          <td>${badgeStat(s.statut)}</td><td>${badgePrio(s.priorite)}</td>
+          <td>${fmtDate(s.dateDebut)}</td>
+          <td><button class="sm" onclick="openSituationModal(${s.id})">Voir</button> <button class="sm danger" onclick="deleteSituation(${s.id})">✕</button></td>
+        </tr>`).join("")}
+        </table>
+      </div>`:'<div style="padding:8px 14px;color:var(--muted);font-size:13px">Aucune situation</div>'}`;
+    }).join("")}
+  `;
+}
+
+// ── Par type ──
+function renderTypes(){
+  const byType = {};
+  TYPES_RH.forEach(t=>byType[t]=[]);
+  state.situations.forEach(s=>{ if(!byType[s.type]) byType[s.type]=[]; byType[s.type].push(s); });
+
+  const typeFilter = filters.type;
+
+  $("#mainContent").innerHTML = `
+    <h2>Situations par type</h2>
+    <p class="sub">Regroupement par catégorie de situation RH</p>
+    <div class="toolbar">
+      <select onchange="filters.type=this.value;render()">
+        <option value="">Tous les types</option>
+        ${TYPES_RH.map(t=>`<option value="${t}" ${filters.type===t?'selected':''}>${t}</option>`).join("")}
+      </select>
+      <span class="spacer"></span>
+      <button class="primary" onclick="openSituationModal()">+ Nouvelle situation</button>
+    </div>
+    ${TYPES_RH.filter(t=> !typeFilter||t===typeFilter).map(t=>{
+      const sits = byType[t];
+      if(!sits.length && typeFilter) return "";
+      return `
+      <div class="group-header">
+        ${esc(t)}
+        <span class="count">${sits.length}</span>
+      </div>
+      ${sits.length?`<div class="card" style="padding:0;overflow:auto">
+        <table><tr><th>École</th><th>Personne</th><th>Statut</th><th>Priorité</th><th>Date début</th><th>Actions</th></tr>
+        ${sits.map(s=>`<tr>
+          <td>${esc(ecoleName(s.ecoleId))}</td>
+          <td>${esc(s.personne)} <span class="tag">${esc(s.fonction)}</span></td>
+          <td>${badgeStat(s.statut)}</td><td>${badgePrio(s.priorite)}</td>
+          <td>${fmtDate(s.dateDebut)}</td>
+          <td><button class="sm" onclick="openSituationModal(${s.id})">Voir</button> <button class="sm danger" onclick="deleteSituation(${s.id})">✕</button></td>
+        </tr>`).join("")}
+        </table>
+      </div>`:'<div style="padding:8px 14px;color:var(--muted);font-size:13px">Aucune situation</div>'}`;
+    }).join("")}
+  `;
+}
+
+// ── Toutes les situations ──
+function renderToutes(){
+  let sits = [...state.situations];
+
+  if(filters.ecole) sits = sits.filter(s=>s.ecoleId===+filters.ecole);
+  if(filters.type) sits = sits.filter(s=>s.type===filters.type);
+  if(filters.statut) sits = sits.filter(s=>s.statut===filters.statut);
+  if(filters.priorite) sits = sits.filter(s=>s.priorite===filters.priorite);
+  if(filters.search){
+    const q = filters.search.toLowerCase();
+    sits = sits.filter(s=>
+      s.personne.toLowerCase().includes(q) ||
+      s.description.toLowerCase().includes(q) ||
+      ecoleName(s.ecoleId).toLowerCase().includes(q) ||
+      s.type.toLowerCase().includes(q)
+    );
+  }
+
+  if(sortCol!==null){
+    const keys = ["ecole","type","personne","statut","priorite","dateDebut"];
+    const k = keys[sortCol];
+    sits.sort((a,b)=>{
+      let va = k==="ecole" ? ecoleName(a.ecoleId) : a[k]||"";
+      let vb = k==="ecole" ? ecoleName(b.ecoleId) : b[k]||"";
+      return va.localeCompare(vb)*sortDir;
+    });
+  }
+
+  $("#mainContent").innerHTML = `
+    <h2>Toutes les situations</h2>
+    <p class="sub">${sits.length} situation(s) affichée(s)</p>
+    <div class="toolbar">
+      <input placeholder="🔍 Rechercher…" value="${esc(filters.search)}" oninput="filters.search=this.value;render()" style="min-width:200px">
+      <select onchange="filters.ecole=this.value;render()">
+        <option value="">Toutes les écoles</option>
+        ${state.ecoles.sort((a,b)=>a.nom.localeCompare(b.nom)).map(e=>`<option value="${e.id}" ${filters.ecole==e.id?'selected':''}>${esc(e.nom)}</option>`).join("")}
+      </select>
+      <select onchange="filters.type=this.value;render()">
+        <option value="">Tous les types</option>
+        ${TYPES_RH.map(t=>`<option value="${t}" ${filters.type===t?'selected':''}>${t}</option>`).join("")}
+      </select>
+      <select onchange="filters.statut=this.value;render()">
+        <option value="">Tous les statuts</option>
+        ${STATUTS.map(s=>`<option value="${s}" ${filters.statut===s?'selected':''}>${s}</option>`).join("")}
+      </select>
+      <select onchange="filters.priorite=this.value;render()">
+        <option value="">Toutes priorités</option>
+        ${PRIORITES.map(p=>`<option value="${p}" ${filters.priorite===p?'selected':''}>${p}</option>`).join("")}
+      </select>
+      <button class="sm" onclick="filters={ecole:'',type:'',statut:'',priorite:'',search:''};render()">Réinitialiser</button>
+      <span class="spacer"></span>
+      <button onclick="exportExcel()">📥 Export Excel</button>
+      <button class="primary" onclick="openSituationModal()">+ Nouvelle situation</button>
+    </div>
+    ${sits.length?`
+    <div class="card" style="padding:0;overflow:auto">
+      <table><tr>
+        ${["École","Type","Personne","Statut","Priorité","Date début"].map((h,i)=>
+          `<th onclick="sortTable(${i})">${h} ${sortCol===i?(sortDir===1?"▲":"▼"):""}</th>`
+        ).join("")}
+        <th>Mails</th><th>Actions</th>
+      </tr>
+      ${sits.map(s=>`<tr>
+        <td>${esc(ecoleName(s.ecoleId))}</td>
+        <td>${esc(s.type)}</td>
+        <td>${esc(s.personne)} <span class="tag">${esc(s.fonction)}</span></td>
+        <td>${badgeStat(s.statut)}</td>
+        <td>${badgePrio(s.priorite)}</td>
+        <td>${fmtDate(s.dateDebut)}</td>
+        <td>${(s.mails||[]).length?`<span class="tag">📧 ${s.mails.length}</span>`:""}</td>
+        <td>
+          <button class="sm" onclick="openSituationModal(${s.id})">Voir</button>
+          <button class="sm danger" onclick="deleteSituation(${s.id})">✕</button>
+        </td>
+      </tr>`).join("")}
+      </table>
+    </div>`:'<div class="empty">Aucune situation trouvée</div>'}
+  `;
+}
+
+function sortTable(col){ if(sortCol===col) sortDir*=-1; else { sortCol=col; sortDir=1; } render(); }
+
+// ── Admin écoles ──
+function renderAdmin(){
+  $("#mainContent").innerHTML = `
+    <h2>Gestion des écoles</h2>
+    <p class="sub">Ajoutez et gérez les écoles de votre circonscription</p>
+    <div class="toolbar">
+      <button class="primary" onclick="openEcoleModal()">+ Ajouter une école</button>
+      <span class="spacer"></span>
+      <span class="tag">${state.ecoles.length} école(s)</span>
+    </div>
+    ${state.ecoles.length?`
+    <div class="card" style="padding:0;overflow:auto">
+      <table><tr><th>Nom</th><th>Commune</th><th>Directeur/trice</th><th>Téléphone</th><th>Situations</th><th>Actions</th></tr>
+      ${state.ecoles.sort((a,b)=>a.nom.localeCompare(b.nom)).map(e=>{
+        const cnt = state.situations.filter(s=>s.ecoleId===e.id).length;
+        return `<tr>
+          <td><strong>${esc(e.nom)}</strong></td>
+          <td>${esc(e.commune||"")}</td>
+          <td>${esc(e.directeur||"")}</td>
+          <td>${esc(e.telephone||"")}</td>
+          <td><span class="tag">${cnt}</span></td>
+          <td>
+            <button class="sm" onclick="openEcoleModal(${e.id})">✏️</button>
+            <button class="sm danger" onclick="deleteEcole(${e.id})">✕</button>
+          </td>
+        </tr>`;
+      }).join("")}
+      </table>
+    </div>`:'<div class="empty">Aucune école. Cliquez sur "+ Ajouter une école" pour commencer.</div>'}
+  `;
+}
+
+// ── Modals ──
+function openSituationModal(id){
+  const s = id ? state.situations.find(x=>x.id===id) : null;
+  const isNew = !s;
+  const sit = s || {ecoleId:"",type:TYPES_RH[0],personne:"",fonction:FONCTIONS[0],
+    statut:"Nouveau",priorite:"Moyenne",dateDebut:new Date().toISOString().slice(0,10),
+    dateFin:"",description:"",historique:[],mails:[]};
+
+  $("#modalContent").innerHTML = `
+    <h3>${isNew?"Nouvelle situation RH":"Modifier la situation"}</h3>
+    <div class="form-grid">
+      <div class="field">
+        <label>École *</label>
+        <select id="f_ecole">
+          <option value="">— Choisir —</option>
+          ${state.ecoles.sort((a,b)=>a.nom.localeCompare(b.nom)).map(e=>
+            `<option value="${e.id}" ${sit.ecoleId==e.id?'selected':''}>${esc(e.nom)}</option>`
+          ).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Type de situation *</label>
+        <select id="f_type">
+          ${TYPES_RH.map(t=>`<option ${sit.type===t?'selected':''}>${t}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Personne concernée *</label>
+        <input id="f_personne" value="${esc(sit.personne)}" placeholder="Nom Prénom">
+      </div>
+      <div class="field">
+        <label>Fonction</label>
+        <select id="f_fonction">
+          ${FONCTIONS.map(f=>`<option ${sit.fonction===f?'selected':''}>${f}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Statut</label>
+        <select id="f_statut">
+          ${STATUTS.map(st=>`<option ${sit.statut===st?'selected':''}>${st}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Priorité</label>
+        <select id="f_priorite">
+          ${PRIORITES.map(p=>`<option ${sit.priorite===p?'selected':''}>${p}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Date de début</label>
+        <input type="date" id="f_debut" value="${sit.dateDebut||''}">
+      </div>
+      <div class="field">
+        <label>Date de fin prévisionnelle</label>
+        <input type="date" id="f_fin" value="${sit.dateFin||''}">
+      </div>
+      <div class="field full">
+        <label>Description / Notes</label>
+        <textarea id="f_desc" rows="3">${esc(sit.description||"")}</textarea>
+      </div>
+    </div>
+
+    ${!isNew?`
+    <hr style="border-color:var(--line);margin:16px 0">
+    <h4 style="margin-bottom:8px">📧 Pièces jointes (mails)</h4>
+    <div class="mail-drop" id="mailDrop" onclick="document.getElementById('mailFile').click()">
+      Glissez un fichier .eml ici ou cliquez pour importer<br>
+      <span style="font-size:11px">Vous pouvez aussi coller le contenu d'un mail ci-dessous</span>
+    </div>
+    <input type="file" id="mailFile" accept=".eml,.txt,.msg" style="display:none" onchange="handleMailFile(this,${id})">
+    <div style="margin-top:8px">
+      <textarea id="f_mailpaste" placeholder="Collez ici le contenu d'un mail…" rows="2"></textarea>
+      <button class="sm" onclick="addMailFromPaste(${id})" style="margin-top:4px">Ajouter comme pièce</button>
+    </div>
+    <div id="mailList">
+      ${(sit.mails||[]).map((m,i)=>`
+        <div class="mail-item">
+          <div>
+            <div class="mail-subject">${esc(m.subject||"Mail importé")}</div>
+            <div class="mail-date">${fmtDate(m.date)} ${m.from?`— ${esc(m.from)}`:""}</div>
+          </div>
+          <div>
+            <button class="sm" onclick="viewMail(${id},${i})">👁</button>
+            <button class="sm danger" onclick="removeMail(${id},${i})">✕</button>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+
+    <hr style="border-color:var(--line);margin:16px 0">
+    <h4 style="margin-bottom:8px">📝 Historique</h4>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="f_histnote" placeholder="Ajouter une note à l'historique…" style="flex:1">
+      <button class="sm primary" onclick="addHistNote(${id})">Ajouter</button>
+    </div>
+    ${(sit.historique||[]).slice().reverse().map(h=>`
+      <div class="hist-item">
+        <div class="hist-date">${fmtDate(h.date)}</div>
+        <div>${esc(h.note)}</div>
+      </div>
+    `).join("")||'<div style="color:var(--muted);font-size:13px">Aucun historique</div>'}
+    `:""}
+
+    <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
+      <button onclick="closeModal('modalSituation')">Annuler</button>
+      <button class="primary" onclick="saveSituation(${id||'null'})">${isNew?"Créer":"Enregistrer"}</button>
+    </div>
+  `;
+
+  if(!isNew){
+    const drop = $("#mailDrop");
+    drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("over")});
+    drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
+    drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("over");
+      if(e.dataTransfer.files.length) readMailFile(e.dataTransfer.files[0],id);
+    });
+  }
+
+  $("#modalSituation").classList.add("open");
+}
+
+function saveSituation(id){
+  const ecoleId = +$("#f_ecole").value;
+  if(!ecoleId){ alert("Veuillez sélectionner une école"); return; }
+  const personne = $("#f_personne").value.trim();
+  if(!personne){ alert("Veuillez saisir le nom de la personne"); return; }
+
+  if(id){
+    const s = state.situations.find(x=>x.id===id);
+    s.ecoleId=ecoleId; s.type=$("#f_type").value; s.personne=personne;
+    s.fonction=$("#f_fonction").value; s.statut=$("#f_statut").value;
+    s.priorite=$("#f_priorite").value; s.dateDebut=$("#f_debut").value;
+    s.dateFin=$("#f_fin").value; s.description=$("#f_desc").value;
+  } else {
+    state.situations.push({
+      id: state.nextId++, ecoleId, type:$("#f_type").value, personne,
+      fonction:$("#f_fonction").value, statut:$("#f_statut").value,
+      priorite:$("#f_priorite").value, dateDebut:$("#f_debut").value,
+      dateFin:$("#f_fin").value, description:$("#f_desc").value,
+      historique:[], mails:[]
+    });
+  }
+  save(); closeModal("modalSituation"); render();
+}
+
+function deleteSituation(id){
+  if(!confirm("Supprimer cette situation ?")) return;
+  state.situations = state.situations.filter(s=>s.id!==id);
+  save(); render();
+}
+
+function addHistNote(id){
+  const note = $("#f_histnote").value.trim();
+  if(!note) return;
+  const s = state.situations.find(x=>x.id===id);
+  s.historique.push({date:new Date().toISOString(), note});
+  save(); openSituationModal(id);
+}
+
+// ── Mail handling ──
+function handleMailFile(input, id){
+  if(input.files.length) readMailFile(input.files[0], id);
+}
+
+function readMailFile(file, id){
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const content = e.target.result;
+    const mail = parseEml(content, file.name);
+    const s = state.situations.find(x=>x.id===id);
+    if(!s.mails) s.mails=[];
+    s.mails.push(mail);
+    save(); openSituationModal(id);
+  };
+  reader.readAsText(file);
+}
+
+function parseEml(text, filename){
+  let subject="", from="", date="", body=text;
+  const subMatch = text.match(/^Subject:\s*(.+)$/mi);
+  if(subMatch) subject = subMatch[1].trim();
+  const fromMatch = text.match(/^From:\s*(.+)$/mi);
+  if(fromMatch) from = fromMatch[1].trim();
+  const dateMatch = text.match(/^Date:\s*(.+)$/mi);
+  if(dateMatch) date = dateMatch[1].trim();
+  const bodyIdx = text.indexOf("\n\n");
+  if(bodyIdx>-1) body = text.substring(bodyIdx+2);
+  return {subject: subject||filename||"Mail importé", from, date: date||new Date().toISOString(), body, filename};
+}
+
+function addMailFromPaste(id){
+  const text = $("#f_mailpaste").value.trim();
+  if(!text){ alert("Collez le contenu d'un mail"); return; }
+  const mail = parseEml(text, "Mail collé");
+  const s = state.situations.find(x=>x.id===id);
+  if(!s.mails) s.mails=[];
+  s.mails.push(mail);
+  save(); openSituationModal(id);
+}
+
+function viewMail(sitId, mailIdx){
+  const s = state.situations.find(x=>x.id===sitId);
+  const m = s.mails[mailIdx];
+  $("#modalMailContent").innerHTML = `
+    <h3>📧 ${esc(m.subject)}</h3>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      ${m.from?`<strong>De :</strong> ${esc(m.from)}<br>`:""}
+      ${m.date?`<strong>Date :</strong> ${esc(m.date)}<br>`:""}
+      ${m.filename?`<strong>Fichier :</strong> ${esc(m.filename)}`:""}
+    </div>
+    <div style="background:var(--chip);border:1px solid var(--line);border-radius:6px;padding:12px;white-space:pre-wrap;font-size:13px;max-height:50vh;overflow:auto">${esc(m.body)}</div>
+    <div style="text-align:right;margin-top:16px">
+      <button onclick="closeModal('modalMail')">Fermer</button>
+    </div>
+  `;
+  $("#modalMail").classList.add("open");
+}
+
+function removeMail(sitId, mailIdx){
+  if(!confirm("Supprimer cette pièce jointe ?")) return;
+  const s = state.situations.find(x=>x.id===sitId);
+  s.mails.splice(mailIdx,1);
+  save(); openSituationModal(sitId);
+}
+
+// ── École modal ──
+function openEcoleModal(id){
+  const e = id ? state.ecoles.find(x=>x.id===id) : null;
+  const isNew = !e;
+  const ecole = e || {nom:"",commune:"",directeur:"",telephone:""};
+
+  $("#modalEcoleContent").innerHTML = `
+    <h3>${isNew?"Ajouter une école":"Modifier l'école"}</h3>
+    <div class="form-grid">
+      <div class="field">
+        <label>Nom de l'école *</label>
+        <input id="fe_nom" value="${esc(ecole.nom)}" placeholder="Ex: École élémentaire Jules Ferry">
+      </div>
+      <div class="field">
+        <label>Commune</label>
+        <input id="fe_commune" value="${esc(ecole.commune||"")}" placeholder="Ex: Strasbourg">
+      </div>
+      <div class="field">
+        <label>Directeur/trice</label>
+        <input id="fe_dir" value="${esc(ecole.directeur||"")}" placeholder="Nom Prénom">
+      </div>
+      <div class="field">
+        <label>Téléphone</label>
+        <input id="fe_tel" value="${esc(ecole.telephone||"")}" placeholder="03 88 ...">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
+      <button onclick="closeModal('modalEcole')">Annuler</button>
+      <button class="primary" onclick="saveEcole(${id||'null'})">${isNew?"Ajouter":"Enregistrer"}</button>
+    </div>
+  `;
+  $("#modalEcole").classList.add("open");
+}
+
+function saveEcole(id){
+  const nom = $("#fe_nom").value.trim();
+  if(!nom){ alert("Le nom est obligatoire"); return; }
+  if(id){
+    const e = state.ecoles.find(x=>x.id===id);
+    e.nom=nom; e.commune=$("#fe_commune").value.trim();
+    e.directeur=$("#fe_dir").value.trim(); e.telephone=$("#fe_tel").value.trim();
+  } else {
+    state.ecoles.push({
+      id: state.nextEcoleId++, nom, commune:$("#fe_commune").value.trim(),
+      directeur:$("#fe_dir").value.trim(), telephone:$("#fe_tel").value.trim()
+    });
+  }
+  save(); closeModal("modalEcole"); render();
+}
+
+function deleteEcole(id){
+  const cnt = state.situations.filter(s=>s.ecoleId===id).length;
+  if(cnt && !confirm(`Cette école a ${cnt} situation(s). Supprimer quand même ?`)) return;
+  if(!cnt && !confirm("Supprimer cette école ?")) return;
+  state.ecoles = state.ecoles.filter(e=>e.id!==id);
+  state.situations = state.situations.filter(s=>s.ecoleId!==id);
+  save(); render();
+}
+
+function closeModal(id){ $("#"+id).classList.remove("open"); }
+
+// Close modals on background click
+["modalSituation","modalMail","modalEcole"].forEach(id=>{
+  $("#"+id).addEventListener("click",e=>{ if(e.target===$("#"+id)) closeModal(id); });
+});
+
+// ── Export Excel ──
+function exportExcel(){
+  const rows = state.situations.map(s=>({
+    "École": ecoleName(s.ecoleId),
+    "Type": s.type,
+    "Personne": s.personne,
+    "Fonction": s.fonction,
+    "Statut": s.statut,
+    "Priorité": s.priorite,
+    "Date début": s.dateDebut,
+    "Date fin prév.": s.dateFin||"",
+    "Description": s.description,
+    "Nb mails": (s.mails||[]).length,
+    "Nb notes historique": (s.historique||[]).length
+  }));
+  if(!rows.length){ alert("Aucune situation à exporter"); return; }
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, "Situations RH");
+  XLSX.writeFile(wb, `suivi_rh_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ── Import/Export JSON (backup) ──
+function exportBackup(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`suivi_rh_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+function importBackup(){
+  const input = document.createElement("input"); input.type="file"; input.accept=".json";
+  input.onchange = function(){
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        const data = JSON.parse(e.target.result);
+        if(data.ecoles && data.situations){
+          if(confirm(`Importer ${data.ecoles.length} école(s) et ${data.situations.length} situation(s) ?\nCeci remplacera toutes les données actuelles.`)){
+            state = data; save(); render();
+          }
+        } else { alert("Fichier invalide"); }
+      } catch(err){ alert("Erreur de lecture: "+err.message); }
+    };
+    reader.readAsText(input.files[0]);
+  };
+  input.click();
+}
+
+// ── Init ──
+buildNav();
+render();
+</script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</body>
+</html>
