@@ -639,7 +639,7 @@ function render(){
   document.getElementById("cnt").textContent=q?(shown+" / "+rows.length):""; updateProg(); updateWorkload();
 }
 function updateWorkload(){ var el=document.getElementById("wl"); if(!el)return; var counts={};
-  rows.forEach(function(r){ if(r.removed)return; (r.tester||"").split(/[;\n]/).map(function(x){return x.trim();}).filter(Boolean).forEach(function(nm){ counts[nm]=(counts[nm]||0)+1; }); });
+  rows.forEach(function(r){ if(r.removed)return; (r.tester||"").split(";").map(function(x){return x.trim();}).filter(Boolean).forEach(function(nm){ counts[nm]=(counts[nm]||0)+1; }); });
   var names=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a]||a.localeCompare(b);});
   if(!names.length){ el.style.display="none"; el.innerHTML=""; return; } el.style.display="flex";
   el.innerHTML='<span class="muted" style="align-self:center">'+esc(T("workloadLbl"))+' :</span> '+names.map(function(nm){ var n=counts[nm]; var c=n>25?'#ef4444':(n>15?'#f59e0b':'#0ea5e9'); return '<span class="badge" style="background:'+c+'22;color:'+c+';border:1px solid '+c+'">'+esc(nm)+' <b>'+n+'</b></span>'; }).join(' '); }
@@ -662,7 +662,7 @@ function init(){
   document.getElementById("hdr").textContent=DATA.campaign+" · "+DATA.iteration+" · "+DATA.scope;
   applyLang(); render();
 }
-try{ init(); }catch(e){ var b=document.getElementById("intro")||document.body; if(b){ b.style.whiteSpace="pre-wrap"; b.style.color="#fca5a5"; b.textContent="⚠ SPOC page error: "+((e&&e.message)||e)+"\n"+((e&&e.stack)||""); } }
+try{ init(); }catch(e){ var b=document.getElementById("intro")||document.body; if(b){ b.style.whiteSpace="pre-wrap"; b.style.color="#fca5a5"; b.textContent="⚠ SPOC page error: "+((e&&e.message)||e)+" — "+((e&&e.stack)||""); } }
 <\/script></body></html>`;
 }
 function applyAssignments(rows){
@@ -1703,7 +1703,7 @@ function init(){ applyLang(); buildLinks(); buildWho();
   if(DATA.testers.length===1){ const inp=document.getElementById("whoami"); if(inp)inp.value=DATA.testers[0].name; loadTester(DATA.testers[0].id); }
   else { render(); }
 }
-try{ init(); }catch(e){ var b=document.getElementById("intro")||document.body; if(b){ b.style.whiteSpace="pre-wrap"; b.style.color="#fca5a5"; b.textContent="⚠ Tester page error: "+((e&&e.message)||e)+"\n"+((e&&e.stack)||""); } }
+try{ init(); }catch(e){ var b=document.getElementById("intro")||document.body; if(b){ b.style.whiteSpace="pre-wrap"; b.style.color="#fca5a5"; b.textContent="⚠ Tester page error: "+((e&&e.message)||e)+" — "+((e&&e.stack)||""); } }
 <\/script></body></html>`;
 }
 function importTesterResults(input){
