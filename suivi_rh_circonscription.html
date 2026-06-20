@@ -87,6 +87,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <span style="font-size:12px;color:var(--muted)" id="countInfo"></span>
     <button class="sm" onclick="exportBackup()" title="Sauvegarder les données">💾 Backup</button>
     <button class="sm" onclick="importBackup()" title="Restaurer une sauvegarde">📂 Restaurer</button>
+    <button class="sm danger" onclick="resetApp()" title="Réinitialiser toutes les données">🗑 Reset</button>
   </div>
 </header>
 
@@ -783,6 +784,13 @@ function resetTypes(){
   if(!confirm("Réinitialiser les types par défaut ?\nLes situations existantes garderont leur type actuel.")) return;
   const custom = state.typesRH.filter(t=>!TYPES_RH_DEFAULT.includes(t) && state.situations.some(s=>s.type===t));
   state.typesRH = [...TYPES_RH_DEFAULT, ...custom];
+  save(); render();
+}
+
+function resetApp(){
+  if(!confirm("⚠ Supprimer TOUTES les données (écoles, situations, types) ?\n\nCette action est irréversible.\nPensez à faire un backup avant.")) return;
+  if(!confirm("Confirmation : voulez-vous vraiment tout effacer ?")) return;
+  state = {ecoles:[],situations:[],typesRH:[...TYPES_RH_DEFAULT],nextId:1,nextEcoleId:1};
   save(); render();
 }
 
