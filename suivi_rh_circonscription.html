@@ -102,8 +102,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
   <h1><span class="brand">📋</span> Suivi RH — Circonscription</h1>
   <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
     <span style="font-size:12px;color:var(--muted)" id="countInfo"></span>
-    <button class="sm" onclick="exportBackup()" title="Sauvegarder les données">💾 Backup</button>
-    <button class="sm" onclick="importBackup()" title="Restaurer une sauvegarde">📂 Restaurer</button>
+    <span id="dataSource" class="tag" style="font-size:11px"></span>
+    <span id="unsavedDot" style="display:none;color:var(--warn);font-size:18px;line-height:1" title="Modifications non sauvegardées sur le fichier partagé">●</span>
+    <button class="sm primary" onclick="saveToFile()" title="Enregistrer sur le fichier partagé (Ctrl+S)">💾 Enregistrer</button>
+    <button class="sm" onclick="loadFromFile()" title="Charger le fichier partagé">📂 Charger fichier</button>
+    <button class="sm" onclick="exportBackup()" title="Télécharger une copie de sauvegarde">📥 Backup</button>
     <button class="sm danger" onclick="resetApp()" title="Réinitialiser toutes les données">🗑 Reset</button>
     <button class="sm" id="themeBtn" onclick="toggleTheme()" title="Basculer mode clair/sombre">🌙</button>
   </div>
@@ -150,7 +153,25 @@ let state = JSON.parse(localStorage.getItem("rh_circo_state")||"null") || {
 if(!state.typesRH) state.typesRH = [...TYPES_RH_DEFAULT];
 function getTypes(){ return state.typesRH; }
 
-function save(){ localStorage.setItem("rh_circo_state", JSON.stringify(state)); }
+let _dirty = false;
+let _fileHandle = null;
+let _fileName = "";
+
+function save(){
+  localStorage.setItem("rh_circo_state", JSON.stringify(state));
+  if(_fileName){ _dirty=true; updateDataSource(); }
+}
+function updateDataSource(){
+  const el = $("#dataSource");
+  if(_fileName){
+    el.textContent = "📁 " + _fileName;
+    el.style.borderColor = _dirty ? "var(--warn)" : "var(--ok)";
+  } else {
+    el.textContent = "💻 Local";
+    el.style.borderColor = "var(--line)";
+  }
+  $("#unsavedDot").style.display = _dirty ? "inline" : "none";
+}
 function $(s,p){ return (p||document).querySelector(s); }
 function $$(s,p){ return [...(p||document).querySelectorAll(s)]; }
 function esc(s){ const d=document.createElement("div"); d.textContent=s||""; return d.innerHTML; }
@@ -860,28 +881,51 @@ function exportBackup(){
   a.click();
 }
 
-function importBackup(){
+function saveToFile(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download = _fileName || "suivi_rh_data.json";
+  a.click();
+  _dirty = false;
+  updateDataSource();
+}
+
+function loadFromFile(){
   const input = document.createElement("input"); input.type="file"; input.accept=".json";
   input.onchange = function(){
+    const file = input.files[0];
     const reader = new FileReader();
     reader.onload = function(e){
       try{
         const data = JSON.parse(e.target.result);
         if(data.ecoles && data.situations){
-          if(confirm(`Importer ${data.ecoles.length} école(s) et ${data.situations.length} situation(s) ?\nCeci remplacera toutes les données actuelles.`)){
-            state = data; save(); render();
-          }
-        } else { alert("Fichier invalide"); }
+          state = data;
+          if(!state.typesRH) state.typesRH = [...TYPES_RH_DEFAULT];
+          localStorage.setItem("rh_circo_state", JSON.stringify(state));
+          _fileName = file.name;
+          _dirty = false;
+          updateDataSource();
+          render();
+        } else { alert("Fichier invalide — il doit contenir des écoles et des situations."); }
       } catch(err){ alert("Erreur de lecture: "+err.message); }
     };
-    reader.readAsText(input.files[0]);
+    reader.readAsText(file);
   };
   input.click();
 }
 
+document.addEventListener("keydown",function(e){
+  if((e.ctrlKey||e.metaKey) && e.key==="s"){ e.preventDefault(); saveToFile(); }
+});
+
+window.addEventListener("beforeunload",function(e){
+  if(_dirty){ e.preventDefault(); e.returnValue=""; }
+});
+
 // ── Init ──
 buildNav();
 render();
+updateDataSource();
 if(document.documentElement.classList.contains("light")) $("#themeBtn").textContent="☀️";
 </script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
