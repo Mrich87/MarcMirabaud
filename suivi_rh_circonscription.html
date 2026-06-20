@@ -100,7 +100,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 </div>
 
 <script>
-const TYPES_RH = [
+const TYPES_RH_DEFAULT = [
   "Absence longue durée","Remplacement","Conflit","Signalement",
   "Mutation","Formation","Disciplinaire","Harcèlement",
   "Conditions de travail","Autre"
@@ -113,15 +113,19 @@ const TABS = [
   {id:"ecoles",label:"Par école"},
   {id:"types",label:"Par type"},
   {id:"toutes",label:"Toutes les situations"},
-  {id:"admin",label:"Écoles"}
+  {id:"admin",label:"Écoles"},
+  {id:"typesAdmin",label:"Types RH"}
 ];
 
 let state = JSON.parse(localStorage.getItem("rh_circo_state")||"null") || {
   ecoles: [],
   situations: [],
+  typesRH: [...TYPES_RH_DEFAULT],
   nextId: 1,
   nextEcoleId: 1
 };
+if(!state.typesRH) state.typesRH = [...TYPES_RH_DEFAULT];
+function getTypes(){ return state.typesRH; }
 
 function save(){ localStorage.setItem("rh_circo_state", JSON.stringify(state)); }
 function $(s,p){ return (p||document).querySelector(s); }
@@ -149,7 +153,7 @@ function switchTab(t){ currentTab=t; sortCol=null; sortDir=1; buildNav(); render
 
 function render(){
   const m = $("#mainContent");
-  const fn = {dashboard:renderDashboard, ecoles:renderEcoles, types:renderTypes, toutes:renderToutes, admin:renderAdmin};
+  const fn = {dashboard:renderDashboard, ecoles:renderEcoles, types:renderTypes, toutes:renderToutes, admin:renderAdmin, typesAdmin:renderTypesAdmin};
   (fn[currentTab]||fn.dashboard)();
   const open = state.situations.filter(s=>s.statut!=="Clôturé"&&s.statut!=="Résolu").length;
   $("#countInfo").textContent = `${state.situations.length} situation(s) · ${open} ouverte(s) · ${state.ecoles.length} école(s)`;
@@ -160,7 +164,7 @@ function renderDashboard(){
   const sits = state.situations;
   const open = sits.filter(s=>s.statut!=="Clôturé"&&s.statut!=="Résolu");
   const byStatut = {}; STATUTS.forEach(s=>byStatut[s]=0); sits.forEach(s=>byStatut[s.statut]=(byStatut[s.statut]||0)+1);
-  const byType = {}; TYPES_RH.forEach(t=>byType[t]=0); sits.forEach(s=>byType[s.type]=(byType[s.type]||0)+1);
+  const byType = {}; getTypes().forEach(t=>byType[t]=0); sits.forEach(s=>byType[s.type]=(byType[s.type]||0)+1);
   const haute = open.filter(s=>s.priorite==="Haute").length;
 
   const colors = {Nouveau:"var(--accent)",["En cours"]:"var(--prog)",["En attente"]:"var(--warn)",Résolu:"var(--ok)",Clôturé:"var(--na)"};
@@ -188,7 +192,7 @@ function renderDashboard(){
       </div>
       <div class="card">
         <h3 style="margin-bottom:12px">Par type</h3>
-        ${TYPES_RH.filter(t=>byType[t]>0).map(t=>`
+        ${getTypes().filter(t=>byType[t]>0).map(t=>`
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span style="flex:1;font-size:13px">${t}</span>
             <span style="font-weight:600">${byType[t]}</span>
@@ -261,7 +265,7 @@ function renderEcoles(){
 // ── Par type ──
 function renderTypes(){
   const byType = {};
-  TYPES_RH.forEach(t=>byType[t]=[]);
+  getTypes().forEach(t=>byType[t]=[]);
   state.situations.forEach(s=>{ if(!byType[s.type]) byType[s.type]=[]; byType[s.type].push(s); });
 
   const typeFilter = filters.type;
@@ -272,12 +276,12 @@ function renderTypes(){
     <div class="toolbar">
       <select onchange="filters.type=this.value;render()">
         <option value="">Tous les types</option>
-        ${TYPES_RH.map(t=>`<option value="${t}" ${filters.type===t?'selected':''}>${t}</option>`).join("")}
+        ${getTypes().map(t=>`<option value="${t}" ${filters.type===t?'selected':''}>${t}</option>`).join("")}
       </select>
       <span class="spacer"></span>
       <button class="primary" onclick="openSituationModal()">+ Nouvelle situation</button>
     </div>
-    ${TYPES_RH.filter(t=> !typeFilter||t===typeFilter).map(t=>{
+    ${getTypes().filter(t=> !typeFilter||t===typeFilter).map(t=>{
       const sits = byType[t];
       if(!sits.length && typeFilter) return "";
       return `
@@ -339,7 +343,7 @@ function renderToutes(){
       </select>
       <select onchange="filters.type=this.value;render()">
         <option value="">Tous les types</option>
-        ${TYPES_RH.map(t=>`<option value="${t}" ${filters.type===t?'selected':''}>${t}</option>`).join("")}
+        ${getTypes().map(t=>`<option value="${t}" ${filters.type===t?'selected':''}>${t}</option>`).join("")}
       </select>
       <select onchange="filters.statut=this.value;render()">
         <option value="">Tous les statuts</option>
@@ -418,7 +422,7 @@ function renderAdmin(){
 function openSituationModal(id){
   const s = id ? state.situations.find(x=>x.id===id) : null;
   const isNew = !s;
-  const sit = s || {ecoleId:"",type:TYPES_RH[0],personne:"",fonction:FONCTIONS[0],
+  const sit = s || {ecoleId:"",type:getTypes()[0],personne:"",fonction:FONCTIONS[0],
     statut:"Nouveau",priorite:"Moyenne",dateDebut:new Date().toISOString().slice(0,10),
     dateFin:"",description:"",historique:[],mails:[]};
 
@@ -437,7 +441,7 @@ function openSituationModal(id){
       <div class="field">
         <label>Type de situation *</label>
         <select id="f_type">
-          ${TYPES_RH.map(t=>`<option ${sit.type===t?'selected':''}>${t}</option>`).join("")}
+          ${getTypes().map(t=>`<option ${sit.type===t?'selected':''}>${t}</option>`).join("")}
         </select>
       </div>
       <div class="field">
@@ -695,6 +699,86 @@ function deleteEcole(id){
   if(!cnt && !confirm("Supprimer cette école ?")) return;
   state.ecoles = state.ecoles.filter(e=>e.id!==id);
   state.situations = state.situations.filter(s=>s.ecoleId!==id);
+  save(); render();
+}
+
+// ── Types RH admin ──
+function renderTypesAdmin(){
+  const types = getTypes();
+  $("#mainContent").innerHTML = `
+    <h2>Gestion des types de situation RH</h2>
+    <p class="sub">Ajoutez, renommez ou supprimez des catégories de situations</p>
+    <div class="toolbar">
+      <input id="newTypeInput" placeholder="Nouveau type de situation…" style="min-width:250px"
+        onkeydown="if(event.key==='Enter')addType()">
+      <button class="primary" onclick="addType()">+ Ajouter</button>
+      <span class="spacer"></span>
+      <button class="sm" onclick="resetTypes()">Réinitialiser par défaut</button>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <table><tr><th style="width:40px">#</th><th>Type</th><th>Situations</th><th style="width:180px">Actions</th></tr>
+      ${types.map((t,i)=>{
+        const cnt = state.situations.filter(s=>s.type===t).length;
+        return `<tr>
+          <td>${i+1}</td>
+          <td><strong>${esc(t)}</strong></td>
+          <td><span class="tag">${cnt}</span></td>
+          <td>
+            <button class="sm" onclick="moveType(${i},-1)" ${i===0?'disabled':''}>▲</button>
+            <button class="sm" onclick="moveType(${i},1)" ${i===types.length-1?'disabled':''}>▼</button>
+            <button class="sm" onclick="renameType(${i})">✏️</button>
+            <button class="sm danger" onclick="deleteType(${i})">✕</button>
+          </td>
+        </tr>`;
+      }).join("")}
+      </table>
+    </div>
+  `;
+}
+
+function addType(){
+  const input = $("#newTypeInput");
+  const name = input.value.trim();
+  if(!name){ alert("Saisissez un nom de type"); return; }
+  if(getTypes().includes(name)){ alert("Ce type existe déjà"); return; }
+  state.typesRH.push(name);
+  save(); render();
+}
+
+function renameType(idx){
+  const old = state.typesRH[idx];
+  const name = prompt("Nouveau nom pour « "+old+" » :", old);
+  if(!name || !name.trim() || name.trim()===old) return;
+  const newName = name.trim();
+  if(state.typesRH.includes(newName)){ alert("Ce type existe déjà"); return; }
+  state.situations.forEach(s=>{ if(s.type===old) s.type=newName; });
+  state.typesRH[idx] = newName;
+  save(); render();
+}
+
+function deleteType(idx){
+  const t = state.typesRH[idx];
+  const cnt = state.situations.filter(s=>s.type===t).length;
+  if(cnt && !confirm(`${cnt} situation(s) utilisent ce type.\nElles seront reclassées en « Autre ».\nContinuer ?`)) return;
+  if(!cnt && !confirm("Supprimer le type « "+t+" » ?")) return;
+  if(cnt) state.situations.forEach(s=>{ if(s.type===t) s.type="Autre"; });
+  state.typesRH.splice(idx,1);
+  if(!state.typesRH.includes("Autre")) state.typesRH.push("Autre");
+  save(); render();
+}
+
+function moveType(idx, dir){
+  const t = state.typesRH;
+  const ni = idx+dir;
+  if(ni<0||ni>=t.length) return;
+  [t[idx], t[ni]] = [t[ni], t[idx]];
+  save(); render();
+}
+
+function resetTypes(){
+  if(!confirm("Réinitialiser les types par défaut ?\nLes situations existantes garderont leur type actuel.")) return;
+  const custom = state.typesRH.filter(t=>!TYPES_RH_DEFAULT.includes(t) && state.situations.some(s=>s.type===t));
+  state.typesRH = [...TYPES_RH_DEFAULT, ...custom];
   save(); render();
 }
 
