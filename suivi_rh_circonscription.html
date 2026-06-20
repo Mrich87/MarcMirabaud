@@ -11,6 +11,23 @@
   --ok:#22c55e;--fail:#ef4444;--warn:#f59e0b;--na:#64748b;--prog:#a855f7;
   --chip:#0b1220;
 }
+html.light{
+  --bg:#f1f5f9;--panel:#ffffff;--panel2:#e2e8f0;--line:#cbd5e1;
+  --txt:#1e293b;--muted:#64748b;--accent:#0284c7;--accent2:#0369a1;
+  --ok:#16a34a;--fail:#dc2626;--warn:#d97706;--na:#94a3b8;--prog:#7c3aed;
+  --chip:#f8fafc;
+}
+html.light .badge-nouveau{background:#0284c722;color:#0284c7;border-color:#0284c755}
+html.light .badge-encours{background:#7c3aed22;color:#7c3aed;border-color:#7c3aed55}
+html.light .badge-enattente{background:#d9770622;color:#d97706;border-color:#d9770655}
+html.light .badge-resolu{background:#16a34a22;color:#16a34a;border-color:#16a34a55}
+html.light .badge-cloture{background:#64748b22;color:#64748b;border-color:#64748b55}
+html.light .badge-haute{background:#dc262622;color:#dc2626;border-color:#dc262655}
+html.light .badge-moyenne{background:#d9770622;color:#d97706;border-color:#d9770655}
+html.light .badge-basse{background:#16a34a22;color:#16a34a;border-color:#16a34a55}
+html.light header{background:linear-gradient(90deg,#e2e8f0,#f1f5f9)}
+html.light nav{background:#e2e8f0}
+html.light .modal-bg.open{background:rgba(0,0,0,.3)}
 *{box-sizing:border-box;margin:0}
 body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
 header{background:linear-gradient(90deg,#0b1220,#16233b);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
@@ -88,6 +105,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <button class="sm" onclick="exportBackup()" title="Sauvegarder les données">💾 Backup</button>
     <button class="sm" onclick="importBackup()" title="Restaurer une sauvegarde">📂 Restaurer</button>
     <button class="sm danger" onclick="resetApp()" title="Réinitialiser toutes les données">🗑 Reset</button>
+    <button class="sm" id="themeBtn" onclick="toggleTheme()" title="Basculer mode clair/sombre">🌙</button>
   </div>
 </header>
 
@@ -146,6 +164,17 @@ function ecoleObj(id){ return state.ecoles.find(x=>x.id===id); }
 let currentTab = "dashboard";
 let sortCol = null, sortDir = 1;
 let filters = {ecole:"",type:"",statut:"",priorite:"",search:""};
+
+function toggleTheme(){
+  const isLight = document.documentElement.classList.toggle("light");
+  localStorage.setItem("rh_circo_theme", isLight?"light":"dark");
+  $("#themeBtn").textContent = isLight?"🌙":"☀️";
+}
+(function initTheme(){
+  if(localStorage.getItem("rh_circo_theme")==="light"){
+    document.documentElement.classList.add("light");
+  }
+})();
 
 function buildNav(){
   const nav = $("#mainNav");
@@ -853,6 +882,7 @@ function importBackup(){
 // ── Init ──
 buildNav();
 render();
+if(document.documentElement.classList.contains("light")) $("#themeBtn").textContent="☀️";
 </script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </body>
