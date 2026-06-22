@@ -123,13 +123,15 @@
   .calpf{font-size:10px;display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
   .calpf b{font-weight:700}
   .calprocs{display:flex;flex-direction:column;gap:2px;margin:1px 0}
-  .calproc{font-size:10px;line-height:1.25;background:var(--chip);border-radius:4px;padding:1px 5px;display:flex;align-items:center;gap:4px}
+  .calproc{font-size:10px;line-height:1.25;background:var(--chip);border-radius:4px;padding:2px 5px;display:flex;flex-direction:column;gap:2px}
+  .calprocrow{display:flex;align-items:center;gap:4px}
   .calproc[draggable=true]{cursor:grab}
   .calproc[draggable=true]:active{cursor:grabbing}
   .calcell.dragover{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent2);color:var(--oncolor)}
   .calproc .calprocn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .calprocbar .pbar{height:4px;border-radius:3px;min-width:30px}
   .calgrid.calall .calcell{min-height:auto}
-  .calgrid.calall .calproc{align-items:flex-start}
+  .calgrid.calall .calprocrow{align-items:flex-start}
   .calgrid.calall .calproc .calprocn{overflow:visible;white-space:normal;word-break:break-word}
   .calproc .calsteps{flex:none;font-weight:700;color:var(--accent);font-size:9px}
   .calcell.has:hover .calproc{background:rgba(6,40,59,.12)}
@@ -1117,10 +1119,10 @@ function renderCalendar(){
     const pf=ex.length?`<div class="calpf">${a.passed?`<span style="color:#22c55e"><b>${a.passed}</b>P</span>`:""}${a.failed?`<span style="color:#ef4444"><b>${a.failed}</b>F</span>`:""}${a.blocked?`<span style="color:#f59e0b"><b>${a.blocked}</b>B</span>`:""}${a.notrun?`<span class="muted"><b>${a.notrun}</b>·</span>`:""}</div>`:"";
     let procHtml="";
     if(ex.length){ const pm={};
-      ex.forEach(e=>{ const p=e.process||"(none)"; const o=pm[p]||(pm[p]={n:0,steps:0}); o.n++; o.steps+=(e.steps||[]).length; });
+      ex.forEach(e=>{ const p=e.process||"(none)"; const o=pm[p]||(pm[p]={n:0,steps:0,ex:[]}); o.n++; o.steps+=(e.steps||[]).length; o.ex.push(e); });
       const procs=Object.keys(pm).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y)));
       const cap=calShowAll?procs.length:4;
-      const shown=procs.slice(0,cap).map(p=>`<div class="calproc" draggable="true" ondragstart="calDragStart(event,'${k}','${jsq(p)}')" title="${esc(p)} — ${pm[p].steps} step(s) · drag to another day to reschedule"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div>`).join("");
+      const shown=procs.slice(0,cap).map(p=>{const pa=aggregate(pm[p].ex);return `<div class="calproc" draggable="true" ondragstart="calDragStart(event,'${k}','${jsq(p)}')" title="${esc(p)} — ${pm[p].steps} step(s) · ${pa.passed}P/${pa.failed}F/${pa.blocked}B/${pa.notrun} to do · drag to another day to reschedule"><div class="calprocrow"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div><div class="calprocbar">${progressBar(pm[p].ex)}</div></div>`;}).join("");
       procHtml=`<div class="calprocs">${shown}${(!calShowAll&&procs.length>4)?`<div class="calproc muted">+${procs.length-4} more…</div>`:""}</div>`; }
     cells+=`<div class="${cls}" data-k="${k}" ondragover="calDragOver(event)" ondragleave="calDragLeave(event)" ondrop="calDrop(event,'${k}')"${ex.length?` onclick="openCalDay('${k}')"`:""}>`
       +`<div class="caldate">${d}</div>`
