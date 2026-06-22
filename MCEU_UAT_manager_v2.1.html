@@ -1049,6 +1049,19 @@ function setExec(id,field,val){ const e=S.executions.find(x=>x.id===id); if(!e)r
   if(field==="comment"||field==="scenario"){ save(); return; }   // don't re-render on each keystroke
   persist(); }
 function delExec(id){ S.executions=S.executions.filter(x=>x.id!==id); persist(); }
+/* coordinator result override (status + comment) — used from Tester view */
+function overrideResult(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  modal(`<h2>Set result <span class="muted" style="font-size:13px">(coordinator override)</span></h2>
+    <p class="hint">${esc(e.process)} · ${esc(e.scenario)} · ${badge(e.entity,entityMeta(e.entity).color)} · ${esc(testerName(e.testerId)||'Unassigned')}</p>
+    <div class="field"><label>Status</label><select id="ov_status" style="min-width:200px">${S.config.statuses.map(s=>`<option ${s.value===e.status?'selected':''}>${esc(s.value)}</option>`).join("")}</select></div>
+    <div class="field" style="margin-top:8px"><label>Comment</label><textarea id="ov_comment" style="min-height:80px" placeholder="result comment…">${esc(e.comment||"")}</textarea></div>
+    <p class="hint">Marks the result as entered by the coordinator (timestamped). No tester required.${e.resultBy==='coordinator'&&e.resultAt?` Last set ${esc(new Date(e.resultAt).toLocaleString())}.`:''}</p>
+    <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveOverride('${id}')">Save result</button></div>`);
+}
+function saveOverride(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
+  const st=$("#ov_status").value, cm=$("#ov_comment").value;
+  if(statusMeta(st).requiresComment && !cm.trim() && !confirm(st+" usually needs a comment. Save anyway?")) return;
+  e.status=st; e.comment=cm; e.resultBy="coordinator"; e.resultAt=new Date().toISOString(); e.updatedAt=e.resultAt; persist(); closeModal(); }
 function delTester(i){ const t=S.testers[i];
   if((S.executions.some(e=>e.testerId===t.id)||S.library.some(c=>libTesterIds(c).includes(t.id)))&&!confirm("This tester is referenced. Remove anyway?"))return;
   S.testers.splice(i,1); persist(); }
@@ -1207,7 +1220,8 @@ function renderTesterView(){
     const nm=tid?testerName(tid):'— Unassigned —'; const open=tvExpanded.has(tid);
     const detail = open ? `<div style="margin-top:6px;border-top:1px solid var(--line);padding-top:6px">`
       + list.slice().sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(e=>`<div style="display:flex;gap:8px;align-items:center;padding:3px 0">
-          <span style="flex:1">${esc(e.process)} · ${esc(e.scenario)} ${badge(e.entity,entityMeta(e.entity).color)} ${badge(e.status,statusMeta(e.status).color)}</span>
+          <span style="flex:1">${esc(e.process)} · ${esc(e.scenario)} ${badge(e.entity,entityMeta(e.entity).color)} ${badge(e.status,statusMeta(e.status).color)}${e.resultBy==='coordinator'?' '+badge('coord','#a855f7'):''}</span>
+          <button class="sm" title="Set result myself (status + comment)" onclick="overrideResult('${e.id}')">✎ Result</button>
           <input list="testerDL" placeholder="reassign to…" title="Type a tester to move this test" onchange="setExecTester('${e.id}',this.value)" style="width:180px"/></div>`).join("")
       + `</div>` : '';
     return `<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1227,9 +1241,10 @@ function renderTesterView(){
     const detail = open ? `<div style="margin-top:6px;border-top:1px solid var(--line);padding-top:6px">`
       + list.slice().sort((x,y)=>naturalKey(x.scenario).localeCompare(naturalKey(y.scenario))).map(e=>`<div style="display:flex;gap:8px;align-items:center;padding:3px 0">
           <input type="checkbox" ${tvSel.has(e.id)?'checked':''} onchange="tvToggleSel('${e.id}',this.checked)"/>
-          <span style="flex:1">${esc(e.scenario)} ${badge(e.status,statusMeta(e.status).color)}</span>
+          <span style="flex:1">${esc(e.scenario)} ${badge(e.status,statusMeta(e.status).color)}${e.resultBy==='coordinator'?' '+badge('coord','#a855f7'):''}</span>
           <select title="Entity" onchange="tvSetEntity('${e.id}',this.value)" style="width:auto">${tvEntOpts(e.entity)}</select>
           <input list="testerDL" value="${esc(testerName(e.testerId))}" placeholder="assign…" title="Assign / reassign tester" onchange="setExecTester('${e.id}',this.value)" style="width:160px"/>
+          <button class="sm" title="Set result myself (status + comment)" onclick="overrideResult('${e.id}')">✎ Result</button>
           <button class="sm" title="Duplicate this scenario" onclick="tvDuplicate('${e.id}')">⧉</button></div>`).join("")
       + `</div>` : '';
     return `<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
