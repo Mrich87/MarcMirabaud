@@ -30,13 +30,15 @@
   .iterdd{position:relative}
   .iterdd-btn{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;min-width:180px;text-align:left}
   .iterdd-menu{display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:80;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);min-width:300px;max-height:60vh;overflow:auto;padding:4px}
-  .iterdd-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px}
+  .iterdd-head{font-size:11px;color:var(--muted);padding:6px 8px 7px;border-bottom:1px solid var(--line);margin-bottom:2px}
+  .iterdd-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer}
   .iterdd-row:hover{background:var(--panel2)}
-  .iterdd-row.active{background:rgba(56,189,248,.10)}
-  .iterdd-row input{flex:none;margin:0}
-  .iterdd-name{flex:1;cursor:pointer;font-size:13px}
-  .iterdd-cnt{flex:none;font-size:11px}
-  .iterdd-foot{font-size:11px;color:var(--muted);padding:7px 8px 4px;border-top:1px solid var(--line);margin-top:2px}
+  .iterdd-row.active{background:rgba(56,189,248,.12)}
+  .iterdd-radio{flex:none;color:var(--accent);font-size:12px;width:12px;text-align:center}
+  .iterdd-name{flex:1;font-size:13px}
+  .iterdd-chk{flex:none;display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer;padding:2px 6px;border:1px solid var(--line);border-radius:5px}
+  .iterdd-chk input{margin:0}
+  .iterdd-cnt{flex:none;font-size:11px;min-width:22px;text-align:right}
   select,input,textarea{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit}
   textarea{width:100%;min-height:50px;resize:vertical}
   button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:13px}
@@ -316,12 +318,14 @@ function buildIterSelect(){
   btn.innerHTML = esc(viewLabel()) + ' <span class="muted">▾</span>';
   btn.title = a.length>1 ? "Cumulative view: "+a.map(iterName).join(", ")+" — writes still target the active iteration" : "Active iteration";
   menu.style.display = iterDDopen ? "block" : "none";
-  menu.innerHTML = S.iterations.map(i=>{ const inView=set.has(i.id), isActive=i.id===S.activeIterationId;
-    return `<div class="iterdd-row${isActive?' active':''}">`
-      +`<input type="checkbox" ${inView?'checked':''} ${isActive?'disabled title="Active iteration is always in view"':''} onchange="toggleViewIter('${i.id}')"/>`
-      +`<span class="iterdd-name" onclick="focusIter('${i.id}')" title="Focus only this iteration (write target)">${esc(i.name)}${isActive?' <span class="tag">active</span>':''}</span>`
+  menu.innerHTML = `<div class="iterdd-head">Click a row to set the <b>active</b> iteration · tick <b>cumul</b> to add it to the cumulative view</div>`
+    + S.iterations.map(i=>{ const inView=set.has(i.id), isActive=i.id===S.activeIterationId;
+    return `<div class="iterdd-row${isActive?' active':''}" onclick="focusIter('${i.id}')">`
+      +`<span class="iterdd-radio">${isActive?'●':'○'}</span>`
+      +`<span class="iterdd-name">${esc(i.name)}${isActive?' <span class="tag">active</span>':''}</span>`
+      +`<label class="iterdd-chk" onclick="event.stopPropagation()" title="Include in the cumulative Dashboard / Calendar view"><input type="checkbox" ${inView?'checked':''} ${isActive?'disabled':''} onchange="toggleViewIter('${i.id}')"/> cumul</label>`
       +`<span class="muted iterdd-cnt">${S.executions.filter(e=>e.iterationId===i.id).length}</span></div>`;
-  }).join("") + `<div class="iterdd-foot">Tick several to track <b>cumulative</b> progress (Dashboard &amp; Calendar). Click a name to focus it (push / tester pages target the active one).</div>`;
+  }).join("");
 }
 function toggleIterDD(ev){ if(ev)ev.stopPropagation(); iterDDopen=!iterDDopen; buildIterSelect(); }
 function closeIterDD(){ if(iterDDopen){ iterDDopen=false; const m=document.getElementById("iterDDmenu"); if(m)m.style.display="none"; } }
