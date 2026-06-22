@@ -554,12 +554,13 @@ function renderDashboard(){
   const byTester={}; ex.forEach(e=>{(byTester[e.testerId]=byTester[e.testerId]||[]).push(e);});
   const byDomain={}; ex.forEach(e=>{const d=e.domain||"(none)";(byDomain[d]=byDomain[d]||[]).push(e);});
   const byProc={}; ex.forEach(e=>{const p=e.process||"(none)";(byProc[p]=byProc[p]||[]).push(e);});
+  const totalSteps=ex.reduce((s,e)=>s+(e.steps||[]).length,0);
 
   $("#view-dashboard").innerHTML=`
     <h2>Dashboard — ${esc(iter?iter.name:"—")}</h2>
     <p class="sub">${esc(S.config.campaignName)} · live progress for the active iteration.</p>
     <div class="cards">
-      ${kpi(a.total,"Assigned",null,'all')}${kpi(a.done+" ("+pct(a.done)+"%)","Executed",'#38bdf8','done')}
+      ${kpi(a.total,"Assigned",null,'all')}${kpi(totalSteps,"Test point",'#a78bfa')}${kpi(a.done+" ("+pct(a.done)+"%)","Executed",'#38bdf8','done')}
       ${kpi(a.passed,"Passed",'#22c55e','Passed')}${kpi(a.failed,"Failed",'#ef4444','Failed')}
       ${kpi(a.blocked,"Blocked",'#f59e0b','Blocked')}${kpi(a.notrun,"To do",'#94a3b8','todo')}
     </div>
