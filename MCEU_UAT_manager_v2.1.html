@@ -27,6 +27,16 @@
   header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
   header .brand{color:var(--accent)}
   .iter-pill{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .iterdd{position:relative}
+  .iterdd-btn{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer;min-width:180px;text-align:left}
+  .iterdd-menu{display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:80;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);min-width:300px;max-height:60vh;overflow:auto;padding:4px}
+  .iterdd-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px}
+  .iterdd-row:hover{background:var(--panel2)}
+  .iterdd-row.active{background:rgba(56,189,248,.10)}
+  .iterdd-row input{flex:none;margin:0}
+  .iterdd-name{flex:1;cursor:pointer;font-size:13px}
+  .iterdd-cnt{flex:none;font-size:11px}
+  .iterdd-foot{font-size:11px;color:var(--muted);padding:7px 8px 4px;border-top:1px solid var(--line);margin-top:2px}
   select,input,textarea{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit}
   textarea{width:100%;min-height:50px;resize:vertical}
   button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:13px}
@@ -129,8 +139,11 @@
   <span class="muted" id="saveStamp" style="font-size:11px;margin-left:6px"></span>
   <div class="iter-pill">
     <button id="themeBtn" class="sm" onclick="toggleTheme()" title="Toggle dark / light theme">🌙 Dark</button>
-    <span class="muted" style="font-size:12px">Active&nbsp;iteration</span>
-    <select id="iterSelect" onchange="setActiveIteration(this.value)"></select>
+    <span class="muted" style="font-size:12px">Iteration(s)</span>
+    <div class="iterdd" id="iterDD">
+      <button class="iterdd-btn" id="iterDDbtn" onclick="toggleIterDD(event)">—</button>
+      <div class="iterdd-menu" id="iterDDmenu"></div>
+    </div>
   </div>
 </header>
 <nav id="nav"></nav>
@@ -224,6 +237,15 @@ const activeIter = () => S.iterations.find(i=>i.id===S.activeIterationId) || S.i
 const libById = id => S.library.find(c=>String(c.id)===String(id));
 const naturalKey = s => String(s||"").toLowerCase().replace(/\d+/g, m=>m.padStart(10,"0"));
 const iterExecs = (iterId) => S.executions.filter(e=>e.iterationId===(iterId||S.activeIterationId));
+/* cumulative view: one or more iterations selected for the progress views (Dashboard, Calendar) */
+function ensureView(){ if(!Array.isArray(S.viewIterIds)||!S.viewIterIds.length)S.viewIterIds=[S.activeIterationId];
+  if(S.viewIterIds.indexOf(S.activeIterationId)<0)S.viewIterIds.unshift(S.activeIterationId); }
+function viewArr(){ let ids=(Array.isArray(S.viewIterIds)&&S.viewIterIds.length?S.viewIterIds:[S.activeIterationId]).filter(id=>S.iterations.some(i=>i.id===id));
+  if(ids.indexOf(S.activeIterationId)<0)ids.unshift(S.activeIterationId); return ids; }
+function viewSet(){ return new Set(viewArr()); }
+function viewExecs(){ const s=viewSet(); return S.executions.filter(e=>s.has(e.iterationId)); }
+function iterName(id){ const i=S.iterations.find(x=>x.id===id); return i?i.name:"—"; }
+function viewLabel(){ const a=viewArr(); const act=activeIter(); if(a.length<=1)return act?act.name:"—"; return (act?act.name:"")+" +"+(a.length-1)+" (cumulative)"; }
 function badge(text,color){ return `<span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}66">${esc(text)}</span>`; }
 
 /* =========================================================================
@@ -287,9 +309,28 @@ function go(tab){ currentTab=tab; document.querySelectorAll(".view").forEach(v=>
 function renderAll(){ buildIterSelect(); buildNav(); renderTab(currentTab); }
 function renderTab(tab){ buildIterSelect();
   ({dashboard:renderDashboard,library:renderLibrary,campaign:renderCampaign,calendar:renderCalendar,testerview:renderTesterView,admin:renderAdmin}[tab]||(()=>{}))(); }
-function buildIterSelect(){ $("#iterSelect").innerHTML = S.iterations.map(i=>
-  `<option value="${i.id}" ${i.id===S.activeIterationId?'selected':''}>${esc(i.name)}</option>`).join(""); }
-function setActiveIteration(id){ S.activeIterationId=id; renderAll(); save(); }
+let iterDDopen=false;
+function buildIterSelect(){
+  const btn=document.getElementById("iterDDbtn"), menu=document.getElementById("iterDDmenu"); if(!btn||!menu)return;
+  const a=viewArr(), set=viewSet();
+  btn.innerHTML = esc(viewLabel()) + ' <span class="muted">▾</span>';
+  btn.title = a.length>1 ? "Cumulative view: "+a.map(iterName).join(", ")+" — writes still target the active iteration" : "Active iteration";
+  menu.style.display = iterDDopen ? "block" : "none";
+  menu.innerHTML = S.iterations.map(i=>{ const inView=set.has(i.id), isActive=i.id===S.activeIterationId;
+    return `<div class="iterdd-row${isActive?' active':''}">`
+      +`<input type="checkbox" ${inView?'checked':''} ${isActive?'disabled title="Active iteration is always in view"':''} onchange="toggleViewIter('${i.id}')"/>`
+      +`<span class="iterdd-name" onclick="focusIter('${i.id}')" title="Focus only this iteration (write target)">${esc(i.name)}${isActive?' <span class="tag">active</span>':''}</span>`
+      +`<span class="muted iterdd-cnt">${S.executions.filter(e=>e.iterationId===i.id).length}</span></div>`;
+  }).join("") + `<div class="iterdd-foot">Tick several to track <b>cumulative</b> progress (Dashboard &amp; Calendar). Click a name to focus it (push / tester pages target the active one).</div>`;
+}
+function toggleIterDD(ev){ if(ev)ev.stopPropagation(); iterDDopen=!iterDDopen; buildIterSelect(); }
+function closeIterDD(){ if(iterDDopen){ iterDDopen=false; const m=document.getElementById("iterDDmenu"); if(m)m.style.display="none"; } }
+function focusIter(id){ S.activeIterationId=id; S.viewIterIds=[id]; iterDDopen=false; renderAll(); save(); }
+function toggleViewIter(id){ if(id===S.activeIterationId)return; ensureView();
+  const i=S.viewIterIds.indexOf(id); if(i>=0)S.viewIterIds.splice(i,1); else S.viewIterIds.push(id);
+  iterDDopen=true; renderAll(); save(); }
+function setActiveIteration(id){ focusIter(id); }
+document.addEventListener("click",e=>{ if(!(e.target.closest&&e.target.closest("#iterDD"))) closeIterDD(); });
 
 /* modal */
 function modal(html){ $("#modalBox").innerHTML=html; $("#modalBg").classList.add("open"); }
@@ -326,8 +367,8 @@ function showExecModal(title,ex){
     <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
 }
 function openExecList(key){ const titleMap={all:"All assigned",done:"Executed",todo:"To do",Passed:"Passed",Failed:"Failed",Blocked:"Blocked"};
-  showExecModal((titleMap[key]||key)+" — "+esc(activeIter().name), iterExecs().filter(e=>execMatch(e,key))); }
-function openProcList(proc){ showExecModal(esc(proc)+" — "+esc(activeIter().name), iterExecs().filter(e=>(e.process||"(none)")===proc)); }
+  showExecModal((titleMap[key]||key)+" — "+esc(viewLabel()), viewExecs().filter(e=>execMatch(e,key))); }
+function openProcList(proc){ showExecModal(esc(proc)+" — "+esc(viewLabel()), viewExecs().filter(e=>(e.process||"(none)")===proc)); }
 /* ---- SPOC assignment sheets: export a (blank) list, re-import their tester assignments ---- */
 function trkFiltered(){ return iterExecs().filter(e=>
   (!trkFilter.entity||e.entity===trkFilter.entity)&&(!trkFilter.tester||e.testerId===trkFilter.tester)&&
@@ -559,7 +600,7 @@ function finishSpocImport(rows,forced){
   alert(`SPOC assignments imported: ${res.upd} updated, ${res.created} new (duplicated), ${res.cloned} multi-tester, ${res.newT} new tester(s), ${res.removedN} removed`+(res.miss?`, ${res.miss} skipped`:``)+(forced?`. Entity "${forced}" applied to lines that had none.`:``)+`.`);
 }
 function renderDashboard(){
-  const iter=activeIter(); const ex=iterExecs(); const a=aggregate(ex);
+  const iter=activeIter(); const ex=viewExecs(); const a=aggregate(ex);
   const pct=n=>a.total?Math.round(n/a.total*100):0;
   const kpi=(n,l,c,key)=>`<div class="kpi" ${key?`style="cursor:pointer" title="Click to list these test cases" onclick="openExecList('${key}')"`:''}><div class="n" style="color:${c||'inherit'}">${n}</div><div class="l">${l}</div></div>`;
   const homeEnt=e=>{ const t=tester(e.testerId); return (t&&t.country)||e.entity||""; };
@@ -573,7 +614,7 @@ function renderDashboard(){
   const totalSteps=ex.reduce((s,e)=>s+(e.steps||[]).length,0);
 
   $("#view-dashboard").innerHTML=`
-    <h2>Dashboard — ${esc(iter?iter.name:"—")}</h2>
+    <h2>Dashboard — ${esc(viewLabel())}</h2>
     <p class="sub">${esc(S.config.campaignName)} · live progress for the active iteration.</p>
     <div class="cards">
       ${kpi(a.total,"Assigned",null,'all')}${kpi(totalSteps,"Test point",'#a78bfa')}${kpi(a.done+" ("+pct(a.done)+"%)","Executed",'#38bdf8','done')}
@@ -1044,7 +1085,7 @@ function calKey(p){ return p.y+"-"+String(p.m+1).padStart(2,"0")+"-"+String(p.d)
 function calBuckets(){
   // returns {byDay:{ "YYYY-MM-DD": [execs] }, unscheduled:[{label,execs}], months:Set("y-m") }
   const byDay={}, uns={}, months={};
-  iterExecs().forEach(e=>{ const p=parseTestDate(e.testDate);
+  viewExecs().forEach(e=>{ const p=parseTestDate(e.testDate);
     if(p){ const k=calKey(p); (byDay[k]=byDay[k]||[]).push(e); months[p.y+"-"+p.m]=true; }
     else { const lbl=(e.testDate||"").trim()||"(no date)"; (uns[lbl]=uns[lbl]||[]).push(e); } });
   return {byDay,uns,months};
@@ -1093,7 +1134,7 @@ function renderCalendar(){
   $("#view-calendar").innerHTML=`
     <div class="card">
       <div class="toolbar">
-        <h2 style="margin:0">Calendar — ${esc(iter.name)}</h2>
+        <h2 style="margin:0">Calendar — ${esc(viewLabel())}</h2>
         <div class="spacer"></div>
         <button class="ghost" onclick="calNav(-1)">‹ Prev</button>
         <b style="min-width:150px;text-align:center;display:inline-block">${CAL_MONTHS[m]} ${y}</b>
@@ -1124,7 +1165,7 @@ function reformatDate(orig,t){ orig=String(orig||"").trim(); const pad=n=>String
   return `${pad(t.d)}/${pad(t.m+1)}/${t.y}`; }
 function calMoveProc(srcKey,proc,dstKey){
   const dp=dstKey.split("-").map(Number); const t={y:dp[0],m:dp[1]-1,d:dp[2]};
-  let n=0; iterExecs().forEach(e=>{ const p=parseTestDate(e.testDate); if(!p)return;
+  let n=0; viewExecs().forEach(e=>{ const p=parseTestDate(e.testDate); if(!p)return;
     if(calKey(p)===srcKey&&(e.process||"(none)")===proc){ e.testDate=reformatDate(e.testDate,t); e.updatedAt=new Date().toISOString(); n++; } });
   if(n) persist(); else renderCalendar(); }
 function openCalDay(k){ const ex=calBuckets().byDay[k]||[]; const p=k.split("-"); showExecModal("Tests due "+p[2]+"/"+p[1]+"/"+p[0],ex); }
@@ -1214,18 +1255,18 @@ function renderTesterView(){
 
 /* iterations */
 function newIter(){ const name=prompt("Iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
-  const it={id:uid(),name,startDate:"",endDate:""}; S.iterations.push(it); S.activeIterationId=it.id; renderAll(); save(); }
+  const it={id:uid(),name,startDate:"",endDate:""}; S.iterations.push(it); S.activeIterationId=it.id; S.viewIterIds=[it.id]; renderAll(); save(); }
 function editIter(id){ const it=S.iterations.find(x=>x.id===id);
   modal(`<h2>Edit iteration</h2><div class="field"><label>Name</label><input id="it_name" value="${esc(it.name)}"/></div>
     <div class="row" style="margin-top:10px"><div class="field"><label>Start</label><input type="date" id="it_start" value="${esc(it.startDate)}"/></div><div class="field"><label>End</label><input type="date" id="it_end" value="${esc(it.endDate)}"/></div></div>
     <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="saveIter('${id}')">Save</button></div>`); }
 function saveIter(id){ const it=S.iterations.find(x=>x.id===id); it.name=$("#it_name").value;it.startDate=$("#it_start").value;it.endDate=$("#it_end").value; closeModal(); renderAll(); save(); }
-function delIter(id){ if(!confirm("Delete this iteration and its executions?"))return; S.iterations=S.iterations.filter(x=>x.id!==id); S.executions=S.executions.filter(e=>e.iterationId!==id); if(S.activeIterationId===id)S.activeIterationId=S.iterations[0].id; renderAll(); save(); }
+function delIter(id){ if(!confirm("Delete this iteration and its executions?"))return; S.iterations=S.iterations.filter(x=>x.id!==id); S.executions=S.executions.filter(e=>e.iterationId!==id); if(S.activeIterationId===id)S.activeIterationId=S.iterations[0].id; S.viewIterIds=(S.viewIterIds||[]).filter(x=>x!==id&&S.iterations.some(i=>i.id===x)); if(!S.viewIterIds.length)S.viewIterIds=[S.activeIterationId]; renderAll(); save(); }
 function carryOver(){ const from=activeIter(); const name=prompt("New iteration name:","UAT "+(S.iterations.length+1)); if(!name)return;
   const it={id:uid(),name,startDate:"",endDate:""}; S.iterations.push(it);
   const src=S.executions.filter(e=>e.iterationId===from.id&&["Failed","Blocked","Not started"].includes(e.status));
   src.forEach(e=>S.executions.push({...e,id:uid(),iterationId:it.id,status:"Not started",comment:"",testDate:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()}));
-  S.activeIterationId=it.id; renderAll(); save(); alert(src.length+" test(s) carried over to "+name+"."); }
+  S.activeIterationId=it.id; S.viewIterIds=[it.id]; renderAll(); save(); alert(src.length+" test(s) carried over to "+name+"."); }
 
 /* =========================================================================
    PER-TESTER STANDALONE HTML
