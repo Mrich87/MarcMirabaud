@@ -1402,12 +1402,29 @@ th.sortable{cursor:pointer;user-select:none}
 .wlist{position:absolute;z-index:20;left:0;right:0;top:100%;margin-top:2px;background:#1e293b;border:1px solid #334155;border-radius:6px;max-height:260px;overflow:auto;display:none;box-shadow:0 10px 26px rgba(0,0,0,.5)}
 .wopt{padding:7px 10px;cursor:pointer;white-space:nowrap}
 .wopt:hover{background:#0ea5e9;color:#06283b}
+.viewtabs{display:flex;gap:6px;margin-bottom:12px}
+.viewtabs button{padding:7px 14px}
+.tcalbar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.tcalgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.tcaldow{text-align:center;font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.03em;padding:2px 0}
+.tcalcell{min-height:90px;border:1px solid #334155;border-radius:8px;padding:5px 6px;background:#16233b;display:flex;flex-direction:column;gap:3px}
+.tcalcell.empty{background:transparent;border-color:transparent}
+.tcalcell.has{border-color:#3b5572}
+.tcalcell.today{border-color:#38bdf8;box-shadow:0 0 0 1px #38bdf8 inset}
+.tcaldate{font-size:12px;color:#94a3b8;font-weight:600}
+.tcalcell.today .tcaldate{color:#38bdf8}
+.tcalcnt{font-size:11px;font-weight:700;color:#e2e8f0}
+.tcalitem{font-size:10px;line-height:1.3;display:flex;align-items:center;gap:4px;background:#0b1220;border-radius:4px;padding:1px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tdot{width:7px;height:7px;border-radius:50%;flex:none;display:inline-block}
+.tcaluns{margin-top:12px;font-size:12px;color:#94a3b8;background:#0b1220;border:1px solid #334155;border-radius:8px;padding:8px 12px}
 </style></head><body>
 <header><h1 id="sheetTitle">UAT Test Sheet</h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option><option value="es">ES</option></select><button id="btnSaveTop" onclick="saveJSON()" style="padding:6px 12px"></button></header>
 <main>
   <div class="whoami" id="whoamiBar"><label class="muted" id="lblWho" for="whoami"></label><div class="wcombo"><input id="whoami" autocomplete="off"/><div class="wlist" id="whoamiList"></div></div></div>
   <div class="links" id="links"></div>
   <p class="muted" id="intro"></p>
+  <div class="viewtabs"><button id="btnViewList" onclick="setView('list')"></button><button id="btnViewCal" class="sec" onclick="setView('cal')"></button></div>
+  <div id="tblWrap">
   <div id="filterBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
     <label class="muted" id="lblProc" for="procFilter"></label>
     <select id="procFilter" onchange="render()"></select>
@@ -1415,11 +1432,18 @@ th.sortable{cursor:pointer;user-select:none}
   </div>
   <table id="tbl"><thead><tr><th id="thPRC" class="sortable" onclick="sortBy('process')"></th><th id="thScn"></th><th id="thEnt"></th><th id="thSt" style="width:140px"></th><th id="thDue" class="sortable" style="width:160px" onclick="sortBy('testDate')"></th><th id="thCom"></th></tr></thead><tbody id="tb"></tbody></table>
   <p style="margin-top:14px"><button class="sec" id="btnAdhoc" onclick="addAdhoc()"></button></p>
+  </div>
+  <div id="calWrap" style="display:none">
+    <div class="tcalbar"><button class="sec" onclick="tcalNav(-1)">‹</button><b id="tcalMonth" style="min-width:150px;text-align:center;display:inline-block"></b><button class="sec" onclick="tcalNav(1)">›</button><button class="sec" id="tcalToday" onclick="tcalToday()"></button></div>
+    <div class="tcalgrid" id="tcalGrid"></div>
+    <div id="tcalUns"></div>
+  </div>
 </main>
 <div class="bar"><button id="btnSave" onclick="saveJSON()"></button><span class="saved" id="savedMsg"></span><span class="muted" style="margin-left:auto" id="prog"></span></div>
 <script>
 const DATA=${dataJson};
 let curId="", rows=[], adhoc=[], expanded=new Set(), sortField="", sortDir=0;
+let tcalYM=null, tcalOn=false;
 const I18N={
  fr:{title:"Feuille de test UAT",selectName:"Sélectionne ton nom :",namePh:"tape ton nom…",
    intro:"Renseigne un <b>Statut</b> pour chaque test. Un commentaire est <b>obligatoire</b> pour Failed/Blocked. Déplie un test (▸&nbsp;étapes) pour voir les étapes à suivre ; saisis la <b>référence de transaction</b> quand c'est demandé. Pour un test <b>Failed/Blocked</b>, coche l'étape qui pose problème et glisse-dépose une ou des <b>captures d'écran</b> comme preuve. Ton travail est enregistré automatiquement ; clique <b>Enregistrer mes résultats (JSON)</b> puis renvoie le fichier au coordinateur.",
@@ -1430,7 +1454,8 @@ const I18N={
    evidence:"Preuve — glisse-dépose une ou des captures ici, ou clique pour parcourir :",dropHere:"Dépose une capture ici / clique pour parcourir",
    txnRef:"Référence de transaction",required:"obligatoire",txnPh:"saisir la référence de transaction…",cReq:"obligatoire…",cOpt:"optionnel",
    done:"faits",saved:"enregistré ✓",full:"⚠ stockage plein (captures trop lourdes) — enregistre le JSON",pickFirst:"Sélectionne d'abord ton nom.",noRes:"aucun résultat",remove:"retirer",
-   cNoCom:"{n} test(s) Failed/Blocked sans commentaire. Enregistrer quand même ?",cNoTxn:"{n} test(s) exécuté(s) sans référence de transaction. Enregistrer quand même ?"},
+   cNoCom:"{n} test(s) Failed/Blocked sans commentaire. Enregistrer quand même ?",cNoTxn:"{n} test(s) exécuté(s) sans référence de transaction. Enregistrer quand même ?",
+   vList:"▤ Liste",vCal:"🗓 Calendrier",calUns:"Non planifié / hors calendrier :",calToday:"Aujourd'hui",calNoData:"Aucun test ce mois — utilise ‹ ›"},
  en:{title:"UAT Test Sheet",selectName:"Select your name:",namePh:"type your name…",
    intro:"Set a <b>Status</b> for each test. A comment is <b>mandatory</b> for Failed/Blocked. Expand a test (▸&nbsp;steps) to view the steps to follow; enter the <b>transaction reference</b> when required. For a <b>Failed/Blocked</b> test, tick the problematic step and drag-and-drop <b>screenshot(s)</b> as evidence. Your work is auto-saved; click <b>Save results (JSON)</b> and send the file back to the coordinator.",
    proc:"Process",allShort:"— All —",allProc:"— All processes ({n}) —",shown:"shown",
@@ -1440,7 +1465,8 @@ const I18N={
    evidence:"Evidence — drag & drop screenshot(s) here, or click to browse:",dropHere:"Drop screenshot here / click to browse",
    txnRef:"Transaction reference",required:"required",txnPh:"enter transaction reference…",cReq:"required…",cOpt:"optional",
    done:"done",saved:"saved ✓",full:"⚠ storage full (screenshots too large) — save the JSON",pickFirst:"Select your name first.",noRes:"no match",remove:"remove",
-   cNoCom:"{n} test(s) Failed/Blocked without a comment. Save anyway?",cNoTxn:"{n} executed test(s) require a transaction reference that is still empty. Save anyway?"},
+   cNoCom:"{n} test(s) Failed/Blocked without a comment. Save anyway?",cNoTxn:"{n} executed test(s) require a transaction reference that is still empty. Save anyway?",
+   vList:"▤ List",vCal:"🗓 Calendar",calUns:"Unscheduled / non-calendar:",calToday:"Today",calNoData:"No test this month — use ‹ ›"},
  es:{title:"Hoja de pruebas UAT",selectName:"Selecciona tu nombre:",namePh:"escribe tu nombre…",
    intro:"Indica un <b>Estado</b> para cada prueba. Un comentario es <b>obligatorio</b> para Failed/Blocked. Despliega una prueba (▸&nbsp;pasos) para ver los pasos a seguir; introduce la <b>referencia de transacción</b> cuando se solicite. Para una prueba <b>Failed/Blocked</b>, marca el paso problemático y arrastra y suelta una o varias <b>capturas de pantalla</b> como prueba. Tu trabajo se guarda automáticamente; haz clic en <b>Guardar mis resultados (JSON)</b> y envía el archivo al coordinador.",
    proc:"Proceso",allShort:"— Todos —",allProc:"— Todos los procesos ({n}) —",shown:"mostrados",
@@ -1450,11 +1476,12 @@ const I18N={
    evidence:"Prueba — arrastra y suelta una o varias capturas aquí, o haz clic para explorar:",dropHere:"Suelta una captura aquí / haz clic para explorar",
    txnRef:"Referencia de transacción",required:"obligatorio",txnPh:"introduce la referencia de transacción…",cReq:"obligatorio…",cOpt:"opcional",
    done:"hechos",saved:"guardado ✓",full:"⚠ almacenamiento lleno (capturas demasiado grandes) — guarda el JSON",pickFirst:"Selecciona primero tu nombre.",noRes:"sin coincidencias",remove:"quitar",
-   cNoCom:"{n} prueba(s) Failed/Blocked sin comentario. ¿Guardar de todos modos?",cNoTxn:"{n} prueba(s) ejecutada(s) requieren una referencia de transacción aún vacía. ¿Guardar de todos modos?"}
+   cNoCom:"{n} prueba(s) Failed/Blocked sin comentario. ¿Guardar de todos modos?",cNoTxn:"{n} prueba(s) ejecutada(s) requieren una referencia de transacción aún vacía. ¿Guardar de todos modos?",
+   vList:"▤ Lista",vCal:"🗓 Calendario",calUns:"Sin planificar / no calendario:",calToday:"Hoy",calNoData:"Sin pruebas este mes — usa ‹ ›"}
 };
 let lang=(function(){try{return localStorage.getItem("mceu_tester_lang")||"fr";}catch(e){return "fr";}})();
 function T(k,n){let v=(I18N[lang]||I18N.fr)[k]||k; return n==null?v:v.replace("{n}",n);}
-function setLang(l){ lang=l; try{localStorage.setItem("mceu_tester_lang",l);}catch(e){} applyLang(); buildLinks(); buildProcFilter(); render(); }
+function setLang(l){ lang=l; try{localStorage.setItem("mceu_tester_lang",l);}catch(e){} applyLang(); buildLinks(); buildProcFilter(); render(); if(tcalOn)tcalRender(); }
 function applyLang(){
   document.getElementById("sheetTitle").textContent=T("title");
   document.getElementById("lblWho").textContent=T("selectName");
@@ -1471,6 +1498,9 @@ function applyLang(){
   document.getElementById("thDue").innerHTML=T("hDue")+' <span id="arD"></span>';
   document.getElementById("thCom").textContent=T("hCom");
   const ls=document.getElementById("langSel"); if(ls) ls.value=lang;
+  var bl=document.getElementById("btnViewList"); if(bl) bl.textContent=T("vList");
+  var bc=document.getElementById("btnViewCal"); if(bc) bc.textContent=T("vCal");
+  var bt=document.getElementById("tcalToday"); if(bt) bt.textContent=T("calToday");
 }
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function stepTxt(s){return typeof s==="string"?s:((s&&s.t)||"");}
@@ -1503,7 +1533,7 @@ function loadTester(id){ curId=id; const tt=DATA.testers.find(x=>x.id===id); con
   rows=tt.tests.map(t=>{const s=saved&&saved.results&&saved.results.find(r=>r.id===t.id);
     return Object.assign({},t,{status:s?s.status:t.status,comment:s?s.comment:t.comment,txnRefValue:(s&&s.txnRefValue)||t.txnRefValue||"",failedSteps:(s&&s.failedSteps)||t.failedSteps||{},screens:(s&&s.screens)||t.screens||[]});});
   adhoc=(saved&&saved.adhoc)||[];
-  buildProcFilter(); render(); }
+  buildProcFilter(); render(); if(tcalOn)tcalRender(); }
 function sk(t){ return sortField==="process"?nat((t.process||"")+" "+(t.scenario||"")):(t.testDate||""); }
 function sortBy(f){ if(sortField===f){ sortDir=sortDir===1?-1:0; if(!sortDir)sortField=""; } else { sortField=f; sortDir=1; } render(); }
 function toggleSteps(id){ if(expanded.has(id))expanded.delete(id); else expanded.add(id); render(); }
@@ -1594,6 +1624,44 @@ function saveJSON(){ if(!curId){alert(T("pickFirst"));return;}
   const b=new Blob([JSON.stringify(payloadOut(),null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="results_"+(tt.name||"tester").replace(/\\W+/g,'_')+"_"+DATA.iteration.replace(/\\W+/g,'_')+".json";a.click();
 }
+/* ---- read-only calendar view (tester) ---- */
+var TCAL_M=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function tparse(s){ s=String(s==null?"":s).trim(); if(!s)return null;
+  var m=s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/); if(m){var y=+m[1],mo=+m[2]-1,d=+m[3]; if(mo>=0&&mo<12&&d>=1&&d<=31)return{y:y,m:mo,d:d}; return null;}
+  m=s.match(/^(\\d{1,2})[\\/.](\\d{1,2})[\\/.](\\d{2,4})/); if(m){var d=+m[1],mo=+m[2]-1,y=+m[3]; if(y<100)y+=2000; if(mo>=0&&mo<12&&d>=1&&d<=31)return{y:y,m:mo,d:d}; return null;} return null;}
+function tkey(p){ return p.y+"-"+String(p.m+1).padStart(2,"0")+"-"+String(p.d).padStart(2,"0"); }
+function tstColor(st){ var m={Passed:"#22c55e",Failed:"#ef4444",Blocked:"#f59e0b","In progress":"#a855f7","N/A":"#64748b"}; return m[st]||"#475569"; }
+function tcalBuckets(){ var byDay={},uns={},months={}; var all=rows.concat(adhoc||[]);
+  all.forEach(function(t){ var p=tparse(t.testDate);
+    if(p){ var k=tkey(p); (byDay[k]=byDay[k]||[]).push(t); months[p.y+"-"+p.m]=true; }
+    else { var lbl=(t.testDate||"").trim()||"—"; (uns[lbl]=uns[lbl]||[]).push(t); } });
+  return {byDay:byDay,uns:uns,months:months}; }
+function tcalRender(){ var b=tcalBuckets();
+  if(!tcalYM){ var ms=Object.keys(b.months).map(function(k){return k.split("-").map(Number);}).sort(function(a,x){return a[0]-x[0]||a[1]-x[1];});
+    if(ms.length)tcalYM={y:ms[0][0],m:ms[0][1]}; else { var n=new Date(); tcalYM={y:n.getFullYear(),m:n.getMonth()}; } }
+  var y=tcalYM.y,m=tcalYM.m;
+  var first=new Date(y,m,1); var startDow=(first.getDay()+6)%7; var daysIn=new Date(y,m+1,0).getDate();
+  var nn=new Date(); var todayK=tkey({y:nn.getFullYear(),m:nn.getMonth(),d:nn.getDate()});
+  var dows=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  var cells=dows.map(function(d){return '<div class="tcaldow">'+d+'</div>';}).join("");
+  var i; for(i=0;i<startDow;i++) cells+='<div class="tcalcell empty"></div>';
+  var d; for(d=1;d<=daysIn;d++){ var k=tkey({y:y,m:m,d:d}); var ex=b.byDay[k]||[];
+    var inner='<div class="tcaldate">'+d+'</div>';
+    if(ex.length){ inner+='<div class="tcalcnt">'+ex.length+' test'+(ex.length>1?'s':'')+'</div>';
+      inner+=ex.map(function(t){ return '<div class="tcalitem" title="'+esc((t.process||"")+" — "+(t.scenario||""))+'"><span class="tdot" style="background:'+tstColor(t.status)+'"></span>'+esc(t.process||t.scenario||"")+'</div>'; }).join(""); }
+    cells+='<div class="tcalcell'+(ex.length?" has":"")+(k===todayK?" today":"")+'">'+inner+'</div>'; }
+  document.getElementById("tcalGrid").innerHTML=cells;
+  document.getElementById("tcalMonth").textContent=TCAL_M[m]+" "+y;
+  var unsKeys=Object.keys(b.uns).sort();
+  document.getElementById("tcalUns").innerHTML=unsKeys.length?('<div class="tcaluns"><b>'+esc(T("calUns"))+'</b> '+unsKeys.map(function(l){return esc(l)+" ("+b.uns[l].length+")";}).join(" · ")+'</div>'):''; }
+function tcalNav(delta){ if(!tcalYM)tcalRender(); var m=tcalYM.m+delta,y=tcalYM.y; while(m<0){m+=12;y--;} while(m>11){m-=12;y++;} tcalYM={y:y,m:m}; tcalRender(); }
+function tcalToday(){ var n=new Date(); tcalYM={y:n.getFullYear(),m:n.getMonth()}; tcalRender(); }
+function setView(v){ tcalOn=(v==="cal");
+  document.getElementById("tblWrap").style.display=tcalOn?"none":"block";
+  document.getElementById("calWrap").style.display=tcalOn?"block":"none";
+  document.getElementById("btnViewList").className=tcalOn?"sec":"";
+  document.getElementById("btnViewCal").className=tcalOn?"":"sec";
+  if(tcalOn)tcalRender(); }
 function init(){ applyLang(); buildLinks(); buildWho();
   if(DATA.testers.length===1){ const inp=document.getElementById("whoami"); if(inp)inp.value=DATA.testers[0].name; loadTester(DATA.testers[0].id); }
   else { render(); }
