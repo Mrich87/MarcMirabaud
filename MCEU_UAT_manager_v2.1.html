@@ -11,10 +11,19 @@
     --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --accent2:#0ea5e9;
     --ok:#22c55e; --fail:#ef4444; --block:#f59e0b; --na:#64748b; --prog:#a855f7;
     --chip:#0b1220;
+    --headfrom:#0b1220; --headto:#16233b; --navbg:#0b1220; --oncolor:#06283b;
   }
+  body.light{
+    --bg:#eef2f7; --panel:#ffffff; --panel2:#e7edf4; --line:#cbd5e1;
+    --txt:#0f172a; --muted:#5b6b80; --accent:#0284c7; --accent2:#0ea5e9;
+    --na:#94a3b8; --chip:#f4f7fb;
+    --headfrom:#ffffff; --headto:#eaf2fb; --navbg:#ffffff; --oncolor:#ffffff;
+  }
+  body.light header h1{color:#0f172a}
+  body.light .pbar{background:#e2e8f0}
   *{box-sizing:border-box}
   body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
-  header{background:linear-gradient(90deg,#0b1220,#16233b);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+  header{background:linear-gradient(90deg,var(--headfrom),var(--headto));border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
   header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
   header .brand{color:var(--accent)}
   .iter-pill{margin-left:auto;display:flex;align-items:center;gap:8px}
@@ -22,11 +31,11 @@
   textarea{width:100%;min-height:50px;resize:vertical}
   button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:13px}
   button:hover{border-color:var(--accent)}
-  button.primary{background:var(--accent2);border-color:var(--accent2);color:#06283b;font-weight:600}
+  button.primary{background:var(--accent2);border-color:var(--accent2);color:var(--oncolor);font-weight:600}
   button.primary:hover{background:var(--accent)}
   button.danger{border-color:var(--fail);color:#fca5a5}
   button.sm{padding:3px 8px;font-size:12px}
-  nav{display:flex;gap:4px;background:#0b1220;padding:6px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  nav{display:flex;gap:4px;background:var(--navbg);padding:6px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
   nav button{background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;padding:9px 18px;color:var(--muted);font-size:14px}
   nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
   main{padding:18px;max-width:1600px;margin:0 auto}
@@ -95,7 +104,7 @@
   .calcell.empty{background:transparent;border-color:transparent}
   .calcell.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
   .calcell.has{cursor:pointer}
-  .calcell.has:hover{background:var(--accent2);color:#06283b}
+  .calcell.has:hover{background:var(--accent2);color:var(--oncolor)}
   .caldate{font-size:12px;font-weight:600;color:var(--muted)}
   .calcell.today .caldate{color:var(--accent)}
   .calcnt{font-size:13px;font-weight:700}
@@ -104,6 +113,9 @@
   .calprocs{display:flex;flex-direction:column;gap:2px;margin:1px 0}
   .calproc{font-size:10px;line-height:1.25;background:var(--chip);border-radius:4px;padding:1px 5px;display:flex;align-items:center;gap:4px}
   .calproc .calprocn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .calgrid.calall .calcell{min-height:auto}
+  .calgrid.calall .calproc{align-items:flex-start}
+  .calgrid.calall .calproc .calprocn{overflow:visible;white-space:normal;word-break:break-word}
   .calproc .calsteps{flex:none;font-weight:700;color:var(--accent);font-size:9px}
   .calcell.has:hover .calproc{background:rgba(6,40,59,.12)}
 </style>
@@ -113,6 +125,7 @@
   <h1><span class="brand">MCEU</span> · UAT Campaign Manager</h1>
   <span class="muted" id="saveStamp" style="font-size:11px;margin-left:6px"></span>
   <div class="iter-pill">
+    <button id="themeBtn" class="sm" onclick="toggleTheme()" title="Toggle dark / light theme">🌙 Dark</button>
     <span class="muted" style="font-size:12px">Active&nbsp;iteration</span>
     <select id="iterSelect" onchange="setActiveIteration(this.value)"></select>
   </div>
@@ -997,6 +1010,7 @@ function reassignAll(fromTid){ const inp=$("#reassign_"+(fromTid||'none')); cons
    CALENDAR — monthly grid of executions by due date (testDate)
    ========================================================================= */
 let calYM=null; // {y, m} — m is 0-based; null => derive from data
+let calShowAll=false; // true => show every process per day (slide / print mode)
 const CAL_MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 /* Parse a free-text testDate into {y,m,d} or null. Handles DD/MM/YYYY, ISO YYYY-MM-DD,
    optional AM/PM/time suffix. Non-dates (W24, TBD, …) return null -> Unscheduled bucket. */
@@ -1042,8 +1056,9 @@ function renderCalendar(){
     if(ex.length){ const pm={};
       ex.forEach(e=>{ const p=e.process||"(none)"; const o=pm[p]||(pm[p]={n:0,steps:0}); o.n++; o.steps+=(e.steps||[]).length; });
       const procs=Object.keys(pm).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y)));
-      const shown=procs.slice(0,4).map(p=>`<div class="calproc" title="${esc(p)} — ${pm[p].steps} step(s)"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div>`).join("");
-      procHtml=`<div class="calprocs">${shown}${procs.length>4?`<div class="calproc muted">+${procs.length-4} more…</div>`:""}</div>`; }
+      const cap=calShowAll?procs.length:4;
+      const shown=procs.slice(0,cap).map(p=>`<div class="calproc" title="${esc(p)} — ${pm[p].steps} step(s)"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div>`).join("");
+      procHtml=`<div class="calprocs">${shown}${(!calShowAll&&procs.length>4)?`<div class="calproc muted">+${procs.length-4} more…</div>`:""}</div>`; }
     cells+=`<div class="${cls}"${ex.length?` onclick="openCalDay('${k}')"`:""}>`
       +`<div class="caldate">${d}</div>`
       +(ex.length?`<div class="calcnt">${ex.length} test${ex.length>1?"s":""}</div>${procHtml}${progressBar(ex)}${pf}`:"")
@@ -1066,14 +1081,16 @@ function renderCalendar(){
         <b style="min-width:150px;text-align:center;display:inline-block">${CAL_MONTHS[m]} ${y}</b>
         <button class="ghost" onclick="calNav(1)">Next ›</button>
         <button class="ghost" onclick="calToday()">Today</button>
+        <button class="${calShowAll?'primary':'ghost'}" onclick="calToggleAll()" title="Show every process in each day (full view for screenshot / slide)">${calShowAll?'▣ Showing all':'▦ Show all'}</button>
       </div>
       <div class="muted" style="font-size:12px;margin-top:4px">${totalScheduled} test(s) with a calendar date · ${totalUns} unscheduled${monthHasData?"":' · <span style="color:#f59e0b">no test this month — use Prev/Next</span>'}</div>
-      <div class="calgrid">${cells}</div>
+      <div class="calgrid${calShowAll?' calall':''}">${cells}</div>
     </div>
     ${unsHtml}`;
 }
 function calNav(delta){ if(!calYM)renderCalendar(); let m=calYM.m+delta,y=calYM.y; while(m<0){m+=12;y--;} while(m>11){m-=12;y++;} calYM={y,m}; renderCalendar(); }
 function calToday(){ const n=new Date(); calYM={y:n.getFullYear(),m:n.getMonth()}; renderCalendar(); }
+function calToggleAll(){ calShowAll=!calShowAll; renderCalendar(); }
 function openCalDay(k){ const ex=calBuckets().byDay[k]||[]; const p=k.split("-"); showExecModal("Tests due "+p[2]+"/"+p[1]+"/"+p[0],ex); }
 function openCalUns(lbl){ const ex=calBuckets().uns[lbl]||[]; showExecModal("Tests — "+esc(lbl),ex); }
 
@@ -1616,6 +1633,14 @@ function exportLibrary(){
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"LUX");
   XLSX.writeFile(wb,`MCEU_UAT_library_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
+
+/* theme (dark / light) */
+const THEME_KEY="mceu_uat_theme";
+function applyTheme(t){ const light=t==="light"; document.body.classList.toggle("light",light);
+  const b=document.getElementById("themeBtn"); if(b) b.textContent=light?"☀ Light":"🌙 Dark"; }
+function toggleTheme(){ const light=!document.body.classList.contains("light"); const t=light?"light":"dark";
+  try{localStorage.setItem(THEME_KEY,t);}catch(e){} applyTheme(t); }
+applyTheme((function(){try{return localStorage.getItem(THEME_KEY);}catch(e){return null;}})()||"dark");
 
 /* startup */
 renderAll(); go("dashboard");
