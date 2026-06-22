@@ -101,6 +101,11 @@
   .calcnt{font-size:13px;font-weight:700}
   .calpf{font-size:10px;display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
   .calpf b{font-weight:700}
+  .calprocs{display:flex;flex-direction:column;gap:2px;margin:1px 0}
+  .calproc{font-size:10px;line-height:1.25;background:var(--chip);border-radius:4px;padding:1px 5px;display:flex;align-items:center;gap:4px}
+  .calproc .calprocn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .calproc .calsteps{flex:none;font-weight:700;color:var(--accent);font-size:9px}
+  .calcell.has:hover .calproc{background:rgba(6,40,59,.12)}
 </style>
 </head>
 <body>
@@ -1032,9 +1037,15 @@ function renderCalendar(){
     const k=calKey({y,m,d}); const ex=b.byDay[k]||[]; const a=aggregate(ex);
     const cls="calcell"+(ex.length?" has":"")+(k===todayK?" today":"");
     const pf=ex.length?`<div class="calpf">${a.passed?`<span style="color:#22c55e"><b>${a.passed}</b>P</span>`:""}${a.failed?`<span style="color:#ef4444"><b>${a.failed}</b>F</span>`:""}${a.blocked?`<span style="color:#f59e0b"><b>${a.blocked}</b>B</span>`:""}${a.notrun?`<span class="muted"><b>${a.notrun}</b>·</span>`:""}</div>`:"";
+    let procHtml="";
+    if(ex.length){ const pm={};
+      ex.forEach(e=>{ const p=e.process||"(none)"; const o=pm[p]||(pm[p]={n:0,steps:0}); o.n++; o.steps+=(e.steps||[]).length; });
+      const procs=Object.keys(pm).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y)));
+      const shown=procs.slice(0,4).map(p=>`<div class="calproc" title="${esc(p)} — ${pm[p].steps} step(s)"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div>`).join("");
+      procHtml=`<div class="calprocs">${shown}${procs.length>4?`<div class="calproc muted">+${procs.length-4} more…</div>`:""}</div>`; }
     cells+=`<div class="${cls}"${ex.length?` onclick="openCalDay('${k}')"`:""}>`
       +`<div class="caldate">${d}</div>`
-      +(ex.length?`<div class="calcnt">${ex.length} test${ex.length>1?"s":""}</div>${progressBar(ex)}${pf}`:"")
+      +(ex.length?`<div class="calcnt">${ex.length} test${ex.length>1?"s":""}</div>${procHtml}${progressBar(ex)}${pf}`:"")
       +`</div>`;
   }
   // unscheduled list
