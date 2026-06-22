@@ -112,6 +112,9 @@
   .calpf b{font-weight:700}
   .calprocs{display:flex;flex-direction:column;gap:2px;margin:1px 0}
   .calproc{font-size:10px;line-height:1.25;background:var(--chip);border-radius:4px;padding:1px 5px;display:flex;align-items:center;gap:4px}
+  .calproc[draggable=true]{cursor:grab}
+  .calproc[draggable=true]:active{cursor:grabbing}
+  .calcell.dragover{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent2);color:var(--oncolor)}
   .calproc .calprocn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .calgrid.calall .calcell{min-height:auto}
   .calgrid.calall .calproc{align-items:flex-start}
@@ -637,7 +640,7 @@ function renderLibrary(){
       <input id="impSheet" value="Tester_View" title="sheet name (UAT5 step-level = Tester_View)" style="width:110px"/>
     </div>
     <table>
-      <thead><tr><th style="width:120px">Order</th><th>PRC (process)</th><th>Scenario</th><th>Domain</th><th>Default tester</th><th style="width:110px"></th></tr></thead>
+      <thead><tr><th style="width:120px">Order</th><th>PRC (process)</th><th>Scenario</th><th>Domain</th><th>Default tester</th><th style="width:150px"></th></tr></thead>
       <tbody>
       ${rows.map(c=>{const steps=c.steps||[];const open=libExpanded.has(String(c.id));return `<tr>
         <td><div class="ord"><button onclick="moveLib('${c.id}',-1)">▲</button><input type="number" value="${c.order||0}" onchange="setLibOrder('${c.id}',this.value)"/><button onclick="moveLib('${c.id}',1)">▼</button></div></td>
@@ -645,7 +648,7 @@ function renderLibrary(){
         <td>${esc(c.scenario)}${c.txnRef?'<span class="reftag">txn ref</span>':''}${steps.length?` <span class="steptoggle" onclick="toggleLibSteps('${c.id}')">${open?'▾':'▸'} ${steps.length} step${steps.length>1?'s':''}</span>`:''}</td>
         <td>${esc(c.domain)}</td>
         <td class="muted">${esc(testerNames(libTesterIds(c))||"—")}</td>
-        <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button></td>
+        <td><button class="sm" onclick="editLibItem('${c.id}')">✎</button> <button class="sm" onclick="cloneLibItem('${c.id}')" title="clone">⧉</button> <button class="sm" onclick="pushOneToIteration('${c.id}')" title="Push this scenario to the active iteration">➜</button></td>
       </tr>${open&&steps.length?`<tr class="steprow"><td></td><td colspan="5"><div class="muted" style="font-size:12px;margin-bottom:2px">Steps to follow:</div><ol class="steplist">${steps.map(s=>`<li>${esc(stepText(s))}${stepTagsHTML(s)}</li>`).join("")}</ol></td></tr>`:''}`;}).join("")}
       </tbody>
     </table>`}`;
@@ -656,9 +659,24 @@ function moveLib(id,dir){ const ids=libDisplayedIds(); const idx=ids.indexOf(Str
   if(idx<0||j<0||j>=ids.length)return; const a=libById(ids[idx]),b=libById(ids[j]); const t=a.order;a.order=b.order;b.order=t; persist(); }
 function resetLibOrder(){ let n=0; sortedLib(S.library).forEach(c=>c.order=++n); persist(); }
 function newLibItem(){ const c={id:uid(),order:(S.library.reduce((m,x)=>Math.max(m,x.order||0),0)+1),domain:"",process:"PRC-",scenario:"New scenario",defaultTesterIds:[],notes:"",prereq:"",steps:[],txnRef:false}; S.library.push(c); save(); editLibItem(c.id); }
+let pushScopeId=null; /* when set, push targets only this single library item */
+function pushScopeTarget(){ if(pushScopeId){ const c=libById(pushScopeId); return c?[c]:[]; }
+  return S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process)); }
+function pushOneToIteration(id){ pushScopeId=id; const c=libById(id); if(!c)return;
+  modal(`<h2>Push to iteration — ${esc(activeIter().name)}</h2>
+    <p class="hint">Single scenario: <b>${esc(c.process)}</b> — ${esc(c.scenario)}. Pick target entities — it is dispatched to its assigned testers × each entity (or override below). Duplicates are skipped.</p>
+    <div class="field"><label>Target entities</label><div class="chiprow">${S.config.entities.map(en=>`<label class="pill"><input type="checkbox" class="ldEnt" value="${en.code}"/> ${esc(en.code)}</label>`).join("")||'<span class="muted">No entity configured (Admin).</span>'}</div></div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1"><label>Override tester (optional)</label>${tCombo('ldTester','',"",{hidden:'ldTester',emptyLabel:'— use assigned testers —',width:'100%'})}</div>
+      <div class="field"><label>Recurrence</label><select id="ldRec"><option value="">—</option>${S.config.recurrences.map(r=>`<option>${esc(r)}</option>`).join("")}</select></div>
+    </div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="pushCancel()">Cancel</button><button class="primary" onclick="pushLibConfirm()">Add scenario</button></div>`);
+}
+function pushCancel(){ pushScopeId=null; closeModal(); }
 function pushLibToIteration(){
+  pushScopeId=null;
   loadSel.domain=libFilter.domain||""; loadSel.process=libFilter.process||"";
-  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
+  const target=pushScopeTarget();
   if(!target.length){ alert("No library definition matches the current filter."); return; }
   modal(`<h2>Push to iteration — ${esc(activeIter().name)}</h2>
     <p class="hint">${target.length} definition(s) from the current Library filter${loadSel.domain?` · domain ${esc(loadSel.domain)}`:''}${loadSel.process?` · ${esc(loadSel.process)}`:''}. Pick target entities — each test case is dispatched to its assigned testers × each entity (or override below). Duplicates are skipped.</p>
@@ -669,7 +687,7 @@ function pushLibToIteration(){
     </div>
     <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="pushLibConfirm()">Add ${target.length} definition(s)</button></div>`);
 }
-function pushLibConfirm(){ const r=loadIntoIteration(); if(r!==false) closeModal(); }
+function pushLibConfirm(){ const r=loadIntoIteration(); if(r!==false){ pushScopeId=null; closeModal(); } }
 function cloneLibItem(id){ const o=libById(id); const c={...o,id:uid(),order:(o.order||0)+1,scenario:o.scenario+" (copy)",steps:(o.steps||[]).slice(),defaultTesterIds:libTesterIds(o).slice()}; S.library.push(c); persist(); }
 function stepRowHtml(s){ const t=stepText(s); const stream=(s&&typeof s==="object"&&s.stream)||""; const app=(s&&typeof s==="object"&&s.app)||"";
   return `<div class="steprow2" style="display:flex;gap:6px;margin-bottom:4px">
@@ -919,7 +937,7 @@ function loadIntoIteration(){
   const ents=[...document.querySelectorAll(".ldEnt:checked")].map(x=>x.value);
   if(!ents.length){ alert("Select at least one target entity."); return false; }
   const formTester=$("#ldTester").value, rec=$("#ldRec").value, iterId=S.activeIterationId;
-  const target=S.library.filter(c=>(!loadSel.domain||c.domain===loadSel.domain)&&(!loadSel.process||c.process===loadSel.process));
+  const target=pushScopeTarget();
   let created=0;
   target.forEach(c=>ents.forEach(ent=>{
     const testerIds = formTester ? [formTester] : (libTesterIds(c).length?libTesterIds(c):[""]);
@@ -1057,9 +1075,9 @@ function renderCalendar(){
       ex.forEach(e=>{ const p=e.process||"(none)"; const o=pm[p]||(pm[p]={n:0,steps:0}); o.n++; o.steps+=(e.steps||[]).length; });
       const procs=Object.keys(pm).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y)));
       const cap=calShowAll?procs.length:4;
-      const shown=procs.slice(0,cap).map(p=>`<div class="calproc" title="${esc(p)} — ${pm[p].steps} step(s)"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div>`).join("");
+      const shown=procs.slice(0,cap).map(p=>`<div class="calproc" draggable="true" ondragstart="calDragStart(event,'${k}','${jsq(p)}')" title="${esc(p)} — ${pm[p].steps} step(s) · drag to another day to reschedule"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div>`).join("");
       procHtml=`<div class="calprocs">${shown}${(!calShowAll&&procs.length>4)?`<div class="calproc muted">+${procs.length-4} more…</div>`:""}</div>`; }
-    cells+=`<div class="${cls}"${ex.length?` onclick="openCalDay('${k}')"`:""}>`
+    cells+=`<div class="${cls}" data-k="${k}" ondragover="calDragOver(event)" ondragleave="calDragLeave(event)" ondrop="calDrop(event,'${k}')"${ex.length?` onclick="openCalDay('${k}')"`:""}>`
       +`<div class="caldate">${d}</div>`
       +(ex.length?`<div class="calcnt">${ex.length} test${ex.length>1?"s":""}</div>${procHtml}${progressBar(ex)}${pf}`:"")
       +`</div>`;
@@ -1091,6 +1109,24 @@ function renderCalendar(){
 function calNav(delta){ if(!calYM)renderCalendar(); let m=calYM.m+delta,y=calYM.y; while(m<0){m+=12;y--;} while(m>11){m-=12;y++;} calYM={y,m}; renderCalendar(); }
 function calToday(){ const n=new Date(); calYM={y:n.getFullYear(),m:n.getMonth()}; renderCalendar(); }
 function calToggleAll(){ calShowAll=!calShowAll; renderCalendar(); }
+/* drag & drop: move a PRC from one day to another → rewrites testDate on its executions */
+let calDrag=null; // {key, proc}
+function calDragStart(ev,key,proc){ calDrag={key,proc}; try{ ev.dataTransfer.effectAllowed="move"; ev.dataTransfer.setData("text/plain",proc); }catch(e){} ev.stopPropagation(); }
+function calDragOver(ev){ if(!calDrag)return; ev.preventDefault(); try{ev.dataTransfer.dropEffect="move";}catch(e){} const c=ev.currentTarget; if(c&&c.getAttribute("data-k")!==calDrag.key)c.classList.add("dragover"); }
+function calDragLeave(ev){ const c=ev.currentTarget; if(c)c.classList.remove("dragover"); }
+function calDrop(ev,dstKey){ ev.preventDefault(); ev.stopPropagation(); const c=ev.currentTarget; if(c)c.classList.remove("dragover");
+  if(!calDrag||dstKey===calDrag.key){ calDrag=null; return; }
+  calMoveProc(calDrag.key,calDrag.proc,dstKey); calDrag=null; }
+/* rebuild a date string at target day, preserving the original format & any suffix (AM/PM/time) */
+function reformatDate(orig,t){ orig=String(orig||"").trim(); const pad=n=>String(n).padStart(2,"0");
+  let mm=orig.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(.*)$/); if(mm) return `${t.y}-${pad(t.m+1)}-${pad(t.d)}${mm[4]||""}`;
+  mm=orig.match(/^(\d{1,2})([\/.])(\d{1,2})[\/.](\d{2,4})(.*)$/); if(mm){ const sep=mm[2]; return `${pad(t.d)}${sep}${pad(t.m+1)}${sep}${t.y}${mm[5]||""}`; }
+  return `${pad(t.d)}/${pad(t.m+1)}/${t.y}`; }
+function calMoveProc(srcKey,proc,dstKey){
+  const dp=dstKey.split("-").map(Number); const t={y:dp[0],m:dp[1]-1,d:dp[2]};
+  let n=0; iterExecs().forEach(e=>{ const p=parseTestDate(e.testDate); if(!p)return;
+    if(calKey(p)===srcKey&&(e.process||"(none)")===proc){ e.testDate=reformatDate(e.testDate,t); e.updatedAt=new Date().toISOString(); n++; } });
+  if(n) persist(); else renderCalendar(); }
 function openCalDay(k){ const ex=calBuckets().byDay[k]||[]; const p=k.split("-"); showExecModal("Tests due "+p[2]+"/"+p[1]+"/"+p[0],ex); }
 function openCalUns(lbl){ const ex=calBuckets().uns[lbl]||[]; showExecModal("Tests — "+esc(lbl),ex); }
 
