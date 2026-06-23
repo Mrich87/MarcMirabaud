@@ -1695,7 +1695,7 @@ function importTesterResults(input){
   r.onload=e=>{ try{ const p=JSON.parse(e.target.result); if(p._type!=="MCEU_TESTER_RESULTS"){alert("Not a tester results file.");return;}
     let upd=0,add=0;
     (p.results||[]).forEach(res=>{ const ex=S.executions.find(x=>x.id===res.id);
-      if(ex){ ex.status=res.status; ex.comment=res.comment||""; ex.testDate=res.testDate||ex.testDate; if(res.txnRefValue!=null)ex.txnRefValue=res.txnRefValue; if(res.failedSteps)ex.failedSteps=res.failedSteps; if(res.screens)ex.screens=res.screens; ex.updatedAt=new Date().toISOString(); upd++; } });
+      if(ex){ ex.status=res.status; ex.comment=res.comment||""; ex.testDate=res.testDate||ex.testDate; if(res.txnRefValue!=null)ex.txnRefValue=res.txnRefValue; if(res.failedSteps)ex.failedSteps=res.failedSteps; if(res.screens)ex.screens=res.screens; delete ex.resultBy; delete ex.resultAt; ex.updatedAt=new Date().toISOString(); upd++; } });
     (p.adhoc||[]).forEach(a=>{ S.executions.push({id:uid(),iterationId:p.iterationId,libraryItemId:null,process:a.process||"(ad-hoc)",scenario:a.scenario||"",domain:"",
       entity:a.entity||"",testerId:p.testerId,status:a.status||"Not started",comment:a.comment||"",recurrence:"",testDate:a.testDate||"",adhoc:true,updatedAt:new Date().toISOString()}); add++; });
     renderAll(); save(); alert(`Results merged for ${esc(p.testerName||"tester")}: ${upd} updated, ${add} ad-hoc added.`);
