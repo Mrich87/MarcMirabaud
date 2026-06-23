@@ -1370,18 +1370,19 @@ function applyPlanning(rows, defEnt, weekly, libraryOnly, europePriority){
   const byNum={}; rows.forEach(r=>{ const n=prcNum(r.prc); if(n==null)return;
     const ord=(europePriority?(r.europe?"0":"1"):"0")+"|"+r.date+"|"+(r.slot==="PM"?"1":"0");
     if(!byNum[n]||ord<byNum[n].ord) byNum[n]={ord,date:r.date,slot:r.slot,prc:r.prc,desc:r.desc,europe:r.europe}; });
-  const nums=Object.keys(byNum); let created=0,updated=0,skipped=0; const notFound=[]; const touched=new Set(); const itBefore=S.iterations.length;
+  const nums=Object.keys(byNum); let created=0,updated=0,skipped=0,unmatched=0; const notFound=[],unmatchedList=[]; const touched=new Set(); const itBefore=S.iterations.length;
+  const noRange=(it,d)=>!(it.startDate&&it.endDate&&it.startDate<=d&&d<=it.endDate);
   nums.forEach(n=>{ const p=byNum[n]; const now=()=>new Date().toISOString();
     const stamp=p.date+(p.slot?(" "+p.slot):"");
     const libItems=S.library.filter(c=>prcNum(c.process)===+n);
     if(!libItems.length){
       if(libraryOnly){ skipped++; return; }
-      const it=planIterFor(p.date,weekly); touched.add(it.id); notFound.push(p.prc+(p.desc?" "+p.desc:""));
+      const it=planIterFor(p.date,weekly); touched.add(it.id); if(noRange(it,p.date)){unmatched++;unmatchedList.push(p.prc+" ("+p.date+")");} notFound.push(p.prc+(p.desc?" "+p.desc:""));
       const ex=S.executions.find(e=>e.iterationId===it.id&&prcNum(e.process)===+n&&e.adhoc);
       if(ex){ ex.testDate=stamp; ex.updatedAt=now(); updated++; }
       else { S.executions.push({id:uid(),iterationId:it.id,libraryItemId:null,process:p.prc+(p.desc?(" "+p.desc):""),scenario:p.desc||"(planned)",domain:"",steps:[],prereq:"",txnRef:false,txnRefValue:"",entity:defEnt,testerId:"",status:"Not started",comment:"",recurrence:"",testDate:stamp,adhoc:true,updatedAt:now()}); created++; }
       return; }
-    const it=planIterFor(p.date,weekly); touched.add(it.id);
+    const it=planIterFor(p.date,weekly); touched.add(it.id); if(noRange(it,p.date)){unmatched++;unmatchedList.push(p.prc+" ("+p.date+")");}
     libItems.forEach(c=>{ const matches=S.executions.filter(e=>e.iterationId===it.id&&e.process===c.process&&e.scenario===c.scenario);
       if(matches.length){ matches.forEach(e=>{ e.testDate=stamp; e.updatedAt=now(); }); updated+=matches.length; }
       else { S.executions.push({id:uid(),iterationId:it.id,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain||"",steps:(c.steps||[]).slice(),prereq:c.prereq||"",txnRef:!!c.txnRef,txnRefValue:"",entity:defEnt,testerId:"",status:"Not started",comment:"",recurrence:"",testDate:stamp,adhoc:false,updatedAt:now()}); created++; } }); });
@@ -1395,6 +1396,7 @@ function applyPlanning(rows, defEnt, weekly, libraryOnly, europePriority){
       <li><b>${updated}</b> existing execution(s) dated</li>
       <li><b>${itCreated}</b> weekly iteration(s) created</li>
       ${skipped?`<li class="muted"><b>${skipped}</b> PRC skipped (not in Library — Geneva-only)</li>`:''}
+      ${unmatched?`<li style="color:#f59e0b"><b>${unmatched}</b> test(s) had no iteration matching their date (placed in the active one) — check your iteration date ranges:<br><span class="muted" style="font-size:12px">${esc(unmatchedList.slice(0,15).join(" · "))}${unmatchedList.length>15?' …':''}</span></li>`:''}
       ${notFound.length?`<li style="color:#f59e0b"><b>${notFound.length}</b> PRC not found in Library (added as placeholders):<br><span class="muted" style="font-size:12px">${esc(notFound.slice(0,15).join(" · "))}${notFound.length>15?' …':''}</span></li>`:''}
     </ul>
     <p class="hint">The calendar (all touched iterations selected) now shows the program. Assign testers later — entity defaults to ${esc(defEnt)}; tester nationality refines per entity.</p>
