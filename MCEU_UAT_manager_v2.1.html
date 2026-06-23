@@ -1191,6 +1191,7 @@ function renderCalendar(){
         <button class="ghost" onclick="calNav(1)">Next ›</button>
         <button class="ghost" onclick="calToday()">Today</button>
         <button class="${calShowAll?'primary':'ghost'}" onclick="calToggleAll()" title="Show every process in each day (full view for screenshot / slide)">${calShowAll?'▣ Showing all':'▦ Show all'}</button>
+        <button class="ghost" onclick="exportPlanning()" title="Download a printable program (month overview + weekly planner), no assignments — to share with testers">⬇ Export planning</button>
       </div>
       <div class="muted" style="font-size:12px;margin-top:4px">${totalScheduled} test(s) with a calendar date · ${totalUns} unscheduled${monthHasData?"":' · <span style="color:#f59e0b">no test this month — use Prev/Next</span>'}</div>
       <div class="calgrid${calShowAll?' calall':''}">${cells}</div>
@@ -1250,6 +1251,105 @@ function openCalProcInvite(k,proc,half){
     <div class="toolbar" style="margin-top:10px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
 }
 function openCalUns(lbl){ const ex=calBuckets().uns[lbl]||[]; showExecModal("Tests — "+esc(lbl),ex); }
+/* ---- printable campaign program (month grid + weekly planner), no assignments ---- */
+function exportPlanning(){
+  const all=viewExecs();
+  const sched=all.filter(e=>parseTestDate(e.testDate));
+  if(!sched.length){ alert("No scheduled test yet — set execution dates first."); return; }
+  const byDay={}; sched.forEach(e=>{ const k=calKey(parseTestDate(e.testDate)); (byDay[k]=byDay[k]||[]).push(e); });
+  const dayKeys=Object.keys(byDay).sort();
+  const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const kd=dt=>calKey({y:dt.getFullYear(),m:dt.getMonth(),d:dt.getDate()});
+  const entBadge=code=>{ const c=(entityMeta(code)||{}).color||"#64748b"; return `<span class="ent" style="background:${c}1f;color:${c};border:1px solid ${c}66">${esc(code)}</span>`; };
+  const procChips=execs=>{ const pm={}; execs.forEach(e=>{ const p=e.process||"(none)"; const o=pm[p]||(pm[p]={scn:new Set(),ent:new Set()}); o.scn.add(e.scenario); if(e.entity)o.ent.add(e.entity); });
+    return Object.keys(pm).sort((a,b)=>naturalKey(a).localeCompare(naturalKey(b))).map(p=>{ const o=pm[p];
+      return `<div class="pchip"><span class="pname">${esc(p)}</span><span class="pcnt">${o.scn.size} sc</span>${[...o.ent].sort().map(entBadge).join("")}</div>`; }).join(""); };
+  const halves=execs=>{ const bh={AM:[],PM:[],"":[]}; execs.forEach(e=>bh[dateHalf(e.testDate)].push(e));
+    return ["AM","PM",""].map(h=>bh[h].length?`<div class="half ${h==="AM"?"am":h==="PM"?"pm":"none"}"><span class="hl">${h||"—"}</span>${procChips(bh[h])}</div>`:"").join(""); };
+  // ---- monthly grids ----
+  const monthsSet={}; dayKeys.forEach(k=>{ const p=k.split("-").map(Number); monthsSet[p[0]+"|"+(p[1]-1)]=true; });
+  const months=Object.keys(monthsSet).map(s=>s.split("|").map(Number)).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  const monthHtml=months.map(([y,mo])=>{
+    const startDow=(new Date(y,mo,1).getDay()+6)%7, daysIn=new Date(y,mo+1,0).getDate();
+    let cells=DOW.map(d=>`<div class="dow">${d}</div>`).join("");
+    for(let i=0;i<startDow;i++) cells+='<div class="cell empty"></div>';
+    for(let d=1;d<=daysIn;d++){ const k=calKey({y,m:mo,d}); const ex=byDay[k]||[];
+      cells+=`<div class="cell${ex.length?' has':''}"><div class="dn">${d}${ex.length?`<span class="dnn">${ex.length}</span>`:""}</div>${ex.length?halves(ex):""}</div>`; }
+    return `<section class="block"><h2>${MN[mo]} ${y}</h2><div class="grid">${cells}</div></section>`; }).join("");
+  // ---- weekly planner (semainier) ----
+  const weeks={}; dayKeys.forEach(k=>{ const [Y,M,D]=k.split("-").map(Number); const dt=new Date(Y,M-1,D);
+    const mon=new Date(dt); mon.setDate(dt.getDate()-((dt.getDay()+6)%7)); (weeks[kd(mon)]=weeks[kd(mon)]||true); });
+  const weekHtml=Object.keys(weeks).sort().map(wk=>{ const [Y,M,D]=wk.split("-").map(Number); const mon=new Date(Y,M-1,D);
+    const end=new Date(mon); end.setDate(mon.getDate()+6);
+    const fmt=dt=>String(dt.getDate()).padStart(2,"0")+"/"+String(dt.getMonth()+1).padStart(2,"0");
+    let cols="";
+    for(let i=0;i<7;i++){ const dt=new Date(mon); dt.setDate(mon.getDate()+i); const ex=byDay[kd(dt)]||[];
+      cols+=`<div class="wcol${ex.length?'':' empty'}"><div class="wdn">${DOW[i]} <b>${fmt(dt)}</b></div>${ex.length?halves(ex):'<div class="wnone">—</div>'}</div>`; }
+    return `<section class="weekblock"><h3>Week of ${fmt(mon)} → ${fmt(end)}</h3><div class="wgrid">${cols}</div></section>`; }).join("");
+  // ---- unscheduled ----
+  const uns=all.filter(e=>!parseTestDate(e.testDate));
+  const unsByLbl={}; uns.forEach(e=>{ const l=(e.testDate||"").trim()||"—"; (unsByLbl[l]=unsByLbl[l]||[]).push(e); });
+  const unsHtml=Object.keys(unsByLbl).length?`<section class="block"><h2>Unscheduled / to be planned</h2>${Object.keys(unsByLbl).sort().map(l=>`<div class="unsrow"><span class="unslbl">${esc(l)}</span>${procChips(unsByLbl[l])}</div>`).join("")}</section>`:"";
+  const legend=S.config.entities.map(en=>entBadge(en.code)+" "+esc(en.label)).join(" &nbsp; ");
+  const html=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${esc(S.config.campaignName)} — Program — ${esc(viewLabel())}</title>
+<style>
+:root{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--am:#f59e0b;--pm:#0ea5e9}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;color:var(--ink);background:#f1f5f9;font-size:13px;line-height:1.4}
+.page{max-width:1180px;margin:0 auto;padding:22px}
+header.cover{background:linear-gradient(120deg,#0ea5e9,#6366f1);color:#fff;border-radius:16px;padding:22px 26px;margin-bottom:20px;box-shadow:0 10px 30px rgba(2,32,71,.18)}
+header.cover h1{margin:0;font-size:24px;letter-spacing:.2px}
+header.cover .sub{opacity:.92;margin-top:4px;font-size:14px}
+header.cover .meta{margin-top:12px;font-size:12px;opacity:.92}
+.legend{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:18px;font-size:12px;display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+.legend .k{display:inline-flex;align-items:center;gap:6px}
+.swatch{width:14px;height:10px;border-radius:3px;display:inline-block}
+.block,.weekblock{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:18px;box-shadow:0 2px 10px rgba(15,23,42,.04)}
+h2{font-size:17px;margin:0 0 12px} h3{font-size:15px;margin:0 0 10px;color:#334155}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
+.dow{font-size:10px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px}
+.cell{min-height:96px;border:1px solid var(--line);border-radius:10px;padding:6px;background:#fcfdff;display:flex;flex-direction:column;gap:5px}
+.cell.empty{background:transparent;border-color:transparent}
+.cell.has{border-color:#cdd9ea}
+.dn{font-size:12px;font-weight:700;color:#334155;display:flex;justify-content:space-between;align-items:center}
+.dnn{font-size:10px;font-weight:700;color:#fff;background:#94a3b8;border-radius:10px;padding:0 6px}
+.half{border-radius:8px;padding:4px 5px;display:flex;flex-direction:column;gap:4px}
+.half.am{background:rgba(245,158,11,.12)} .half.pm{background:rgba(14,165,233,.12)} .half.none{background:rgba(148,163,184,.12)}
+.hl{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;align-self:flex-start;padding:0 6px;border-radius:5px}
+.half.am .hl{background:rgba(245,158,11,.28);color:#b45309} .half.pm .hl{background:rgba(14,165,233,.26);color:#0369a1} .half.none .hl{background:rgba(148,163,184,.28);color:#475569}
+.pchip{background:#fff;border:1px solid var(--line);border-radius:8px;padding:3px 6px;display:flex;flex-wrap:wrap;align-items:center;gap:5px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.pname{font-weight:600;font-size:11px}
+.pcnt{font-size:9px;font-weight:700;color:var(--mut);background:#eef2f7;border-radius:8px;padding:0 6px}
+.ent{font-size:9px;font-weight:700;border-radius:8px;padding:0 6px}
+.wgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.wcol{border:1px solid var(--line);border-radius:10px;padding:7px;background:#fcfdff;min-height:120px;display:flex;flex-direction:column;gap:6px}
+.wcol.empty{background:#f8fafc;opacity:.6}
+.wdn{font-size:11px;color:#334155;border-bottom:1px solid var(--line);padding-bottom:4px}
+.wnone{color:#cbd5e1;text-align:center;margin:auto;font-size:18px}
+.unsrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
+.unslbl{font-weight:700;min-width:90px}
+footer{color:var(--mut);font-size:11px;text-align:center;margin:8px 0 24px}
+.bar{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;margin-bottom:14px}
+.bar button{background:#0ea5e9;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:600;cursor:pointer;font-size:13px}
+.bar .hint{color:var(--mut);font-size:12px}
+@media print{ body{background:#fff} .page{max-width:none;padding:0} .noprint{display:none!important}
+  .block,.weekblock{break-inside:avoid;box-shadow:none} header.cover{box-shadow:none}
+  @page{size:A4 landscape;margin:10mm} }
+</style></head><body><div class="page">
+<div class="bar noprint"><button onclick="window.print()">🖨 Print / Save as PDF</button><span class="hint">Tip: choose “Landscape” and “Background graphics” in the print dialog.</span></div>
+<header class="cover"><h1>${esc(S.config.campaignName)}</h1>
+  <div class="sub">UAT campaign program — calendar view${months.length?` · ${MN[months[0][1]]} ${months[0][0]}${months.length>1?` → ${MN[months[months.length-1][1]]} ${months[months.length-1][0]}`:""}`:""}</div>
+  <div class="meta">${esc(viewLabel())} · ${sched.length} scheduled test(s)${uns.length?` · ${uns.length} to be planned`:""} · generated ${new Date().toLocaleDateString()}</div></header>
+<div class="legend"><span class="k"><span class="swatch" style="background:rgba(245,158,11,.5)"></span><b>AM</b></span><span class="k"><span class="swatch" style="background:rgba(14,165,233,.5)"></span><b>PM</b></span><span class="k">Entities: ${legend}</span><span class="k" style="color:var(--mut)">“N sc” = scenarios · no tester assignment shown</span></div>
+<h2 style="margin:6px 2px 10px">Overview</h2>${monthHtml}
+<h2 style="margin:18px 2px 10px">Weekly planner</h2>${weekHtml}
+${unsHtml}
+<footer>${esc(S.config.campaignName)} — program (no assignments). Testers receive their individual test sheets separately.</footer>
+</div></body></html>`;
+  download(`MCEU_planning_${slug(activeIter().name)}.html`, html, "text/html");
+}
 
 function renderTesterView(){
   const iter=activeIter(); const all=iterExecs();
