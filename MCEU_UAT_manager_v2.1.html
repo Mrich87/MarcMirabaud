@@ -131,10 +131,17 @@
   .calproc .calprocn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .calprocbar .pbar{height:4px;border-radius:3px;min-width:30px}
   .caldaybar{margin-top:3px;opacity:.85}
-  .calhalf{border:1px dashed transparent;border-radius:5px;padding:1px 3px 2px;margin-top:2px;display:flex;flex-direction:column;gap:2px}
-  .calhalf.has{border-color:color-mix(in srgb,var(--line) 70%,transparent);background:rgba(148,163,184,.06)}
-  .calhalflbl{font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.06em;cursor:pointer;text-transform:uppercase}
-  .calhalflbl:hover{color:var(--accent)}
+  .calhalf{border-radius:6px;padding:2px 4px 3px;margin-top:3px;display:flex;flex-direction:column;gap:2px}
+  .calhalf[data-half="AM"]{background:rgba(245,158,11,.08)}
+  .calhalf[data-half="PM"]{background:rgba(56,189,248,.08)}
+  .calhalf[data-half=""]{background:rgba(148,163,184,.07)}
+  .calhalf.has[data-half="AM"]{background:rgba(245,158,11,.15)}
+  .calhalf.has[data-half="PM"]{background:rgba(56,189,248,.15)}
+  .calhalflbl{display:inline-block;align-self:flex-start;font-size:9px;font-weight:800;letter-spacing:.08em;cursor:pointer;text-transform:uppercase;padding:0 5px;border-radius:4px}
+  .calhalf[data-half="AM"] .calhalflbl{background:rgba(245,158,11,.28);color:#f59e0b}
+  .calhalf[data-half="PM"] .calhalflbl{background:rgba(56,189,248,.28);color:#38bdf8}
+  .calhalf[data-half=""] .calhalflbl{background:rgba(148,163,184,.22);color:var(--muted)}
+  .calhalflbl:hover{filter:brightness(1.18)}
   .calhalfn{color:var(--txt)}
   .calhalf.dragover{outline:2px dashed var(--accent);outline-offset:-1px;background:var(--accent2);color:var(--oncolor)}
   .calcnt{display:inline-block}
@@ -1484,8 +1491,14 @@ th.sortable{cursor:pointer;user-select:none}
 .tcalcnt{font-size:11px;font-weight:700;color:#e2e8f0}
 .tcalitem{font-size:10px;line-height:1.3;display:flex;align-items:center;gap:4px;background:#0b1220;border-radius:4px;padding:1px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tdot{width:7px;height:7px;border-radius:50%;flex:none;display:inline-block}
-.tcalhalf{display:flex;flex-direction:column;gap:2px;border-top:1px solid #2a3a52;padding-top:2px;margin-top:2px}
-.tcalhalflbl{font-size:9px;font-weight:700;letter-spacing:.06em;color:#94a3b8;text-transform:uppercase}
+.tcalhalf{display:flex;flex-direction:column;gap:2px;border-radius:6px;padding:3px 4px;margin-top:3px}
+.tcalhalf.am{background:rgba(245,158,11,.13)}
+.tcalhalf.pm{background:rgba(56,189,248,.13)}
+.tcalhalf.none{background:rgba(148,163,184,.10)}
+.tcalhalflbl{display:inline-block;align-self:flex-start;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:0 5px;border-radius:4px;margin-bottom:1px}
+.tcalhalf.am .tcalhalflbl{background:rgba(245,158,11,.30);color:#fcd34d}
+.tcalhalf.pm .tcalhalflbl{background:rgba(56,189,248,.30);color:#7dd3fc}
+.tcalhalf.none .tcalhalflbl{background:rgba(148,163,184,.25);color:#cbd5e1}
 .tcaluns{margin-top:12px;font-size:12px;color:#94a3b8;background:#0b1220;border:1px solid #334155;border-radius:8px;padding:8px 12px}
 </style></head><body>
 <header><h1 id="sheetTitle">UAT Test Sheet</h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option><option value="es">ES</option></select><button id="btnSaveTop" onclick="saveJSON()" style="padding:6px 12px"></button></header>
@@ -1725,7 +1738,8 @@ function tcalRender(){ var b=tcalBuckets();
     if(ex.length){ inner+='<div class="tcalcnt">'+ex.length+' test'+(ex.length>1?'s':'')+'</div>';
       var bh={AM:[],PM:[],"":[]}; ex.forEach(function(t){ (bh[thalf(t.testDate)]=bh[thalf(t.testDate)]||[]).push(t); });
       ["AM","PM",""].forEach(function(hf){ var arr=bh[hf]||[]; if(!arr.length)return;
-        inner+='<div class="tcalhalf"><span class="tcalhalflbl">'+(hf||"—")+'</span>'
+        var hc=hf==="AM"?" am":hf==="PM"?" pm":" none";
+        inner+='<div class="tcalhalf'+hc+'"><span class="tcalhalflbl">'+(hf||"—")+'</span>'
           + arr.map(function(t){ return '<div class="tcalitem" title="'+esc((t.process||"")+" — "+(t.scenario||""))+'"><span class="tdot" style="background:'+tstColor(t.status)+'"></span>'+esc(t.process||t.scenario||"")+'</div>'; }).join("")
           + '</div>'; }); }
     cells+='<div class="tcalcell'+(ex.length?" has":"")+(k===todayK?" today":"")+'">'+inner+'</div>'; }
