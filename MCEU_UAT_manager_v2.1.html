@@ -1271,7 +1271,7 @@ function planIterFor(dateStr,weekly){
 function parsePlanningText(txt){ const out=[];
   String(txt||"").split(/\r?\n/).forEach(line=>{ const m=line.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})\s+(?:(AM|PM)\s+)?(PRC[-\s]?\d+)\s*(.*)$/i);
     if(m){ const mo=+m[2], dd=+m[3]; if(mo<1||mo>12||dd<1||dd>31) return; const date=m[1]+"-"+String(mo).padStart(2,"0")+"-"+String(dd).padStart(2,"0");
-      out.push({date,slot:(m[4]||"").toUpperCase(),prc:m[5].toUpperCase().replace(/\s+/,"-"),desc:(m[6]||"").trim()}); } });
+      out.push({date,slot:(m[4]||"").toUpperCase(),prc:m[5].toUpperCase().replace(/\s+/,"-"),desc:(m[6]||"").trim(),europe:/europe/i.test(m[6]||"")}); } });
   return out; }
 function parseICS(txt){
   const s=String(txt||"").replace(/\r\n/g,"\n").replace(/\n[ \t]/g,""); // unfold folded lines
@@ -1281,7 +1281,7 @@ function parseICS(txt){
     if(/^END:VEVENT/i.test(line)){ if(cur&&cur.dtstart){ const dm=cur.dtstart.match(/(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2}))?/);
         const blob=((cur.summary||"")+" "+(cur.description||"")+" "+(cur.location||"")).trim();
         const pm=blob.match(/PRC[-\s]?\d+/i);
-        if(dm&&pm){ const slot=dm[4]!=null?((+dm[4])<12?"AM":"PM"):""; rows.push({date:dm[1]+"-"+dm[2]+"-"+dm[3],slot,prc:pm[0].toUpperCase().replace(/\s+/,"-"),desc:(cur.summary||blob.slice(0,80)).trim(),search:blob.toLowerCase()}); } }
+        if(dm&&pm){ const slot=dm[4]!=null?((+dm[4])<12?"AM":"PM"):""; rows.push({date:dm[1]+"-"+dm[2]+"-"+dm[3],slot,prc:pm[0].toUpperCase().replace(/\s+/,"-"),desc:(cur.summary||blob.slice(0,80)).trim(),search:blob.toLowerCase(),europe:/europe/i.test((cur.summary||"")+" "+(cur.location||""))}); } }
       cur=null; return; }
     if(!cur)return;
     const m=line.match(/^(DTSTART|SUMMARY|DESCRIPTION|LOCATION)([^:]*):(.*)$/i);
@@ -1299,7 +1299,11 @@ function openImportPlanning(){
       <div class="field"><label>Default entity</label><select id="pl_ent">${S.config.entities.map(en=>`<option ${(hasMceu?en.code==="MCEU":false)?'selected':''}>${esc(en.code)}</option>`).join("")}</select></div>
       <label class="pill" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="pl_weekly" checked/> Create weekly iterations as needed</label>
     </div>
-    <div class="field" style="margin-top:8px"><label>Keep only events whose title contains (comma = all terms; e.g. <i>UAT 1, europe</i>)</label><input id="pl_filter" placeholder="leave empty = keep all"/></div>
+    <div class="row" style="gap:14px;margin-top:8px">
+      <label class="pill" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="pl_europe" checked/> Prioritise « Europe » events (when a PRC has several dates)</label>
+      <label class="pill" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="pl_libonly" checked/> Only PRCs in the Library (skip Geneva-only)</label>
+    </div>
+    <div class="field" style="margin-top:8px"><label>Optional hard filter — keep only events whose title contains (comma = all terms; e.g. <i>UAT 1</i>)</label><input id="pl_filter" placeholder="leave empty = keep all (acceptance status is ignored)"/></div>
     <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="runImportPlanning()">Import</button></div>`);
 }
 function planToPreview(rows){ const ta=$("#pl_text"); if(ta) ta.value=rows.map(r=>r.date+"\t"+(r.slot||"")+"\t"+r.prc+"\t"+(r.desc||"")).join("\n"); if(!rows.length)alert("No Date/PRC events detected in the file."); }
@@ -1326,20 +1330,24 @@ function runImportPlanning(){
     if(!rows.length){ alert("No event matches the filter ("+terms.join(", ")+"). "+before+" event(s) were read."); return; } }
   const nprc=new Set(rows.map(r=>prcNum(r.prc)).filter(x=>x!=null)).size;
   if(!confirm("Schedule "+nprc+" process(es) from "+rows.length+" line(s)?")) return;
-  applyPlanning(rows, ($("#pl_ent")||{}).value||"MCEU", ($("#pl_weekly")||{}).checked!==false);
+  applyPlanning(rows, ($("#pl_ent")||{}).value||"MCEU", ($("#pl_weekly")||{}).checked!==false, ($("#pl_libonly")||{}).checked!==false, ($("#pl_europe")||{}).checked!==false);
 }
-function applyPlanning(rows, defEnt, weekly){
+function applyPlanning(rows, defEnt, weekly, libraryOnly, europePriority){
   const byNum={}; rows.forEach(r=>{ const n=prcNum(r.prc); if(n==null)return;
-    const ord=r.date+"|"+(r.slot==="PM"?"1":"0"); if(!byNum[n]||ord<byNum[n].ord) byNum[n]={ord,date:r.date,slot:r.slot,prc:r.prc,desc:r.desc}; });
-  const nums=Object.keys(byNum); let created=0,updated=0; const notFound=[]; const touched=new Set(); const itBefore=S.iterations.length;
-  nums.forEach(n=>{ const p=byNum[n]; const it=planIterFor(p.date,weekly); touched.add(it.id);
-    const stamp=p.date+(p.slot?(" "+p.slot):""); const now=()=>new Date().toISOString();
+    const ord=(europePriority?(r.europe?"0":"1"):"0")+"|"+r.date+"|"+(r.slot==="PM"?"1":"0");
+    if(!byNum[n]||ord<byNum[n].ord) byNum[n]={ord,date:r.date,slot:r.slot,prc:r.prc,desc:r.desc,europe:r.europe}; });
+  const nums=Object.keys(byNum); let created=0,updated=0,skipped=0; const notFound=[]; const touched=new Set(); const itBefore=S.iterations.length;
+  nums.forEach(n=>{ const p=byNum[n]; const now=()=>new Date().toISOString();
+    const stamp=p.date+(p.slot?(" "+p.slot):"");
     const libItems=S.library.filter(c=>prcNum(c.process)===+n);
-    if(!libItems.length){ notFound.push(p.prc+(p.desc?" "+p.desc:""));
+    if(!libItems.length){
+      if(libraryOnly){ skipped++; return; }
+      const it=planIterFor(p.date,weekly); touched.add(it.id); notFound.push(p.prc+(p.desc?" "+p.desc:""));
       const ex=S.executions.find(e=>e.iterationId===it.id&&prcNum(e.process)===+n&&e.adhoc);
       if(ex){ ex.testDate=stamp; ex.updatedAt=now(); updated++; }
       else { S.executions.push({id:uid(),iterationId:it.id,libraryItemId:null,process:p.prc+(p.desc?(" "+p.desc):""),scenario:p.desc||"(planned)",domain:"",steps:[],prereq:"",txnRef:false,txnRefValue:"",entity:defEnt,testerId:"",status:"Not started",comment:"",recurrence:"",testDate:stamp,adhoc:true,updatedAt:now()}); created++; }
       return; }
+    const it=planIterFor(p.date,weekly); touched.add(it.id);
     libItems.forEach(c=>{ const matches=S.executions.filter(e=>e.iterationId===it.id&&e.process===c.process&&e.scenario===c.scenario);
       if(matches.length){ matches.forEach(e=>{ e.testDate=stamp; e.updatedAt=now(); }); updated+=matches.length; }
       else { S.executions.push({id:uid(),iterationId:it.id,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain||"",steps:(c.steps||[]).slice(),prereq:c.prereq||"",txnRef:!!c.txnRef,txnRefValue:"",entity:defEnt,testerId:"",status:"Not started",comment:"",recurrence:"",testDate:stamp,adhoc:false,updatedAt:now()}); created++; } }); });
@@ -1352,6 +1360,7 @@ function applyPlanning(rows, defEnt, weekly){
       <li><b>${created}</b> execution(s) created <span class="muted">(entity ${esc(defEnt)})</span></li>
       <li><b>${updated}</b> existing execution(s) dated</li>
       <li><b>${itCreated}</b> weekly iteration(s) created</li>
+      ${skipped?`<li class="muted"><b>${skipped}</b> PRC skipped (not in Library — Geneva-only)</li>`:''}
       ${notFound.length?`<li style="color:#f59e0b"><b>${notFound.length}</b> PRC not found in Library (added as placeholders):<br><span class="muted" style="font-size:12px">${esc(notFound.slice(0,15).join(" · "))}${notFound.length>15?' …':''}</span></li>`:''}
     </ul>
     <p class="hint">The calendar (all touched iterations selected) now shows the program. Assign testers later — entity defaults to ${esc(defEnt)}; tester nationality refines per entity.</p>
