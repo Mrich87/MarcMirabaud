@@ -1191,7 +1191,7 @@ function renderCalendar(){
         <button class="ghost" onclick="calNav(1)">Next ›</button>
         <button class="ghost" onclick="calToday()">Today</button>
         <button class="${calShowAll?'primary':'ghost'}" onclick="calToggleAll()" title="Show every process in each day (full view for screenshot / slide)">${calShowAll?'▣ Showing all':'▦ Show all'}</button>
-        <button class="ghost" onclick="exportPlanning()" title="Download a printable program (month overview + weekly planner), no assignments — to share with testers">⬇ Export planning</button>
+        <button class="ghost" onclick="openExportPlanning()" title="Download a printable program (choose month range), no assignments — to share with testers">⬇ Export planning</button>
       </div>
       <div class="muted" style="font-size:12px;margin-top:4px">${totalScheduled} test(s) with a calendar date · ${totalUns} unscheduled${monthHasData?"":' · <span style="color:#f59e0b">no test this month — use Prev/Next</span>'}</div>
       <div class="calgrid${calShowAll?' calall':''}">${cells}</div>
@@ -1252,12 +1252,36 @@ function openCalProcInvite(k,proc,half){
 }
 function openCalUns(lbl){ const ex=calBuckets().uns[lbl]||[]; showExecModal("Tests — "+esc(lbl),ex); }
 /* ---- printable campaign program (month grid + weekly planner), no assignments ---- */
-function exportPlanning(){
+function openExportPlanning(){
+  const sched=viewExecs().filter(e=>parseTestDate(e.testDate));
+  if(!sched.length){ alert("No scheduled test yet — set execution dates first."); return; }
+  const set={}; sched.forEach(e=>{ const p=parseTestDate(e.testDate); set[p.y*12+p.m]=true; });
+  const ms=Object.keys(set).map(Number).sort((a,b)=>a-b);
+  const lbl=v=>CAL_MONTHS[v%12]+" "+Math.floor(v/12);
+  const cur=calYM?(calYM.y*12+calYM.m):ms[0]; const def=ms.indexOf(cur)>=0?cur:ms[0];
+  const opts=sel=>ms.map(v=>`<option value="${v}" ${v===sel?'selected':''}>${lbl(v)}</option>`).join("");
+  modal(`<h2>Export planning</h2>
+    <p class="hint">Pick the month range to include (default = the month shown in the calendar).</p>
+    <div class="row">
+      <div class="field"><label>From</label><select id="ep_from">${opts(def)}</select></div>
+      <div class="field"><label>To</label><select id="ep_to">${opts(def)}</select></div>
+    </div>
+    <label class="pill" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="ep_uns"/> Include unscheduled (W24 / TBD…)</label>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="runExportPlanning()">Export</button></div>`);
+}
+function runExportPlanning(){ let f=+$("#ep_from").value, t=+$("#ep_to").value; if(f>t){const x=f;f=t;t=x;}
+  const uns=$("#ep_uns").checked; closeModal();
+  exportPlanning({fy:Math.floor(f/12),fm:f%12,ty:Math.floor(t/12),tm:t%12,uns}); }
+function exportPlanning(range){
   const all=viewExecs();
   const sched=all.filter(e=>parseTestDate(e.testDate));
   if(!sched.length){ alert("No scheduled test yet — set execution dates first."); return; }
   const byDay={}; sched.forEach(e=>{ const k=calKey(parseTestDate(e.testDate)); (byDay[k]=byDay[k]||[]).push(e); });
+  if(range){ const lo=range.fy*12+range.fm, hi=range.ty*12+range.tm;
+    Object.keys(byDay).forEach(k=>{ const p=k.split("-").map(Number); const ym=p[0]*12+(p[1]-1); if(ym<lo||ym>hi) delete byDay[k]; }); }
   const dayKeys=Object.keys(byDay).sort();
+  if(!dayKeys.length){ alert("No scheduled test in the selected range."); return; }
+  const schedCount=Object.values(byDay).reduce((s,a)=>s+a.length,0);
   const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
   const kd=dt=>calKey({y:dt.getFullYear(),m:dt.getMonth(),d:dt.getDate()});
@@ -1287,8 +1311,8 @@ function exportPlanning(){
     for(let i=0;i<7;i++){ const dt=new Date(mon); dt.setDate(mon.getDate()+i); const ex=byDay[kd(dt)]||[];
       cols+=`<div class="wcol${ex.length?'':' empty'}"><div class="wdn">${DOW[i]} <b>${fmt(dt)}</b></div>${ex.length?halves(ex):'<div class="wnone">—</div>'}</div>`; }
     return `<section class="weekblock"><h3>Week of ${fmt(mon)} → ${fmt(end)}</h3><div class="wgrid">${cols}</div></section>`; }).join("");
-  // ---- unscheduled ----
-  const uns=all.filter(e=>!parseTestDate(e.testDate));
+  // ---- unscheduled (only when requested) ----
+  const uns=(!range||range.uns)?all.filter(e=>!parseTestDate(e.testDate)):[];
   const unsByLbl={}; uns.forEach(e=>{ const l=(e.testDate||"").trim()||"—"; (unsByLbl[l]=unsByLbl[l]||[]).push(e); });
   const unsHtml=Object.keys(unsByLbl).length?`<section class="block"><h2>Unscheduled / to be planned</h2>${Object.keys(unsByLbl).sort().map(l=>`<div class="unsrow"><span class="unslbl">${esc(l)}</span>${procChips(unsByLbl[l])}</div>`).join("")}</section>`:"";
   const legend=S.config.entities.map(en=>entBadge(en.code)+" "+esc(en.label)).join(" &nbsp; ");
@@ -1341,7 +1365,7 @@ footer{color:var(--mut);font-size:11px;text-align:center;margin:8px 0 24px}
 <div class="bar noprint"><button onclick="window.print()">🖨 Print / Save as PDF</button><span class="hint">Tip: choose “Landscape” and “Background graphics” in the print dialog.</span></div>
 <header class="cover"><h1>${esc(S.config.campaignName)}</h1>
   <div class="sub">UAT campaign program — calendar view${months.length?` · ${MN[months[0][1]]} ${months[0][0]}${months.length>1?` → ${MN[months[months.length-1][1]]} ${months[months.length-1][0]}`:""}`:""}</div>
-  <div class="meta">${esc(viewLabel())} · ${sched.length} scheduled test(s)${uns.length?` · ${uns.length} to be planned`:""} · generated ${new Date().toLocaleDateString()}</div></header>
+  <div class="meta">${esc(viewLabel())} · ${schedCount} scheduled test(s)${uns.length?` · ${uns.length} to be planned`:""} · generated ${new Date().toLocaleDateString()}</div></header>
 <div class="legend"><span class="k"><span class="swatch" style="background:rgba(245,158,11,.5)"></span><b>AM</b></span><span class="k"><span class="swatch" style="background:rgba(14,165,233,.5)"></span><b>PM</b></span><span class="k">Entities: ${legend}</span><span class="k" style="color:var(--mut)">“N sc” = scenarios · no tester assignment shown</span></div>
 <h2 style="margin:6px 2px 10px">Overview</h2>${monthHtml}
 <h2 style="margin:18px 2px 10px">Weekly planner</h2>${weekHtml}
