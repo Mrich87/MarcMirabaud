@@ -967,7 +967,7 @@ function renderCampaign(){
           <select onchange="trkFilter.entity=this.value;renderCampaign()"><option value="">All entities</option>${S.config.entities.map(en=>`<option ${trkFilter.entity===en.code?'selected':''}>${esc(en.code)}</option>`).join("")}</select>
           ${tCombo('trkTester',trkFilter.tester,"trkFilter.tester=v;renderCampaign()",{emptyLabel:'All testers',placeholder:'🔍 all testers…',width:'180px'})}
           <select onchange="trkFilter.status=this.value;renderCampaign()"><option value="">All statuses</option>${S.config.statuses.map(s=>`<option ${trkFilter.status===s.value?'selected':''}>${esc(s.value)}</option>`).join("")}</select>
-          <select title="Filter by execution due date — then use Tester list (Outlook) to invite that date's testers" onchange="trkFilter.date=this.value;renderCampaign()"><option value="">All dates</option>${[...new Set(iterExecs().map(e=>e.testDate).filter(Boolean))].sort().map(d=>`<option ${trkFilter.date===d?'selected':''}>${esc(d)}</option>`).join("")}</select>
+          ${(()=>{ const ds=[...new Set(iterExecs().map(e=>e.testDate).filter(Boolean))]; if(trkFilter.date&&ds.indexOf(trkFilter.date)<0)ds.push(trkFilter.date); ds.sort(); return `<select title="Filter by execution due date — then use Tester list (Outlook) to invite that date's testers" onchange="trkFilter.date=this.value;renderCampaign()"><option value="" ${!trkFilter.date?'selected':''}>All dates</option>${ds.map(d=>`<option ${trkFilter.date===d?'selected':''}>${esc(d)}</option>`).join("")}</select>`; })()}
           <div class="spacer"></div>
           <button onclick="genSpocPage()" title="Generate a standalone HTML page for the current filter so a SPOC can assign testers (then sends back the JSON)">⬇ SPOC page (HTML)</button>
           <button onclick="exportAssignments()" title="Export the same as an Excel sheet (SPOC fills the Tester column)">⬇ …or Excel</button>
@@ -982,6 +982,7 @@ function renderCampaign(){
     </details>`;
 }
 function trkSearch(v){ trkFilter.q=v; trkPage=0; const w=$("#trkTableWrap"); if(w) w.innerHTML=renderTrackingTable(); else renderCampaign(); }
+function clearTrkFilters(){ trkFilter={entity:"",tester:"",status:"",process:"",q:"",date:""}; trkPage=0; renderCampaign(); }
 function renderLoadPanel(){
   if(S.library.length===0) return '<p class="muted">Library is empty — import definitions first (Library tab).</p>';
   const domains=[...new Set(S.library.map(c=>c.domain))].filter(Boolean).sort();
@@ -1022,7 +1023,10 @@ function renderTrackingTable(){
     (!trkFilter.date||(e.testDate||"")===trkFilter.date)&&
     (!trkFilter.q||((e.process||"")+" "+(e.scenario||"")).toLowerCase().includes(trkFilter.q.toLowerCase())));
   ex=ex.sort((a,b)=>{const ka=trkKey(a,trkSort.field),kb=trkKey(b,trkSort.field);return (ka<kb?-1:ka>kb?1:0)*trkSort.dir;});
-  if(ex.length===0) return '<div class="empty">No execution in this iteration yet — load Library definitions above.</div>';
+  if(ex.length===0){ const raw=iterExecs().length;
+    return raw>0
+      ? `<div class="empty">No execution matches the current filters — <b>${raw}</b> in this iteration are hidden. <button class="sm" onclick="clearTrkFilters()">Clear filters</button></div>`
+      : '<div class="empty">No execution in this iteration yet — load Library definitions above.</div>'; }
   const total=ex.length, pages=Math.ceil(total/TRK_PAGE);
   if(trkPage>=pages) trkPage=0;
   const pageEx=ex.slice(trkPage*TRK_PAGE,(trkPage+1)*TRK_PAGE);
