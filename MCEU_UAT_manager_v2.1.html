@@ -1196,6 +1196,7 @@ function renderCalendar(){
         <button class="ghost" onclick="calToday()">Today</button>
         <button class="${calShowAll?'primary':'ghost'}" onclick="calToggleAll()" title="Show every process in each day (full view for screenshot / slide)">${calShowAll?'▣ Showing all':'▦ Show all'}</button>
         <button class="ghost" onclick="openExportPlanning()" title="Download a printable program (choose month range), no assignments — to share with testers">⬇ Export planning</button>
+        <button class="ghost" onclick="openImportPlanning()" title="Import a planning (Date / Slot / PRC) to populate the calendar from the Library">⬆ Import planning</button>
       </div>
       <div class="muted" style="font-size:12px;margin-top:4px">${totalScheduled} test(s) with a calendar date · ${totalUns} unscheduled${monthHasData?"":' · <span style="color:#f59e0b">no test this month — use Prev/Next</span>'}</div>
       <div class="calgrid${calShowAll?' calall':''}">${cells}</div>
@@ -1255,6 +1256,85 @@ function openCalProcInvite(k,proc,half){
     <div class="toolbar" style="margin-top:10px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
 }
 function openCalUns(lbl){ const ex=calBuckets().uns[lbl]||[]; showExecModal("Tests — "+esc(lbl),ex); }
+/* ---- import a planning (Date / Slot / PRC) → create dated executions, weekly iterations ---- */
+function prcNum(s){ const m=String(s==null?"":s).match(/PRC[-\s]?0*(\d+)/i); return m?parseInt(m[1],10):null; }
+function isoOf(dt){ return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
+function weekBounds(dateStr){ const p=dateStr.split("-").map(Number); const dt=new Date(p[0],p[1]-1,p[2]);
+  const mon=new Date(dt); mon.setDate(dt.getDate()-((dt.getDay()+6)%7)); const fri=new Date(mon); fri.setDate(mon.getDate()+4);
+  return {mon:isoOf(mon),fri:isoOf(fri)}; }
+function planIterFor(dateStr,weekly){
+  let it=S.iterations.find(i=>i.startDate&&i.endDate&&i.startDate<=dateStr&&dateStr<=i.endDate); if(it)return it;
+  if(!weekly) return activeIter();
+  const wb=weekBounds(dateStr); it=S.iterations.find(i=>i.startDate===wb.mon&&/week of/i.test(i.name||"")); if(it)return it;
+  const f=s=>{const q=s.split("-");return q[2]+"/"+q[1];};
+  it={id:uid(),name:"UAT — Week of "+f(wb.mon),startDate:wb.mon,endDate:wb.fri}; S.iterations.push(it); return it; }
+function parsePlanningText(txt){ const out=[];
+  String(txt||"").split(/\r?\n/).forEach(line=>{ const m=line.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})\s+(?:(AM|PM)\s+)?(PRC[-\s]?\d+)\s*(.*)$/i);
+    if(m){ const mo=+m[2], dd=+m[3]; if(mo<1||mo>12||dd<1||dd>31) return; const date=m[1]+"-"+String(mo).padStart(2,"0")+"-"+String(dd).padStart(2,"0");
+      out.push({date,slot:(m[4]||"").toUpperCase(),prc:m[5].toUpperCase().replace(/\s+/,"-"),desc:(m[6]||"").trim()}); } });
+  return out; }
+function openImportPlanning(){
+  const hasMceu=S.config.entities.some(en=>en.code==="MCEU");
+  modal(`<h2>Import planning <span class="muted" style="font-size:13px">(Date · Slot · PRC)</span></h2>
+    <p class="hint">Paste the planning (or load a .xlsx). Each PRC is scheduled at its <b>earliest</b> date; its Library scenarios are created (or existing ones dated). Weekly iterations are created as needed.</p>
+    <div class="field"><label>Paste planning</label><textarea id="pl_text" style="min-height:150px" placeholder="2026-06-18\tAM\tPRC-227\tCorporate Tax"></textarea></div>
+    <div class="row" style="align-items:flex-end;gap:14px;margin-top:6px">
+      <label class="pill" style="cursor:pointer">⬆ …or .xlsx<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="planFromFile(this)"/></label>
+      <div class="field"><label>Default entity</label><select id="pl_ent">${S.config.entities.map(en=>`<option ${(hasMceu?en.code==="MCEU":false)?'selected':''}>${esc(en.code)}</option>`).join("")}</select></div>
+      <label class="pill" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="pl_weekly" checked/> Create weekly iterations as needed</label>
+    </div>
+    <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="runImportPlanning()">Import</button></div>`);
+}
+function planFromFile(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+    const ws=wb.Sheets[wb.SheetNames[0]]; const arr=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});
+    const lines=[]; arr.forEach(row=>{ if(!row||!row.length)return; let date="",slot="",prc="",desc="";
+      row.forEach(cell=>{ if(cell instanceof Date){ if(!date)date=isoOf(cell); return; } const s=String(cell).trim(); if(!s)return;
+        if(!date&&/^\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2}/.test(s))date=s.replace(/[\/.]/g,"-");
+        else if(!slot&&/^(AM|PM)$/i.test(s))slot=s.toUpperCase();
+        else if(!prc&&/^PRC[-\s]?\d+$/i.test(s))prc=s.toUpperCase();
+        else if(prc&&!desc)desc=s; });
+      if(date&&prc)lines.push(date+"\t"+slot+"\t"+prc+"\t"+desc); });
+    const ta=$("#pl_text"); if(ta)ta.value=lines.join("\n");
+    if(!lines.length)alert("No Date/PRC rows detected in the file.");
+  }catch(err){ alert("Could not read file: "+err.message); } };
+  r.readAsArrayBuffer(f); }
+function runImportPlanning(){
+  const rows=parsePlanningText(($("#pl_text")||{}).value||"");
+  if(!rows.length){ alert("No planning rows parsed (need Date + PRC per line)."); return; }
+  const nprc=new Set(rows.map(r=>prcNum(r.prc)).filter(x=>x!=null)).size;
+  if(!confirm("Schedule "+nprc+" process(es) from "+rows.length+" line(s)?")) return;
+  applyPlanning(rows, ($("#pl_ent")||{}).value||"MCEU", ($("#pl_weekly")||{}).checked!==false);
+}
+function applyPlanning(rows, defEnt, weekly){
+  const byNum={}; rows.forEach(r=>{ const n=prcNum(r.prc); if(n==null)return;
+    const ord=r.date+"|"+(r.slot==="PM"?"1":"0"); if(!byNum[n]||ord<byNum[n].ord) byNum[n]={ord,date:r.date,slot:r.slot,prc:r.prc,desc:r.desc}; });
+  const nums=Object.keys(byNum); let created=0,updated=0; const notFound=[]; const touched=new Set(); const itBefore=S.iterations.length;
+  nums.forEach(n=>{ const p=byNum[n]; const it=planIterFor(p.date,weekly); touched.add(it.id);
+    const stamp=p.date+(p.slot?(" "+p.slot):""); const now=()=>new Date().toISOString();
+    const libItems=S.library.filter(c=>prcNum(c.process)===+n);
+    if(!libItems.length){ notFound.push(p.prc+(p.desc?" "+p.desc:""));
+      const ex=S.executions.find(e=>e.iterationId===it.id&&prcNum(e.process)===+n&&e.adhoc);
+      if(ex){ ex.testDate=stamp; ex.updatedAt=now(); updated++; }
+      else { S.executions.push({id:uid(),iterationId:it.id,libraryItemId:null,process:p.prc+(p.desc?(" "+p.desc):""),scenario:p.desc||"(planned)",domain:"",steps:[],prereq:"",txnRef:false,txnRefValue:"",entity:defEnt,testerId:"",status:"Not started",comment:"",recurrence:"",testDate:stamp,adhoc:true,updatedAt:now()}); created++; }
+      return; }
+    libItems.forEach(c=>{ const matches=S.executions.filter(e=>e.iterationId===it.id&&e.process===c.process&&e.scenario===c.scenario);
+      if(matches.length){ matches.forEach(e=>{ e.testDate=stamp; e.updatedAt=now(); }); updated+=matches.length; }
+      else { S.executions.push({id:uid(),iterationId:it.id,libraryItemId:c.id,process:c.process,scenario:c.scenario,domain:c.domain||"",steps:(c.steps||[]).slice(),prereq:c.prereq||"",txnRef:!!c.txnRef,txnRefValue:"",entity:defEnt,testerId:"",status:"Not started",comment:"",recurrence:"",testDate:stamp,adhoc:false,updatedAt:now()}); created++; } }); });
+  const itCreated=S.iterations.length-itBefore;
+  if(touched.size){ S.viewIterIds=[...touched]; if(!touched.has(S.activeIterationId)) S.activeIterationId=[...touched][0]; }
+  calYM=null; persist(); go("calendar");
+  modal(`<h2>Planning imported ✓</h2>
+    <p class="hint">${nums.length} process(es) scheduled at their earliest date.</p>
+    <ul style="line-height:1.7">
+      <li><b>${created}</b> execution(s) created <span class="muted">(entity ${esc(defEnt)})</span></li>
+      <li><b>${updated}</b> existing execution(s) dated</li>
+      <li><b>${itCreated}</b> weekly iteration(s) created</li>
+      ${notFound.length?`<li style="color:#f59e0b"><b>${notFound.length}</b> PRC not found in Library (added as placeholders):<br><span class="muted" style="font-size:12px">${esc(notFound.slice(0,15).join(" · "))}${notFound.length>15?' …':''}</span></li>`:''}
+    </ul>
+    <p class="hint">The calendar (all touched iterations selected) now shows the program. Assign testers later — entity defaults to ${esc(defEnt)}; tester nationality refines per entity.</p>
+    <div class="toolbar" style="margin-top:10px"><div class="spacer"></div><button class="primary" onclick="closeModal()">OK</button></div>`);
+}
 /* ---- printable campaign program (month grid + weekly planner), no assignments ---- */
 function openExportPlanning(){
   const sched=viewExecs().filter(e=>parseTestDate(e.testDate));
