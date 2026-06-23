@@ -1280,8 +1280,11 @@ function parseICS(txt){
     if(/^BEGIN:VEVENT/i.test(line)){ cur={}; return; }
     if(/^END:VEVENT/i.test(line)){ if(cur&&cur.dtstart){ const dm=cur.dtstart.match(/(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2}))?/);
         const blob=((cur.summary||"")+" "+(cur.description||"")+" "+(cur.location||"")).trim();
-        const pm=blob.match(/PRC[-\s]?\d+/i);
-        if(dm&&pm){ const slot=dm[4]!=null?((+dm[4])<12?"AM":"PM"):""; rows.push({date:dm[1]+"-"+dm[2]+"-"+dm[3],slot,prc:pm[0].toUpperCase().replace(/\s+/,"-"),desc:(cur.summary||blob.slice(0,80)).trim(),search:blob.toLowerCase(),europe:/europe/i.test((cur.summary||"")+" "+(cur.location||""))}); } }
+        const all=blob.match(/PRC[-\s]?\d+/ig);
+        if(dm&&all){ const slot=dm[4]!=null?((+dm[4])<12?"AM":"PM"):""; const date=dm[1]+"-"+dm[2]+"-"+dm[3];
+          const eu=/europe/i.test(blob); const desc=(cur.summary||blob.slice(0,80)).trim(); const search=blob.toLowerCase(); const seen={};
+          all.forEach(p=>{ const code=p.toUpperCase().replace(/\s+/g,"-").replace(/--+/g,"-"); if(seen[code])return; seen[code]=1;
+            rows.push({date,slot,prc:code,desc,search,europe:eu}); }); } }
       cur=null; return; }
     if(!cur)return;
     const m=line.match(/^(DTSTART|SUMMARY|DESCRIPTION|LOCATION)([^:]*):(.*)$/i);
