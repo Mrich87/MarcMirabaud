@@ -1273,19 +1273,38 @@ function parsePlanningText(txt){ const out=[];
     if(m){ const mo=+m[2], dd=+m[3]; if(mo<1||mo>12||dd<1||dd>31) return; const date=m[1]+"-"+String(mo).padStart(2,"0")+"-"+String(dd).padStart(2,"0");
       out.push({date,slot:(m[4]||"").toUpperCase(),prc:m[5].toUpperCase().replace(/\s+/,"-"),desc:(m[6]||"").trim()}); } });
   return out; }
+function parseICS(txt){
+  const s=String(txt||"").replace(/\r\n/g,"\n").replace(/\n[ \t]/g,""); // unfold folded lines
+  const rows=[]; let cur=null;
+  s.split("\n").forEach(line=>{
+    if(/^BEGIN:VEVENT/i.test(line)){ cur={}; return; }
+    if(/^END:VEVENT/i.test(line)){ if(cur&&cur.dtstart){ const dm=cur.dtstart.match(/(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2}))?/);
+        const blob=((cur.summary||"")+" "+(cur.description||"")+" "+(cur.location||"")).trim();
+        const pm=blob.match(/PRC[-\s]?\d+/i);
+        if(dm&&pm){ const slot=dm[4]!=null?((+dm[4])<12?"AM":"PM"):""; rows.push({date:dm[1]+"-"+dm[2]+"-"+dm[3],slot,prc:pm[0].toUpperCase().replace(/\s+/,"-"),desc:(cur.summary||blob.slice(0,80)).trim(),search:blob.toLowerCase()}); } }
+      cur=null; return; }
+    if(!cur)return;
+    const m=line.match(/^(DTSTART|SUMMARY|DESCRIPTION|LOCATION)([^:]*):(.*)$/i);
+    if(m){ const k=m[1].toUpperCase(); if(k==="DTSTART"){ cur.dtstart=m[3].trim(); return; }
+      const v=m[3].replace(/\\n/gi," ").replace(/\\,/g,",").replace(/\\;/g,";"); cur[k.toLowerCase()]=(cur[k.toLowerCase()]||"")+v; } });
+  return rows; }
+function parsePlanningInput(txt){ return /BEGIN:VEVENT/i.test(txt)?parseICS(txt):parsePlanningText(txt); }
 function openImportPlanning(){
   const hasMceu=S.config.entities.some(en=>en.code==="MCEU");
   modal(`<h2>Import planning <span class="muted" style="font-size:13px">(Date · Slot · PRC)</span></h2>
-    <p class="hint">Paste the planning (or load a .xlsx). Each PRC is scheduled at its <b>earliest</b> date; its Library scenarios are created (or existing ones dated). Weekly iterations are created as needed.</p>
-    <div class="field"><label>Paste planning</label><textarea id="pl_text" style="min-height:150px" placeholder="2026-06-18\tAM\tPRC-227\tCorporate Tax"></textarea></div>
+    <p class="hint">Paste the planning, or load a <b>.ics</b> (Outlook calendar) / <b>.xlsx</b>. Each PRC is scheduled at its <b>earliest</b> date (AM/PM from the event time); its Library scenarios are created (or existing ones dated). Weekly iterations are created as needed.</p>
+    <div class="field"><label>Paste planning or .ics</label><textarea id="pl_text" style="min-height:150px" placeholder="2026-06-18\tAM\tPRC-227\tCorporate Tax"></textarea></div>
     <div class="row" style="align-items:flex-end;gap:14px;margin-top:6px">
-      <label class="pill" style="cursor:pointer">⬆ …or .xlsx<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="planFromFile(this)"/></label>
+      <label class="pill" style="cursor:pointer">⬆ …or .ics / .xlsx<input type="file" accept=".ics,.xlsx,.xls,.csv" style="display:none" onchange="planFromFile(this)"/></label>
       <div class="field"><label>Default entity</label><select id="pl_ent">${S.config.entities.map(en=>`<option ${(hasMceu?en.code==="MCEU":false)?'selected':''}>${esc(en.code)}</option>`).join("")}</select></div>
       <label class="pill" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="pl_weekly" checked/> Create weekly iterations as needed</label>
     </div>
+    <div class="field" style="margin-top:8px"><label>Keep only events whose title contains (comma = all terms; e.g. <i>UAT 1, europe</i>)</label><input id="pl_filter" placeholder="leave empty = keep all"/></div>
     <div class="toolbar" style="margin-top:14px"><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="runImportPlanning()">Import</button></div>`);
 }
+function planToPreview(rows){ const ta=$("#pl_text"); if(ta) ta.value=rows.map(r=>r.date+"\t"+(r.slot||"")+"\t"+r.prc+"\t"+(r.desc||"")).join("\n"); if(!rows.length)alert("No Date/PRC events detected in the file."); }
 function planFromFile(input){ const f=input.files[0]; if(!f)return; const r=new FileReader();
+  if(/\.ics$/i.test(f.name)){ r.onload=e=>{ try{ planToPreview(parseICS(e.target.result)); }catch(err){ alert("Could not read .ics: "+err.message); } }; r.readAsText(f); return; }
   r.onload=e=>{ try{ const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
     const ws=wb.Sheets[wb.SheetNames[0]]; const arr=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});
     const lines=[]; arr.forEach(row=>{ if(!row||!row.length)return; let date="",slot="",prc="",desc="";
@@ -1300,8 +1319,11 @@ function planFromFile(input){ const f=input.files[0]; if(!f)return; const r=new 
   }catch(err){ alert("Could not read file: "+err.message); } };
   r.readAsArrayBuffer(f); }
 function runImportPlanning(){
-  const rows=parsePlanningText(($("#pl_text")||{}).value||"");
-  if(!rows.length){ alert("No planning rows parsed (need Date + PRC per line)."); return; }
+  let rows=parsePlanningInput(($("#pl_text")||{}).value||"");
+  if(!rows.length){ alert("No planning rows parsed (need Date + PRC per line, or a valid .ics)."); return; }
+  const terms=(($("#pl_filter")||{}).value||"").split(",").map(t=>t.trim().toLowerCase()).filter(Boolean);
+  if(terms.length){ const before=rows.length; rows=rows.filter(r=>{ const hay=r.search||((r.prc||"")+" "+(r.desc||"")).toLowerCase(); return terms.every(t=>hay.includes(t)); });
+    if(!rows.length){ alert("No event matches the filter ("+terms.join(", ")+"). "+before+" event(s) were read."); return; } }
   const nprc=new Set(rows.map(r=>prcNum(r.prc)).filter(x=>x!=null)).size;
   if(!confirm("Schedule "+nprc+" process(es) from "+rows.length+" line(s)?")) return;
   applyPlanning(rows, ($("#pl_ent")||{}).value||"MCEU", ($("#pl_weekly")||{}).checked!==false);
