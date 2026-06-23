@@ -130,6 +130,8 @@
   .calcell.dragover{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent2);color:var(--oncolor)}
   .calproc .calprocn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .calprocbar .pbar{height:4px;border-radius:3px;min-width:30px}
+  .calmore{font-size:10px;font-weight:600;color:var(--accent);cursor:pointer;padding:1px 5px;border-radius:4px;align-self:flex-start}
+  .calmore:hover{background:rgba(56,189,248,.14)}
   .caldaybar{margin-top:3px;opacity:.85}
   .calhalf{border-radius:6px;padding:2px 4px 3px;margin-top:3px;display:flex;flex-direction:column;gap:2px}
   .calhalf[data-half="AM"]{background:rgba(245,158,11,.08)}
@@ -1104,6 +1106,8 @@ function reassignAll(fromTid){ const inp=$("#reassign_"+(fromTid||'none')); cons
    ========================================================================= */
 let calYM=null; // {y, m} — m is 0-based; null => derive from data
 let calShowAll=false; // true => show every process per day (slide / print mode)
+let calExpand=new Set(); // per-half expand: keys "YYYY-MM-DD|AM" etc.
+function calExpandHalf(k,half){ const id=k+"|"+half; if(calExpand.has(id))calExpand.delete(id); else calExpand.add(id); renderCalendar(); }
 const CAL_MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 /* Parse a free-text testDate into {y,m,d} or null. Handles DD/MM/YYYY, ISO YYYY-MM-DD,
    optional AM/PM/time suffix. Non-dates (W24, TBD, …) return null -> Unscheduled bucket. */
@@ -1147,12 +1151,15 @@ function renderCalendar(){
   const dows=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   let cells=dows.map(d=>`<div class="caldow">${d}</div>`).join("");
   for(let i=0;i<startDow;i++) cells+='<div class="calcell empty"></div>';
-  const cap=calShowAll?999:3;
   const chipsFor=(zex,k,half)=>{ if(!zex.length)return"";
     const pm={}; zex.forEach(e=>{ const p=e.process||"(none)"; const o=pm[p]||(pm[p]={steps:0,ex:[]}); o.steps+=(e.steps||[]).length; o.ex.push(e); });
     const procs=Object.keys(pm).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y)));
+    const expanded=calShowAll||calExpand.has(k+"|"+half);
+    const cap=expanded?procs.length:3;
     const shown=procs.slice(0,cap).map(p=>{const pa=aggregate(pm[p].ex);return `<div class="calproc" draggable="true" ondragstart="calDragStart(event,'${k}','${jsq(p)}','${half}')" onclick="event.stopPropagation();openCalProcInvite('${k}','${jsq(p)}','${half}')" title="${esc(p)} — ${pm[p].steps} step(s) · ${pa.passed}P/${pa.failed}F/${pa.blocked}B/${pa.notrun} to do · click = testers to invite · drag to AM/PM or another day"><div class="calprocrow"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div><div class="calprocbar">${progressBar(pm[p].ex)}</div></div>`;}).join("");
-    return shown+((!calShowAll&&procs.length>cap)?`<div class="calproc muted">+${procs.length-cap} more…</div>`:""); };
+    let extra="";
+    if(!calShowAll && procs.length>3) extra=`<div class="calmore" onclick="event.stopPropagation();calExpandHalf('${k}','${half}')">${expanded?'− less':'+ '+(procs.length-3)+' more…'}</div>`;
+    return shown+extra; };
   const zone=(k,byHalf,half,label)=>{ const zex=byHalf[half]||[];
     return `<div class="calhalf${zex.length?' has':''}" data-k="${k}" data-half="${half}" ondragover="calDragOver(event)" ondragleave="calDragLeave(event)" ondrop="calDrop(event,'${k}','${half}')">`
       +`<div class="calhalflbl" onclick="event.stopPropagation();openCalDayHalf('${k}','${half}')">${label}${zex.length?` <span class="calhalfn">${zex.length}</span>`:''}</div>`
