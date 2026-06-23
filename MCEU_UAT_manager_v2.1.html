@@ -1484,6 +1484,8 @@ th.sortable{cursor:pointer;user-select:none}
 .tcalcnt{font-size:11px;font-weight:700;color:#e2e8f0}
 .tcalitem{font-size:10px;line-height:1.3;display:flex;align-items:center;gap:4px;background:#0b1220;border-radius:4px;padding:1px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tdot{width:7px;height:7px;border-radius:50%;flex:none;display:inline-block}
+.tcalhalf{display:flex;flex-direction:column;gap:2px;border-top:1px solid #2a3a52;padding-top:2px;margin-top:2px}
+.tcalhalflbl{font-size:9px;font-weight:700;letter-spacing:.06em;color:#94a3b8;text-transform:uppercase}
 .tcaluns{margin-top:12px;font-size:12px;color:#94a3b8;background:#0b1220;border:1px solid #334155;border-radius:8px;padding:8px 12px}
 </style></head><body>
 <header><h1 id="sheetTitle">UAT Test Sheet</h1><span class="muted" id="hdr"></span><select id="langSel" onchange="setLang(this.value)" style="margin-left:auto;width:auto"><option value="fr">FR</option><option value="en">EN</option><option value="es">ES</option></select><button id="btnSaveTop" onclick="saveJSON()" style="padding:6px 12px"></button></header>
@@ -1699,6 +1701,11 @@ function tparse(s){ s=String(s==null?"":s).trim(); if(!s)return null;
   m=s.match(/^(\\d{1,2})[\\/.](\\d{1,2})[\\/.](\\d{2,4})/); if(m){var d=+m[1],mo=+m[2]-1,y=+m[3]; if(y<100)y+=2000; if(mo>=0&&mo<12&&d>=1&&d<=31)return{y:y,m:mo,d:d}; return null;} return null;}
 function tkey(p){ return p.y+"-"+String(p.m+1).padStart(2,"0")+"-"+String(p.d).padStart(2,"0"); }
 function tstColor(st){ var m={Passed:"#22c55e",Failed:"#ef4444",Blocked:"#f59e0b","In progress":"#a855f7","N/A":"#64748b"}; return m[st]||"#475569"; }
+function thalf(s){ s=String(s||"");
+  if(/\\bPM\\b/i.test(s)||/après|aprem|afternoon|tarde/i.test(s))return "PM";
+  if(/\\bAM\\b/i.test(s)||/matin|morning|mañana/i.test(s))return "AM";
+  var t=s.match(/\\b([01]?\\d|2[0-3]):([0-5]\\d)\\b/); if(t)return (+t[1])<12?"AM":"PM";
+  return ""; }
 function tcalBuckets(){ var byDay={},uns={},months={}; var all=rows.concat(adhoc||[]);
   all.forEach(function(t){ var p=tparse(t.testDate);
     if(p){ var k=tkey(p); (byDay[k]=byDay[k]||[]).push(t); months[p.y+"-"+p.m]=true; }
@@ -1716,7 +1723,11 @@ function tcalRender(){ var b=tcalBuckets();
   var d; for(d=1;d<=daysIn;d++){ var k=tkey({y:y,m:m,d:d}); var ex=b.byDay[k]||[];
     var inner='<div class="tcaldate">'+d+'</div>';
     if(ex.length){ inner+='<div class="tcalcnt">'+ex.length+' test'+(ex.length>1?'s':'')+'</div>';
-      inner+=ex.map(function(t){ return '<div class="tcalitem" title="'+esc((t.process||"")+" — "+(t.scenario||""))+'"><span class="tdot" style="background:'+tstColor(t.status)+'"></span>'+esc(t.process||t.scenario||"")+'</div>'; }).join(""); }
+      var bh={AM:[],PM:[],"":[]}; ex.forEach(function(t){ (bh[thalf(t.testDate)]=bh[thalf(t.testDate)]||[]).push(t); });
+      ["AM","PM",""].forEach(function(hf){ var arr=bh[hf]||[]; if(!arr.length)return;
+        inner+='<div class="tcalhalf"><span class="tcalhalflbl">'+(hf||"—")+'</span>'
+          + arr.map(function(t){ return '<div class="tcalitem" title="'+esc((t.process||"")+" — "+(t.scenario||""))+'"><span class="tdot" style="background:'+tstColor(t.status)+'"></span>'+esc(t.process||t.scenario||"")+'</div>'; }).join("")
+          + '</div>'; }); }
     cells+='<div class="tcalcell'+(ex.length?" has":"")+(k===todayK?" today":"")+'">'+inner+'</div>'; }
   document.getElementById("tcalGrid").innerHTML=cells;
   document.getElementById("tcalMonth").textContent=TCAL_M[m]+" "+y;
