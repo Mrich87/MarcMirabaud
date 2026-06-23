@@ -119,7 +119,7 @@
   .calcell.has:hover{background:var(--accent2);color:var(--oncolor)}
   .caldate{font-size:12px;font-weight:600;color:var(--muted)}
   .calcell.today .caldate{color:var(--accent)}
-  .calcnt{font-size:13px;font-weight:700}
+  .calcnt{font-size:10px;font-weight:700;color:var(--muted)}
   .calpf{font-size:10px;display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
   .calpf b{font-weight:700}
   .calprocs{display:flex;flex-direction:column;gap:2px;margin:1px 0}
@@ -130,6 +130,14 @@
   .calcell.dragover{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent2);color:var(--oncolor)}
   .calproc .calprocn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .calprocbar .pbar{height:4px;border-radius:3px;min-width:30px}
+  .caldaybar{margin-top:3px;opacity:.85}
+  .calhalf{border:1px dashed transparent;border-radius:5px;padding:1px 3px 2px;margin-top:2px;display:flex;flex-direction:column;gap:2px}
+  .calhalf.has{border-color:color-mix(in srgb,var(--line) 70%,transparent);background:rgba(148,163,184,.06)}
+  .calhalflbl{font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.06em;cursor:pointer;text-transform:uppercase}
+  .calhalflbl:hover{color:var(--accent)}
+  .calhalfn{color:var(--txt)}
+  .calhalf.dragover{outline:2px dashed var(--accent);outline-offset:-1px;background:var(--accent2);color:var(--oncolor)}
+  .calcnt{display:inline-block}
   .calgrid.calall .calcell{min-height:auto}
   .calgrid.calall .calprocrow{align-items:flex-start}
   .calgrid.calall .calproc .calprocn{overflow:visible;white-space:normal;word-break:break-word}
@@ -1101,6 +1109,12 @@ function parseTestDate(s){
   return null;
 }
 function calKey(p){ return p.y+"-"+String(p.m+1).padStart(2,"0")+"-"+String(p.d).padStart(2,"0"); }
+/* AM / PM half of a free-text testDate: explicit AM/PM token, else inferred from a HH:MM time, else "" */
+function dateHalf(s){ s=String(s||"");
+  if(/\bPM\b/i.test(s)||/après|aprem|afternoon|tarde/i.test(s)) return "PM";
+  if(/\bAM\b/i.test(s)||/matin|morning|mañana/i.test(s)) return "AM";
+  const t=s.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/); if(t) return (+t[1])<12?"AM":"PM";
+  return ""; }
 function calBuckets(){
   // returns {byDay:{ "YYYY-MM-DD": [execs] }, unscheduled:[{label,execs}], months:Set("y-m") }
   const byDay={}, uns={}, months={};
@@ -1126,20 +1140,23 @@ function renderCalendar(){
   const dows=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   let cells=dows.map(d=>`<div class="caldow">${d}</div>`).join("");
   for(let i=0;i<startDow;i++) cells+='<div class="calcell empty"></div>';
+  const cap=calShowAll?999:3;
+  const chipsFor=(zex,k,half)=>{ if(!zex.length)return"";
+    const pm={}; zex.forEach(e=>{ const p=e.process||"(none)"; const o=pm[p]||(pm[p]={steps:0,ex:[]}); o.steps+=(e.steps||[]).length; o.ex.push(e); });
+    const procs=Object.keys(pm).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y)));
+    const shown=procs.slice(0,cap).map(p=>{const pa=aggregate(pm[p].ex);return `<div class="calproc" draggable="true" ondragstart="calDragStart(event,'${k}','${jsq(p)}','${half}')" onclick="event.stopPropagation();openCalProcInvite('${k}','${jsq(p)}','${half}')" title="${esc(p)} — ${pm[p].steps} step(s) · ${pa.passed}P/${pa.failed}F/${pa.blocked}B/${pa.notrun} to do · click = testers to invite · drag to AM/PM or another day"><div class="calprocrow"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div><div class="calprocbar">${progressBar(pm[p].ex)}</div></div>`;}).join("");
+    return shown+((!calShowAll&&procs.length>cap)?`<div class="calproc muted">+${procs.length-cap} more…</div>`:""); };
+  const zone=(k,byHalf,half,label)=>{ const zex=byHalf[half]||[];
+    return `<div class="calhalf${zex.length?' has':''}" data-k="${k}" data-half="${half}" ondragover="calDragOver(event)" ondragleave="calDragLeave(event)" ondrop="calDrop(event,'${k}','${half}')">`
+      +`<div class="calhalflbl" onclick="event.stopPropagation();openCalDayHalf('${k}','${half}')">${label}${zex.length?` <span class="calhalfn">${zex.length}</span>`:''}</div>`
+      +chipsFor(zex,k,half)+`</div>`; };
   for(let d=1;d<=daysIn;d++){
-    const k=calKey({y,m,d}); const ex=b.byDay[k]||[]; const a=aggregate(ex);
+    const k=calKey({y,m,d}); const ex=b.byDay[k]||[];
     const cls="calcell"+(ex.length?" has":"")+(k===todayK?" today":"");
-    const pf=ex.length?`<div class="calpf">${a.passed?`<span style="color:#22c55e"><b>${a.passed}</b>P</span>`:""}${a.failed?`<span style="color:#ef4444"><b>${a.failed}</b>F</span>`:""}${a.blocked?`<span style="color:#f59e0b"><b>${a.blocked}</b>B</span>`:""}${a.notrun?`<span class="muted"><b>${a.notrun}</b>·</span>`:""}</div>`:"";
-    let procHtml="";
-    if(ex.length){ const pm={};
-      ex.forEach(e=>{ const p=e.process||"(none)"; const o=pm[p]||(pm[p]={n:0,steps:0,ex:[]}); o.n++; o.steps+=(e.steps||[]).length; o.ex.push(e); });
-      const procs=Object.keys(pm).sort((x,y)=>naturalKey(x).localeCompare(naturalKey(y)));
-      const cap=calShowAll?procs.length:4;
-      const shown=procs.slice(0,cap).map(p=>{const pa=aggregate(pm[p].ex);return `<div class="calproc" draggable="true" ondragstart="calDragStart(event,'${k}','${jsq(p)}')" title="${esc(p)} — ${pm[p].steps} step(s) · ${pa.passed}P/${pa.failed}F/${pa.blocked}B/${pa.notrun} to do · drag to another day to reschedule"><div class="calprocrow"><span class="calprocn">${esc(p)}</span>${pm[p].steps?`<span class="calsteps">${pm[p].steps} st</span>`:""}</div><div class="calprocbar">${progressBar(pm[p].ex)}</div></div>`;}).join("");
-      procHtml=`<div class="calprocs">${shown}${(!calShowAll&&procs.length>4)?`<div class="calproc muted">+${procs.length-4} more…</div>`:""}</div>`; }
-    cells+=`<div class="${cls}" data-k="${k}" ondragover="calDragOver(event)" ondragleave="calDragLeave(event)" ondrop="calDrop(event,'${k}')"${ex.length?` onclick="openCalDay('${k}')"`:""}>`
-      +`<div class="caldate">${d}</div>`
-      +(ex.length?`<div class="calcnt">${ex.length} test${ex.length>1?"s":""}</div>${procHtml}${progressBar(ex)}${pf}`:"")
+    const byHalf={AM:[],PM:[],"":[]}; ex.forEach(e=>{ (byHalf[dateHalf(e.testDate)]=byHalf[dateHalf(e.testDate)]||[]).push(e); });
+    cells+=`<div class="${cls}" data-k="${k}">`
+      +`<div class="caldate"${ex.length?` onclick="openCalDay('${k}')" title="Open the whole day"`:''}>${d}${ex.length?` <span class="calcnt">${ex.length}</span>`:""}</div>`
+      +(ex.length?`${zone(k,byHalf,"AM","AM")}${zone(k,byHalf,"PM","PM")}${byHalf[""].length?zone(k,byHalf,"","—"):""}<div class="calprocbar caldaybar">${progressBar(ex)}</div>`:"")
       +`</div>`;
   }
   // unscheduled list
@@ -1169,25 +1186,55 @@ function renderCalendar(){
 function calNav(delta){ if(!calYM)renderCalendar(); let m=calYM.m+delta,y=calYM.y; while(m<0){m+=12;y--;} while(m>11){m-=12;y++;} calYM={y,m}; renderCalendar(); }
 function calToday(){ const n=new Date(); calYM={y:n.getFullYear(),m:n.getMonth()}; renderCalendar(); }
 function calToggleAll(){ calShowAll=!calShowAll; renderCalendar(); }
-/* drag & drop: move a PRC from one day to another → rewrites testDate on its executions */
-let calDrag=null; // {key, proc}
-function calDragStart(ev,key,proc){ calDrag={key,proc}; try{ ev.dataTransfer.effectAllowed="move"; ev.dataTransfer.setData("text/plain",proc); }catch(e){} ev.stopPropagation(); }
-function calDragOver(ev){ if(!calDrag)return; ev.preventDefault(); try{ev.dataTransfer.dropEffect="move";}catch(e){} const c=ev.currentTarget; if(c&&c.getAttribute("data-k")!==calDrag.key)c.classList.add("dragover"); }
+/* drag & drop: move a PRC onto another day / AM-PM half → rewrites testDate on its executions */
+let calDrag=null; // {key, proc, half}
+function calDragStart(ev,key,proc,half){ calDrag={key,proc,half}; try{ ev.dataTransfer.effectAllowed="move"; ev.dataTransfer.setData("text/plain",proc); }catch(e){} ev.stopPropagation(); }
+function calDragOver(ev){ if(!calDrag)return; ev.preventDefault(); try{ev.dataTransfer.dropEffect="move";}catch(e){} const c=ev.currentTarget;
+  if(c&&!(c.getAttribute("data-k")===calDrag.key&&c.getAttribute("data-half")===calDrag.half))c.classList.add("dragover"); }
 function calDragLeave(ev){ const c=ev.currentTarget; if(c)c.classList.remove("dragover"); }
-function calDrop(ev,dstKey){ ev.preventDefault(); ev.stopPropagation(); const c=ev.currentTarget; if(c)c.classList.remove("dragover");
-  if(!calDrag||dstKey===calDrag.key){ calDrag=null; return; }
-  calMoveProc(calDrag.key,calDrag.proc,dstKey); calDrag=null; }
-/* rebuild a date string at target day, preserving the original format & any suffix (AM/PM/time) */
+function calDrop(ev,dstKey,dstHalf){ ev.preventDefault(); ev.stopPropagation(); const c=ev.currentTarget; if(c)c.classList.remove("dragover");
+  if(!calDrag||(dstKey===calDrag.key&&dstHalf===calDrag.half)){ calDrag=null; return; }
+  calMoveProcHalf(calDrag.key,calDrag.proc,calDrag.half,dstKey,dstHalf); calDrag=null; }
+/* rebuild a date string at target day, preserving format; sets/clears an explicit AM/PM half */
 function reformatDate(orig,t){ orig=String(orig||"").trim(); const pad=n=>String(n).padStart(2,"0");
   let mm=orig.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(.*)$/); if(mm) return `${t.y}-${pad(t.m+1)}-${pad(t.d)}${mm[4]||""}`;
   mm=orig.match(/^(\d{1,2})([\/.])(\d{1,2})[\/.](\d{2,4})(.*)$/); if(mm){ const sep=mm[2]; return `${pad(t.d)}${sep}${pad(t.m+1)}${sep}${t.y}${mm[5]||""}`; }
   return `${pad(t.d)}/${pad(t.m+1)}/${t.y}`; }
-function calMoveProc(srcKey,proc,dstKey){
+function reformatDateHalf(orig,t,half){ const core=reformatDate(orig,t).replace(/\s+\d{1,2}:\d{2}\S*/g,"").replace(/\s*\b(AM|PM|matin|morning|mañana|après-?midi|aprem|afternoon|tarde)\b/ig,"").trim(); return half?core+" "+half:core; }
+function calMoveProcHalf(srcKey,proc,srcHalf,dstKey,dstHalf){
   const dp=dstKey.split("-").map(Number); const t={y:dp[0],m:dp[1]-1,d:dp[2]};
   let n=0; viewExecs().forEach(e=>{ const p=parseTestDate(e.testDate); if(!p)return;
-    if(calKey(p)===srcKey&&(e.process||"(none)")===proc){ e.testDate=reformatDate(e.testDate,t); e.updatedAt=new Date().toISOString(); n++; } });
+    if(calKey(p)===srcKey&&(e.process||"(none)")===proc&&dateHalf(e.testDate)===srcHalf){ e.testDate=reformatDateHalf(e.testDate,t,dstHalf); e.updatedAt=new Date().toISOString(); n++; } });
   if(n) persist(); else renderCalendar(); }
 function openCalDay(k){ const ex=calBuckets().byDay[k]||[]; const p=k.split("-"); showExecModal("Tests due "+p[2]+"/"+p[1]+"/"+p[0],ex); }
+function openCalDayHalf(k,half){ const ex=(calBuckets().byDay[k]||[]).filter(e=>dateHalf(e.testDate)===half); const p=k.split("-"); showExecModal("Tests "+(half||"no half")+" — "+p[2]+"/"+p[1]+"/"+p[0],ex); }
+/* click a process in the calendar → its assigned testers, ready to copy/paste or open in Outlook */
+function openCalProcInvite(k,proc,half){
+  const ex=(calBuckets().byDay[k]||[]).filter(e=>(e.process||"(none)")===proc&&dateHalf(e.testDate)===half)
+    .sort((a,b)=>naturalKey(a.scenario).localeCompare(naturalKey(b.scenario)));
+  if(!ex.length)return;
+  const ids=[...new Set(ex.map(e=>e.testerId).filter(Boolean))];
+  const ts=ids.map(id=>tester(id)).filter(Boolean).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  const names=ts.map(t=>t.name).join("; ");
+  const emails=ts.map(t=>t.email).filter(Boolean).join("; ");
+  const noMail=ts.filter(t=>!t.email).map(t=>t.name);
+  const unass=ex.filter(e=>!e.testerId).length;
+  const p=k.split("-"); const dateLbl=p[2]+"/"+p[1]+"/"+p[0]+(half?(" "+half):"");
+  const ents=[...new Set(ex.map(e=>e.entity).filter(Boolean))];
+  const subject="UAT "+proc+" — "+dateLbl;
+  const body=["Hello,","","UAT test session:","Process: "+proc,"Date: "+dateLbl+(ents.length?("   ·   Entity(ies): "+ents.join(", ")):""),"","Scenarios ("+ex.length+"):"]
+    .concat(ex.map(e=>"- "+e.scenario+(e.entity?(" ["+e.entity+"]"):"")+(e.testerId?("  → "+testerName(e.testerId)):"")))
+    .concat(["","Thanks."]).join("\n");
+  const mailto="mailto:"+emails+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+  modal(`<h2>Invite — ${esc(proc)} <span class="muted" style="font-size:13px">${esc(dateLbl)}</span></h2>
+    <p class="hint">${ts.length} tester(s) · ${ex.length} test(s)${ents.length?` · ${ents.map(en=>badge(en,entityMeta(en).color)).join(' ')}`:''}. Copy below into Outlook, or open a pre-filled email.</p>
+    <div class="field"><label>Emails (Outlook “To”)</label><textarea id="ci_emails" style="min-height:46px" onclick="this.select()">${esc(emails)}</textarea>
+      <div class="toolbar" style="margin-top:6px"><button class="sm" onclick="copyFrom('ci_emails')">⧉ Copy emails</button> <a class="sm" style="display:inline-block;text-decoration:none" href="${esc(mailto)}">✉ Open in Outlook</a>${noMail.length?`<span class="hint" style="color:#f59e0b">No email for: ${esc(noMail.join(", "))}</span>`:''}${unass?`<span class="hint" style="color:#ef4444">${unass} unassigned test(s)</span>`:''}</div></div>
+    <div class="field" style="margin-top:4px"><label>Names</label><textarea id="ci_names" style="min-height:40px" onclick="this.select()">${esc(names)}</textarea>
+      <div class="toolbar" style="margin-top:6px"><button class="sm" onclick="copyFrom('ci_names')">⧉ Copy names</button></div></div>
+    <div class="field" style="margin-top:4px"><label>Scenarios</label><div style="max-height:30vh;overflow:auto;border:1px solid var(--line);border-radius:6px"><table><tbody>${ex.map(e=>`<tr><td>${esc(e.scenario)}</td><td>${badge(e.entity,entityMeta(e.entity).color)}</td><td>${esc(testerName(e.testerId)||'—')}</td><td>${badge(e.status,statusMeta(e.status).color)}</td></tr>`).join("")}</tbody></table></div></div>
+    <div class="toolbar" style="margin-top:10px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
+}
 function openCalUns(lbl){ const ex=calBuckets().uns[lbl]||[]; showExecModal("Tests — "+esc(lbl),ex); }
 
 function renderTesterView(){
