@@ -971,6 +971,7 @@ function renderCampaign(){
           <div class="spacer"></div>
           <button onclick="genSpocPage()" title="Generate a standalone HTML page for the current filter so a SPOC can assign testers (then sends back the JSON)">⬇ SPOC page (HTML)</button>
           <button onclick="exportAssignments()" title="Export the same as an Excel sheet (SPOC fills the Tester column)">⬇ …or Excel</button>
+          <button onclick="exportByProcess()" title="Export the iteration's tests grouped by process — a 'By process' summary sheet + a 'Detail' sheet (respects current filters)">⬇ Tests by process</button>
           <button onclick="exportTxnRefs()" title="Export the transaction references entered by testers (respects current filters)">⬇ Transaction refs</button>
           <label class="pill" style="cursor:pointer" title="Re-import a SPOC's filled assignment file (.json from the SPOC page, or .xlsx) — creates missing testers; several names separated by ; create one execution per tester">⬆ Import assignments<input type="file" accept=".xlsx,.xls,.json" style="display:none" onchange="importAssignmentsAny(this)"/></label>
           <label class="pill" style="cursor:pointer">↩ Import tester results<input type="file" accept=".json" style="display:none" onchange="importTesterResults(this)"/></label>
@@ -1674,6 +1675,26 @@ function exportTxnRefs(){
   const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Transaction refs");
   const scope=trkFilter.entity||"all"; const dt=(trkFilter.date||"").replace(/\W+/g,"")||new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb,`MCEU_txnrefs_${slug(activeIter().name)}_${scope}_${dt}.xlsx`);
+}
+/* Export the iteration's tests grouped by process (summary sheet + detail sheet) */
+function exportByProcess(){
+  const ex=trkFiltered();
+  if(!ex.length){ alert("No execution to export (check the tracking filters)."); return; }
+  const sorted=ex.slice().sort((a,b)=>naturalKey((a.process||"")+" "+(a.scenario||"")).localeCompare(naturalKey((b.process||"")+" "+(b.scenario||""))));
+  const detail=sorted.map(e=>{const t=tester(e.testerId)||{};
+    return {PRC:e.process||"",Scenario:e.scenario||"",Domain:e.domain||"",Entity:e.entity||"",Tester:t.name||"",Status:e.status||"",DueDate:e.testDate||"",BusinessComment:e.comment||"",Recurrence:e.recurrence||""};});
+  const byP={}; ex.forEach(e=>{ const p=e.process||"(none)"; (byP[p]=byP[p]||[]).push(e); });
+  const summary=Object.keys(byP).sort((a,b)=>naturalKey(a).localeCompare(naturalKey(b))).map(p=>{ const list=byP[p]; const a=aggregate(list);
+    return {PRC:p, Scenarios:new Set(list.map(e=>e.scenario)).size, Executions:list.length, Assigned:list.filter(e=>e.testerId).length,
+      Passed:a.passed, Failed:a.failed, Blocked:a.blocked, NA:a.byStatus["N/A"]||0, ToDo:a.notrun, PctDone:(a.total?Math.round(a.done/a.total*100):0)+"%",
+      Entities:[...new Set(list.map(e=>e.entity).filter(Boolean))].sort().join(", "),
+      Testers:[...new Set(list.map(e=>testerName(e.testerId)).filter(Boolean))].sort().join(", "),
+      Dates:[...new Set(list.map(e=>e.testDate).filter(Boolean))].sort().join(", ")};});
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(summary.length?summary:[{Info:"No execution"}]),"By process");
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(detail.length?detail:[{Info:"No execution"}]),"Detail");
+  const scope=trkFilter.entity||"all"; const dt=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`MCEU_tests_by_process_${slug(activeIter().name)}_${scope}_${dt}.xlsx`);
 }
 function openGenTester(){
   modal(`<h2>Generate tester sheet(s)</h2>
