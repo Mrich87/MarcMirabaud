@@ -1697,13 +1697,19 @@ function exportByProcess(){
   XLSX.writeFile(wb,`MCEU_tests_by_process_${slug(activeIter().name)}_${scope}_${dt}.xlsx`);
 }
 function openGenTester(){
+  const procs=[...new Set(iterExecs().map(e=>e.process||"(none)"))].sort((a,b)=>naturalKey(a).localeCompare(naturalKey(b)));
   modal(`<h2>Generate tester sheet(s)</h2>
-    <p class="hint">Standalone HTML for <b>${esc(activeIter().name)}</b>. The tester fills statuses / comments / evidence and sends back the JSON (only their own selection). Import it via "Import tester results".</p>
-    <div class="row">
-      <div class="field" style="flex:1"><label>Single tester</label>${tCombo('gtTester',(S.testers[0]||{}).id||'',"",{hidden:'gtTester',allowEmpty:false,width:'100%'})}</div>
-      <div class="field"><label>Entity filter (optional)</label><select id="gtEntity"><option value="">— all —</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select></div>
+    <p class="hint">Standalone HTML for <b>${esc(activeIter().name)}</b>. The filler sets statuses / comments / evidence and returns the JSON, re-imported via "Import tester results" (results match by test, so any scope re-imports cleanly).</p>
+    <div class="field"><label>Entity filter (optional — applies to all below)</label><select id="gtEntity"><option value="">— all —</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select></div>
+    <div class="card" style="margin-top:10px"><b>By tester</b>
+      <div class="row" style="margin-top:6px"><div class="field" style="flex:1"><label>Single tester</label>${tCombo('gtTester',(S.testers[0]||{}).id||'',"",{hidden:'gtTester',allowEmpty:false,width:'100%'})}</div></div>
+      <div class="toolbar" style="margin-top:8px"><button onclick="genAllTesterPages()" title="One combined file with every tester — each sees/returns only their own selection">⬇ ALL testers (combined)</button><div class="spacer"></div><button class="primary" onclick="genTesterPage()">Generate this tester</button></div>
     </div>
-    <div class="toolbar" style="margin-top:14px"><button onclick="genAllTesterPages()" title="One combined file with every tester — each only sees and returns their own selection">⬇ Generate ALL testers (combined)</button><div class="spacer"></div><button onclick="closeModal()">Cancel</button><button class="primary" onclick="genTesterPage()">Generate this tester</button></div>`);
+    <div class="card" style="margin-top:10px"><b>By process</b> <span class="muted" style="font-size:12px">— a sheet scoped to one process (all its tests, any tester), or one combined file with a process picker</span>
+      <div class="row" style="margin-top:6px"><div class="field" style="flex:1"><label>Single process</label><select id="gtProcess">${procs.map(p=>`<option>${esc(p)}</option>`).join("")||'<option value="">— none —</option>'}</select></div></div>
+      <div class="toolbar" style="margin-top:8px"><button onclick="genAllProcessPages()" title="One combined file with every process — pick the process from the top selector">⬇ ALL processes (combined)</button><div class="spacer"></div><button class="primary" onclick="genProcessPage()">Generate this process</button></div>
+    </div>
+    <div class="toolbar" style="margin-top:12px"><div class="spacer"></div><button onclick="closeModal()">Close</button></div>`);
 }
 function slug(s){ return String(s||"").replace(/\W+/g,'_'); }
 function execToTest(e){ return {id:e.id,process:e.process,scenario:e.scenario,entity:e.entity,status:e.status,comment:e.comment||"",testDate:e.testDate||"",
@@ -1730,6 +1736,25 @@ function genAllTesterPages(){
     .filter(x=>x.tests.length).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
   if(!testers.length){ alert("No assignment in this iteration yet."); return; }
   download(`UAT_${slug(iter.name)}_ALL_testers.html`, buildTesterHTML(basePayload(iter,testers)), "text/html");
+  closeModal();
+}
+function genProcessPage(){
+  const proc=$("#gtProcess").value, entFilter=$("#gtEntity").value, iter=activeIter();
+  if(!proc){ alert("No process available."); return; }
+  const tests=S.executions.filter(e=>e.iterationId===iter.id&&(e.process||"(none)")===proc&&(!entFilter||e.entity===entFilter))
+    .sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(execToTest);
+  if(!tests.length){ alert("No test for this process / entity."); return; }
+  download(`UAT_${slug(iter.name)}_${slug(proc)}.html`, buildTesterHTML(basePayload(iter,[{id:"proc::"+proc,name:proc,tests}])), "text/html");
+  closeModal();
+}
+function genAllProcessPages(){
+  const iter=activeIter(), entFilter=$("#gtEntity").value;
+  const procs=[...new Set(S.executions.filter(e=>e.iterationId===iter.id&&(!entFilter||e.entity===entFilter)).map(e=>e.process||"(none)"))];
+  const entries=procs.map(p=>({id:"proc::"+p,name:p,
+      tests:S.executions.filter(e=>e.iterationId===iter.id&&(e.process||"(none)")===p&&(!entFilter||e.entity===entFilter)).sort((a,b)=>naturalKey(a.process+a.scenario).localeCompare(naturalKey(b.process+b.scenario))).map(execToTest)}))
+    .filter(x=>x.tests.length).sort((a,b)=>naturalKey(a.name).localeCompare(naturalKey(b.name)));
+  if(!entries.length){ alert("No execution in this iteration."); return; }
+  download(`UAT_${slug(iter.name)}_ALL_processes.html`, buildTesterHTML(basePayload(iter,entries)), "text/html");
   closeModal();
 }
 function buildTesterHTML(payload){
