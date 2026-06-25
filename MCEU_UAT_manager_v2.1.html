@@ -924,6 +924,7 @@ function bulkAssign(){ if(!trkSel.size)return; const nm=(($("#bulkTester")||{}).
   S.executions.forEach(e=>{ if(trkSel.has(e.id)){ e.testerId=v; e.updatedAt=new Date().toISOString(); } }); persist(); }
 function bulkSetDate(){ if(!trkSel.size)return; const v=($("#bulkDate")||{}).value||"";
   S.executions.forEach(e=>{ if(trkSel.has(e.id)){ e.testDate=v; e.updatedAt=new Date().toISOString(); } }); persist(); }
+function bulkSetTxn(on){ if(!trkSel.size)return; S.executions.forEach(e=>{ if(trkSel.has(e.id)){ e.txnRef=!!on; e.updatedAt=new Date().toISOString(); } }); persist(); }
 function bulkDelSel(){ if(!trkSel.size)return; if(!confirm("Delete "+trkSel.size+" selected execution(s)?"))return;
   S.executions=S.executions.filter(e=>!trkSel.has(e.id)); trkSel.clear(); persist(); }
 function renderCampaign(){
@@ -1040,6 +1041,7 @@ function renderTrackingTable(){
     <b><span id="bulkCount">${trkSel.size}</span> selected</b>
     <span class="muted">Tester:</span><input id="bulkTester" list="testerDL" placeholder="name (new ok)" style="width:180px"/><button class="sm" onclick="bulkAssign()">Assign</button>
     <span class="muted" style="margin-left:8px">Due date:</span><input id="bulkDate" placeholder="e.g. 2026-06-20 / W25" style="width:150px"/><button class="sm" onclick="bulkSetDate()">Apply</button>
+    <span class="muted" style="margin-left:8px">Client/Txn ref:</span><button class="sm" onclick="bulkSetTxn(true)" title="Require a client/transaction number from the tester for the selected tests">Require</button><button class="sm" onclick="bulkSetTxn(false)" title="Remove the client/transaction number requirement">Remove</button>
     <div class="spacer"></div><button class="sm danger" onclick="bulkDelSel()">Delete</button><button class="sm" onclick="bulkClear()">Clear</button></div>`;
   const pager=`<div class="toolbar" style="margin-bottom:8px"><span class="muted">${total} execution(s)${pages>1?` · page ${trkPage+1}/${pages} (${a0}–${b0})`:''}</span><div class="spacer"></div>${pages>1?`<button class="sm" onclick="trkGo(-1)">◀ Prev</button><button class="sm" onclick="trkGo(1)">Next ▶</button>`:''}</div>`;
   const tdl=`<datalist id="testerDL">${S.testers.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(t=>`<option value="${esc(t.name)}"></option>`).join("")}</datalist>`;
