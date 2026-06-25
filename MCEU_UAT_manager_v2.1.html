@@ -1099,7 +1099,16 @@ function tvDuplicate(id){ const e=S.executions.find(x=>x.id===id); if(!e)return;
 function tvSetEntity(id,val){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.entity=val; e.updatedAt=new Date().toISOString(); persist(); }
 function tvBulkDup(){ if(!tvSel.size)return; [...tvSel].forEach(id=>{ const e=S.executions.find(x=>x.id===id); if(e)tvDupExec(e); }); tvSel.clear(); persist(); }
 function tvBulkEntity(val){ if(!val||!tvSel.size)return; S.executions.forEach(e=>{ if(tvSel.has(e.id)){ e.entity=val; e.updatedAt=new Date().toISOString(); } }); persist(); }
-function tvBulkAssign(){ const inp=$("#tvbulkt"); const name=((inp&&inp.value)||"").trim(); if(!name||!tvSel.size)return; const tid=findOrCreateTester(name); S.executions.forEach(e=>{ if(tvSel.has(e.id)){ e.testerId=tid; e.updatedAt=new Date().toISOString(); } }); tvSel.clear(); persist(); }
+function tvBulkAssign(){ const inp=$("#tvbulkt"); const raw=((inp&&inp.value)||"").trim(); if(!raw||!tvSel.size)return;
+  const names=raw.split(/[;,\n]/).map(x=>x.trim()).filter(Boolean); if(!names.length)return;
+  const tids=names.map(findOrCreateTester);
+  [...tvSel].forEach(id=>{ const e=S.executions.find(x=>x.id===id); if(!e)return;
+    e.testerId=tids[0]; e.updatedAt=new Date().toISOString();
+    for(let i=1;i<tids.length;i++){ const c=tvDupExec(e); c.testerId=tids[i]; } });
+  tvSel.clear(); persist(); }
+function tvBulkDate(){ const inp=$("#tvbulkd"); const v=((inp&&inp.value)||"").trim(); if(!tvSel.size)return;
+  S.executions.forEach(e=>{ if(tvSel.has(e.id)){ e.testDate=v; e.updatedAt=new Date().toISOString(); } }); tvSel.clear(); persist(); }
+function tvBulkTxn(on){ if(!tvSel.size)return; S.executions.forEach(e=>{ if(tvSel.has(e.id)){ e.txnRef=!!on; e.updatedAt=new Date().toISOString(); } }); persist(); }
 function tvEntOpts(cur){ const opts=S.config.entities.map(en=>en.code); if(cur&&opts.indexOf(cur)<0)opts.push(cur); return '<option value=""'+(!cur?' selected':'')+'>—</option>'+opts.map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join(''); }
 function reassignAll(fromTid){ const inp=$("#reassign_"+(fromTid||'none')); const name=((inp&&inp.value)||"").trim();
   if(!name){ alert("Type a target tester first."); return; }
@@ -1594,18 +1603,24 @@ function renderTesterView(){
         <span><span style="color:#22c55e">${a.passed}</span>/<span style="color:#ef4444">${a.failed}</span>/<span style="color:#f59e0b">${a.blocked}</span></span>
       </div>${detail}</div>`; }).join("");
   $("#view-testerview").innerHTML=`${tdl}
-    <h2>Tester view — ${esc(iter?iter.name:'—')}</h2>
-    <p class="sub">Projection des assignations et réaffectation à la volée (indisponibilités) — sans passer par l'Execution Tracking.</p>
+    <div class="toolbar" style="align-items:center"><h2 style="margin:0">Tester view — ${esc(iter?iter.name:'—')}</h2><div class="spacer"></div>
+      <button class="sm" onclick="genSpocPage()" title="Generate a SPOC assignment sheet (HTML) for this iteration">⬇ SPOC page</button>
+      <button class="sm" onclick="openGenTester()" title="Generate tester sheet(s) — by tester or by process">⬇ Tester pages</button>
+      <button class="sm" onclick="openImportPlanning()" title="Import a planning (Date / Slot / PRC) to create &amp; date executions">⬆ Import planning</button>
+    </div>
+    <p class="sub">Assign, duplicate, set dates, require references, and generate SPOC / tester pages — all from here.</p>
     <details class="sec" open><summary>Cross-service / cross-entity processes</summary><div class="card">
       <p class="hint">Process couvrant plusieurs domaines (services) et/ou plusieurs entités — pratique là où des testeurs ont été ajoutés.</p>
       ${crossHtml}</div></details>
     <details class="sec" open><summary>By process — assign</summary><div class="card">
       <div class="toolbar">${entSel}${stSel}<span class="muted">${Object.keys(bpf).length} process(es)</span><span class="hint" style="margin-left:8px">Tick scenarios to act in bulk · ⧉ duplicates a scenario.</span></div>
-      ${tvSel.size?`<div class="toolbar" style="background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:8px;align-items:center">
+      ${tvSel.size?`<div class="toolbar" style="background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:8px;align-items:center;flex-wrap:wrap;gap:6px">
         <b>${tvSel.size} selected</b>
         <button class="sm" onclick="tvBulkDup()" title="Duplicate the selected scenarios">⧉ Duplicate</button>
         <span class="muted">Entity:</span><select onchange="tvBulkEntity(this.value)"><option value="">—</option>${S.config.entities.map(en=>`<option>${esc(en.code)}</option>`).join("")}</select>
-        <span class="muted">Assign:</span><input list="testerDL" id="tvbulkt" placeholder="tester…" style="width:140px"/><button class="sm" onclick="tvBulkAssign()">Apply</button>
+        <span class="muted">Assign:</span><input list="testerDL" id="tvbulkt" placeholder="tester(s) — ; for several" title="One or more testers separated by ; — each selected scenario is assigned/duplicated to every tester" style="width:180px"/><button class="sm" onclick="tvBulkAssign()">Apply</button>
+        <span class="muted">Date:</span><input id="tvbulkd" placeholder="2026-06-20 / W25 / AM-PM" style="width:150px"/><button class="sm" onclick="tvBulkDate()">Apply</button>
+        <span class="muted">Ref:</span><button class="sm" onclick="tvBulkTxn(true)" title="Require a client/transaction number">Require</button><button class="sm" onclick="tvBulkTxn(false)">Remove</button>
         <div class="spacer"></div><button class="sm" onclick="tvSel.clear();renderTesterView()">Clear</button></div>`:''}
       ${procCards||'<p class="muted">No assignment in this iteration.</p>'}</div></details>
     <details class="sec" open><summary>By tester — reassign</summary><div class="card">
