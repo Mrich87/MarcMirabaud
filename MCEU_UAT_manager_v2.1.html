@@ -215,6 +215,7 @@ function defaultState(){
       ],
       recurrences:["Often","Rarely","Exceptionally"],
       links:[],
+      procMeetings:{},
       columnMapping:{ process:"TitleLevel3", scenario:"TitleLevel4", domain:"TitleLevel2", tester:"TesterName" }
     },
     testers:[],
@@ -1094,6 +1095,7 @@ function delTester(i){ const t=S.testers[i];
 function tvToggle(tid){ if(tvExpanded.has(tid))tvExpanded.delete(tid); else tvExpanded.add(tid); renderTesterView(); }
 let tvSel=new Set();
 function tvToggleSel(id,on){ if(on)tvSel.add(id); else tvSel.delete(id); renderTesterView(); }
+function tvSelProc(p,on){ iterExecs().filter(e=>(e.process||"(none)")===p&&(!tvFilter.entity||e.entity===tvFilter.entity)&&(!tvFilter.status||e.status===tvFilter.status)).forEach(e=>{ if(on)tvSel.add(e.id); else tvSel.delete(e.id); }); renderTesterView(); }
 function tvDupExec(e){ const idx=S.executions.indexOf(e); const c=Object.assign({},e,{id:uid(),testerId:"",status:"Not started",comment:"",txnRefValue:"",failedSteps:{},screens:[],updatedAt:new Date().toISOString()}); S.executions.splice(idx+1,0,c); return c; }
 function tvDuplicate(id){ const e=S.executions.find(x=>x.id===id); if(!e)return; tvDupExec(e); persist(); }
 function tvSetEntity(id,val){ const e=S.executions.find(x=>x.id===id); if(!e)return; e.entity=val; e.updatedAt=new Date().toISOString(); persist(); }
@@ -1109,6 +1111,15 @@ function tvBulkAssign(){ const inp=$("#tvbulkt"); const raw=((inp&&inp.value)||"
 function tvBulkDate(){ const inp=$("#tvbulkd"); const v=((inp&&inp.value)||"").trim(); if(!tvSel.size)return;
   S.executions.forEach(e=>{ if(tvSel.has(e.id)){ e.testDate=v; e.updatedAt=new Date().toISOString(); } }); tvSel.clear(); persist(); }
 function tvBulkTxn(on){ if(!tvSel.size)return; S.executions.forEach(e=>{ if(tvSel.has(e.id)){ e.txnRef=!!on; e.updatedAt=new Date().toISOString(); } }); persist(); }
+/* per-process Teams meeting link (stored in config, keyed by process name) */
+function procMeeting(p){ return (S.config.procMeetings||{})[p]||""; }
+function setProcMeeting(p,url){ S.config.procMeetings=S.config.procMeetings||{}; url=(url||"").trim();
+  if(url) S.config.procMeetings[p]=url; else delete S.config.procMeetings[p]; save(); }
+function copyProcMeeting(p,btn){ const url=procMeeting(p); if(!url){ alert("No Teams link set for this process yet."); return; }
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url);
+    else { const ta=document.createElement("textarea"); ta.value=url; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } }catch(e){}
+  if(btn){ const t=btn.textContent; btn.textContent="✓ Copied"; setTimeout(()=>{btn.textContent=t;},1200); } }
+function openProcMeeting(p){ const url=procMeeting(p); if(!url){ alert("No Teams link set for this process yet."); return; } window.open(url,"_blank","noopener"); }
 function tvEntOpts(cur){ const opts=S.config.entities.map(en=>en.code); if(cur&&opts.indexOf(cur)<0)opts.push(cur); return '<option value=""'+(!cur?' selected':'')+'>—</option>'+opts.map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join(''); }
 function reassignAll(fromTid){ const inp=$("#reassign_"+(fromTid||'none')); const name=((inp&&inp.value)||"").trim();
   if(!name){ alert("Type a target tester first."); return; }
@@ -1595,12 +1606,15 @@ function renderTesterView(){
           <button class="sm" title="Set result myself (status + comment)" onclick="overrideResult('${e.id}')">✎ Result</button>
           <button class="sm" title="Duplicate this scenario" onclick="tvDuplicate('${e.id}')">⧉</button></div>`).join("")
       + `</div>` : '';
+    const mtg=procMeeting(p); const allSel=list.length&&list.every(e=>tvSel.has(e.id));
     return `<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="checkbox" title="Select all scenarios of this process (for bulk actions)" ${allSel?'checked':''} onchange="tvSelProc('${jsq(p)}',this.checked)"/>
         <button class="sm" onclick="tvToggle('proc::${jsq(p)}')">${open?'▾':'▸'}</button>
         <b style="min-width:160px">${esc(p)}</b> ${ents.map(en=>badge(en,entityMeta(en).color)).join(' ')}
         <span class="muted">${list.length} test(s) · ${tids.length} tester(s)${unass?' · ':''}</span>${unass?badge(unass+' unassigned','#ef4444'):''}
-        <div style="flex:1;min-width:150px">${progressBar(list)}</div>
+        <div style="flex:1;min-width:120px">${progressBar(list)}</div>
         <span><span style="color:#22c55e">${a.passed}</span>/<span style="color:#ef4444">${a.failed}</span>/<span style="color:#f59e0b">${a.blocked}</span></span>
+        <span title="Teams meeting link for this process" style="display:inline-flex;align-items:center;gap:4px">👥<input placeholder="paste Teams link…" value="${esc(mtg)}" onchange="setProcMeeting('${jsq(p)}',this.value)" style="width:150px"/><button class="sm" onclick="copyProcMeeting('${jsq(p)}',this)" title="Copy Teams link">📋 Copy</button>${mtg?`<button class="sm" onclick="openProcMeeting('${jsq(p)}')" title="Open meeting">↗</button>`:''}</span>
       </div>${detail}</div>`; }).join("");
   $("#view-testerview").innerHTML=`${tdl}
     <div class="toolbar" style="align-items:center"><h2 style="margin:0">Tester view — ${esc(iter?iter.name:'—')}</h2><div class="spacer"></div>
