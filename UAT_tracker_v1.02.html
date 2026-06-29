@@ -235,7 +235,67 @@ tr.sub-row.lvl2 td{background:#FBFAF7;}
   font-size:13px;box-shadow:0 4px 16px rgba(0,26,48,.25);z-index:500;opacity:0;transform:translateY(8px);transition:all .25s;}
 .toast.show{opacity:1;transform:translateY(0);}
 @media(max-width:1000px){.sidebar{display:none;}.main{margin-left:0;padding:20px 14px;}.top-bar{grid-template-columns:auto 1fr auto;}}
+
+/* ANIMATIONS */
+@keyframes kpiIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+.kpi-card{animation:kpiIn .3s ease both;}
+.kpi-card:nth-child(1){animation-delay:.0s;}
+.kpi-card:nth-child(2){animation-delay:.06s;}
+.kpi-card:nth-child(3){animation-delay:.12s;}
+.kpi-card:nth-child(4){animation-delay:.18s;}
+.kpi-card:nth-child(5){animation-delay:.24s;}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+.chart-card{animation:fadeIn .3s ease both;}
+table.prc tbody tr{animation:fadeIn .2s ease both;}
+@keyframes domCardIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.domain-card{animation:domCardIn .25s ease both;}
+.domain-card:nth-child(1){animation-delay:.0s;}
+.domain-card:nth-child(2){animation-delay:.05s;}
+.domain-card:nth-child(3){animation-delay:.1s;}
+.domain-card:nth-child(4){animation-delay:.15s;}
+.domain-card:nth-child(5){animation-delay:.2s;}
+.domain-card:nth-child(6){animation-delay:.25s;}
+tr.sub-row{animation:fadeIn .2s ease both;}
+
+/* CHARTS */
+.charts-section{margin-bottom:22px;}
+.charts-section h3{font-size:14px;font-weight:600;color:var(--m-navy);margin-bottom:12px;}
+.charts-row{display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:16px;}
+.charts-row-full{display:grid;grid-template-columns:1fr;gap:16px;}
+.chart-card{background:var(--g-surface);border:1px solid var(--g-border);border-radius:10px;padding:18px;transition:box-shadow .2s;}
+.chart-card:hover{box-shadow:var(--elevation-card-hover);}
+.chart-card h4{font-size:12px;font-weight:600;color:var(--g-hint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;}
+.chart-card canvas{width:100%!important;}
+
+/* DOMAIN CARDS */
+.domain-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin-bottom:22px;}
+.domain-card{background:var(--g-surface);border:1px solid var(--g-border);border-radius:10px;padding:16px;cursor:pointer;transition:all .2s;}
+.domain-card:hover{box-shadow:var(--elevation-card-hover);border-color:var(--m-blue);}
+.domain-card.active{background:var(--g-primary-bg);border-color:var(--m-navy);box-shadow:0 0 0 1px var(--m-navy);}
+.domain-card-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.domain-card-title{font-size:13px;font-weight:600;color:var(--m-navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+.domain-card-stats{display:flex;gap:12px;font-size:11px;color:var(--g-text-muted);margin-bottom:6px;}
+.domain-card-stats b{font-family:'JetBrains Mono',monospace;color:var(--g-text-main);}
+
+/* KPI DELTA BADGES */
+.kpi-delta{font-size:11px;font-weight:600;margin-left:6px;font-family:'JetBrains Mono',monospace;vertical-align:middle;}
+.kpi-delta.up{color:var(--c-green);}
+.kpi-delta.down{color:var(--c-red);}
+
+/* ALERT BANNER */
+.alert-banner{background:linear-gradient(135deg,var(--c-red-light) 0%,#fff5f0 100%);border:1px solid var(--c-red);border-radius:10px;
+  padding:14px 20px;margin-bottom:18px;display:flex;align-items:flex-start;gap:12px;position:relative;}
+.alert-banner.warning{border-color:var(--c-amber);background:linear-gradient(135deg,var(--c-amber-light) 0%,#fffcf0 100%);}
+.alert-banner-icon{font-size:20px;flex-shrink:0;line-height:1;}
+.alert-banner-content{flex:1;}
+.alert-banner-title{font-size:13px;font-weight:700;color:var(--c-red-dark);margin-bottom:4px;}
+.alert-banner.warning .alert-banner-title{color:var(--c-amber-dark);}
+.alert-banner-msg{font-size:12px;color:var(--g-text-main);line-height:1.5;}
+.alert-banner-msg li{margin-left:16px;list-style:disc;}
+.alert-banner-close{position:absolute;top:10px;right:14px;border:none;background:none;font-size:18px;cursor:pointer;color:var(--g-text-muted);}
+.alert-banner-close:hover{color:var(--g-text-main);}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -312,6 +372,27 @@ tr.sub-row.lvl2 td{background:#FBFAF7;}
   <!-- DASHBOARD -->
   <section id="view-dash" class="hidden">
     <div class="kpi-grid" id="kpi-grid"></div>
+
+    <div id="alert-banner" class="alert-banner hidden">
+      <span class="alert-banner-icon">&#9888;</span>
+      <div class="alert-banner-content">
+        <div class="alert-banner-title" id="alert-title"></div>
+        <ul class="alert-banner-msg" id="alert-msg"></ul>
+      </div>
+      <button class="alert-banner-close" id="alert-close">&times;</button>
+    </div>
+
+    <div class="charts-section" id="charts-section">
+      <div class="charts-row">
+        <div class="chart-card"><h4 id="chart-donut-title"></h4><canvas id="chart-donut"></canvas></div>
+        <div class="chart-card"><h4 id="chart-domain-title"></h4><canvas id="chart-domain"></canvas></div>
+      </div>
+      <div class="charts-row-full">
+        <div class="chart-card"><h4 id="chart-trend-title"></h4><canvas id="chart-trend"></canvas></div>
+      </div>
+    </div>
+
+    <div id="domain-cards" class="domain-cards-grid"></div>
 
     <div class="filters-bar">
       <input type="text" id="f-search" data-i18n-ph="searchPh" placeholder="Search PRC / scenario / test case…">
@@ -411,7 +492,13 @@ const I18N = {
     stOnTrack:"On track", stLate:"Late", stDone:"Done", stNoDate:"No date", auto:"auto", manual:"man",
     lastActivity:"Last activity", source:"Source", refreshed:"refreshed", file:"File", noData:"No process matches the filters.",
     savedBackup:"Manager edits exported", restored:"Manager edits restored", exported:"Report exported",
-    scenarios:"scenarios", tests:"tests", seededHint:"(first actual execution, col N — click to confirm/edit)" },
+    scenarios:"scenarios", tests:"tests", seededHint:"(first actual execution, col N — click to confirm/edit)",
+    chartsTitle:"Execution overview", chartDonut:"Overall breakdown", chartDomain:"By domain", chartTrend:"Trend (daily)",
+    domainCards:"Domain overview", vsYesterday:"vs yesterday",
+    alertLate:"processes past their execution date", alertHighFail:"processes with >50% failure",
+    alertExecDrop:"Execution rate dropped vs yesterday", alertTitle:"Attention required",
+    notExecuted:"Not executed", passed:"Passed", failed:"Failed", blocked:"Blocked", na:"N/A",
+    testsCount:"tests", execRate:"Exec", passRateShort:"Pass" },
   fr:{ brandSub:"Suivi UAT", testPlan:"Plan de test", loadExcel:"Charger Excel", exportReport:"Exporter",
     backup:"Sauvegarder", restore:"Restaurer", domains:"Domaines métier", filterByDomain:"Filtrer / zoomer",
     pageTitle:"Suivi de campagne UAT", pageSub:"Suivi d'exécution par processus",
@@ -430,7 +517,13 @@ const I18N = {
     stOnTrack:"Dans les temps", stLate:"En retard", stDone:"Terminé", stNoDate:"Sans date", auto:"auto", manual:"man",
     lastActivity:"Dernière activité", source:"Source", refreshed:"actualisé", file:"Fichier", noData:"Aucun processus ne correspond aux filtres.",
     savedBackup:"Modifications exportées", restored:"Modifications restaurées", exported:"Rapport exporté",
-    scenarios:"scénarios", tests:"tests", seededHint:"(première exécution réelle, col N — cliquez pour confirmer/éditer)" },
+    scenarios:"scénarios", tests:"tests", seededHint:"(première exécution réelle, col N — cliquez pour confirmer/éditer)",
+    chartsTitle:"Vue d'ensemble", chartDonut:"Répartition globale", chartDomain:"Par domaine", chartTrend:"Tendance (quotidien)",
+    domainCards:"Aperçu par domaine", vsYesterday:"vs hier",
+    alertLate:"processus en retard", alertHighFail:"processus avec >50% d'échecs",
+    alertExecDrop:"Le taux d'exécution a baissé vs hier", alertTitle:"Attention requise",
+    notExecuted:"Non exécuté", passed:"Réussi", failed:"Échoué", blocked:"Bloqué", na:"N/A",
+    testsCount:"tests", execRate:"Exéc.", passRateShort:"Réussi" },
   sp:{ brandSub:"Seguim. UAT", testPlan:"Plan de prueba", loadExcel:"Cargar Excel", exportReport:"Exportar",
     backup:"Copia", restore:"Restaurar", domains:"Dominios de negocio", filterByDomain:"Filtrar / enfocar",
     pageTitle:"Seguimiento de campaña UAT", pageSub:"Seguimiento de ejecución por proceso",
@@ -449,7 +542,13 @@ const I18N = {
     stOnTrack:"En tiempo", stLate:"Atrasado", stDone:"Completado", stNoDate:"Sin fecha", auto:"auto", manual:"man",
     lastActivity:"Última actividad", source:"Fuente", refreshed:"actualizado", file:"Archivo", noData:"Ningún proceso coincide con los filtros.",
     savedBackup:"Cambios exportados", restored:"Cambios restaurados", exported:"Informe exportado",
-    scenarios:"escenarios", tests:"pruebas", seededHint:"(primera ejecución real, col N — clic para confirmar/editar)" }
+    scenarios:"escenarios", tests:"pruebas", seededHint:"(primera ejecución real, col N — clic para confirmar/editar)",
+    chartsTitle:"Vista general", chartDonut:"Desglose global", chartDomain:"Por dominio", chartTrend:"Tendencia (diario)",
+    domainCards:"Resumen por dominio", vsYesterday:"vs ayer",
+    alertLate:"procesos atrasados", alertHighFail:"procesos con >50% de fallos",
+    alertExecDrop:"La tasa de ejecución bajó vs ayer", alertTitle:"Atención requerida",
+    notExecuted:"No ejecutado", passed:"Aprobado", failed:"Fallido", blocked:"Bloqueado", na:"N/A",
+    testsCount:"pruebas", execRate:"Ejec.", passRateShort:"Aprob." }
 };
 let LANG = localStorage.getItem("uat:lang") || "en";
 const t = k => (I18N[LANG] && I18N[LANG][k]) || I18N.en[k] || k;
@@ -633,6 +732,129 @@ function computeStatus(p){
   return "ontrack";
 }
 
+/* ----------------------------- history / snapshots ----------------------------- */
+function historyKey(plan){ return "uat:history:"+plan; }
+function loadHistory(plan){ try{ return JSON.parse(localStorage.getItem(historyKey(plan))||"[]"); }catch(e){ return []; } }
+function saveSnapshot(plan, metrics){
+  const today = ymd(new Date());
+  const snap = { date:today, total:metrics.total, passed:metrics.passed, failed:metrics.failed,
+    blocked:metrics.blocked, na:metrics.na, none:metrics.none,
+    execRate:metrics.execRate, passRate:metrics.passRate, failRate:metrics.failRate, blockRate:metrics.blockRate };
+  const hist = loadHistory(plan);
+  const idx = hist.findIndex(h=>h.date===today);
+  if(idx>=0) hist[idx]=snap; else hist.push(snap);
+  hist.sort((a,b)=>a.date.localeCompare(b.date));
+  localStorage.setItem(historyKey(plan), JSON.stringify(hist));
+  return hist;
+}
+function getYesterdaySnap(plan){
+  const hist = loadHistory(plan);
+  const today = ymd(new Date());
+  const prev = hist.filter(h=>h.date<today);
+  return prev.length? prev[prev.length-1] : null;
+}
+
+/* ----------------------------- charts ----------------------------- */
+let chartDonut=null, chartDomain=null, chartTrend=null;
+function renderCharts(prcs){
+  // titles
+  document.getElementById("chart-donut-title").textContent=t("chartDonut");
+  document.getElementById("chart-domain-title").textContent=t("chartDomain");
+  document.getElementById("chart-trend-title").textContent=t("chartTrend");
+  // global counts
+  const g={passed:0,failed:0,blocked:0,na:0,none:0};
+  prcs.forEach(p=>{ g.passed+=p.m.passed; g.failed+=p.m.failed; g.blocked+=p.m.blocked; g.na+=p.m.na; g.none+=p.m.none; });
+  const colors=['#2D7D46','#B5342B','#C48A1A','#1B5E8A','#8C8C8C'];
+  const labels=[t("passed"),t("failed"),t("blocked"),t("na"),t("notExecuted")];
+  // donut
+  if(chartDonut){ chartDonut.destroy(); chartDonut=null; }
+  const ctxD=document.getElementById("chart-donut").getContext("2d");
+  chartDonut=new Chart(ctxD,{type:"doughnut",data:{labels:labels,datasets:[{data:[g.passed,g.failed,g.blocked,g.na,g.none],backgroundColor:colors,borderWidth:1,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:true,cutout:"60%",plugins:{legend:{position:"bottom",labels:{font:{size:11,family:"Inter"},padding:10}}}}});
+  // domain stacked bar
+  const domMap=new Map();
+  prcs.forEach(p=>{ let d=domMap.get(p.domain); if(!d){d={passed:0,failed:0,blocked:0,na:0,none:0};domMap.set(p.domain,d);} d.passed+=p.m.passed;d.failed+=p.m.failed;d.blocked+=p.m.blocked;d.na+=p.m.na;d.none+=p.m.none; });
+  const domNames=[...domMap.keys()].sort();
+  const ds=labels.map((lbl,i)=>({label:lbl,data:domNames.map(dn=>{const d=domMap.get(dn);return [d.passed,d.failed,d.blocked,d.na,d.none][i];}),backgroundColor:colors[i]}));
+  if(chartDomain){ chartDomain.destroy(); chartDomain=null; }
+  const ctxB=document.getElementById("chart-domain").getContext("2d");
+  chartDomain=new Chart(ctxB,{type:"bar",data:{labels:domNames,datasets:ds},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{display:false},ticks:{font:{size:11,family:"Inter"}}}},plugins:{legend:{position:"bottom",labels:{font:{size:11,family:"Inter"},padding:10}}}}});
+  document.getElementById("chart-domain").parentElement.style.minHeight=Math.max(180,domNames.length*36+80)+"px";
+  // trend line chart
+  const hist=loadHistory(activePlan);
+  if(chartTrend){ chartTrend.destroy(); chartTrend=null; }
+  const ctxT=document.getElementById("chart-trend").getContext("2d");
+  if(hist.length>1){
+    chartTrend=new Chart(ctxT,{type:"line",data:{labels:hist.map(h=>h.date),datasets:[
+      {label:t("execRate"),data:hist.map(h=>h.execRate),borderColor:'#1B5E8A',backgroundColor:'rgba(27,94,138,.1)',fill:true,tension:.3,pointRadius:3},
+      {label:t("passRateShort"),data:hist.map(h=>h.passRate),borderColor:'#2D7D46',backgroundColor:'rgba(45,125,70,.1)',fill:true,tension:.3,pointRadius:3}
+    ]},options:{responsive:true,maintainAspectRatio:true,scales:{y:{min:0,max:100,ticks:{callback:v=>v+"%"}},x:{grid:{display:false}}},plugins:{legend:{position:"bottom",labels:{font:{size:11,family:"Inter"},padding:10}}}}});
+    document.getElementById("chart-trend").parentElement.classList.remove("hidden");
+  } else {
+    document.getElementById("chart-trend").parentElement.classList.add("hidden");
+  }
+}
+
+/* ----------------------------- domain cards ----------------------------- */
+function renderDomainCards(prcs){
+  const wrap=document.getElementById("domain-cards"); wrap.innerHTML="";
+  const domMap=new Map();
+  prcs.forEach(p=>{
+    let d=domMap.get(p.domain);
+    if(!d){d={total:0,passed:0,failed:0,blocked:0,na:0,none:0,executed:0};domMap.set(p.domain,d);}
+    d.total+=p.m.total;d.passed+=p.m.passed;d.failed+=p.m.failed;d.blocked+=p.m.blocked;d.na+=p.m.na;d.none+=p.m.none;
+  });
+  [...domMap.entries()].sort((a,b)=>b[1].total-a[1].total).forEach(([name,d])=>{
+    d.executed=d.passed+d.failed+d.blocked+d.na;
+    const er=d.total?Math.round(d.executed/d.total*100):0;
+    const denom=d.passed+d.failed+d.blocked;
+    const pr=denom?Math.round(d.passed/denom*100):0;
+    // SVG mini donut
+    const r=20, circ=2*Math.PI*r, filled=circ*er/100;
+    const svg='<svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="'+r+'" fill="none" stroke="#E0DDD6" stroke-width="5"/>'+
+      '<circle cx="24" cy="24" r="'+r+'" fill="none" stroke="'+("var(--m-navy)")+'" stroke-width="5" stroke-dasharray="'+filled+' '+circ+'" stroke-linecap="round" transform="rotate(-90 24 24)"/></svg>';
+    // mini stacked bar
+    const tot=d.passed+d.failed+d.blocked+d.na;
+    const w=n=>tot?(n/tot*100):0;
+    const bar='<div class="stack" style="width:100%;margin-top:4px;"><span class="s-pass" style="width:'+w(d.passed)+'%"></span>'+
+      '<span class="s-fail" style="width:'+w(d.failed)+'%"></span><span class="s-block" style="width:'+w(d.blocked)+'%"></span>'+
+      '<span class="s-na" style="width:'+w(d.na)+'%"></span></div>';
+    const card=el("div","domain-card"+(activeDomain===name?" active":""));
+    card.innerHTML='<div class="domain-card-head">'+svg+'<div class="domain-card-title" title="'+escapeAttr(name)+'">'+escapeShort(name)+'</div></div>'+
+      '<div class="domain-card-stats"><span><b>'+d.total+'</b> '+t("testsCount")+'</span><span>'+t("execRate")+' <b>'+er+'%</b></span><span>'+t("passRateShort")+' <b>'+pr+'%</b></span></div>'+bar;
+    card.onclick=()=>{ activeDomain=(activeDomain===name?"__all__":name); render(); };
+    wrap.appendChild(card);
+  });
+}
+
+/* ----------------------------- alerts ----------------------------- */
+let alertDismissed=false;
+function renderAlerts(prcs){
+  const banner=document.getElementById("alert-banner");
+  const msgEl=document.getElementById("alert-msg");
+  const titleEl=document.getElementById("alert-title");
+  if(alertDismissed){ banner.classList.add("hidden"); return; }
+  const alerts=[];
+  // late processes
+  const late=prcs.filter(p=>p.status==="late").length;
+  if(late>0) alerts.push(late+" "+t("alertLate"));
+  // high fail rate
+  const highFail=prcs.filter(p=>{ const fr=p.m.failRate; return fr!=null && fr>50; }).length;
+  if(highFail>0) alerts.push(highFail+" "+t("alertHighFail"));
+  // exec rate drop
+  const yesterday=getYesterdaySnap(activePlan);
+  if(yesterday){
+    const gm={total:0,executed:0};
+    prcs.forEach(p=>{ gm.total+=p.m.total; gm.executed+=p.m.executed; });
+    const curExec=gm.total?Math.round(gm.executed/gm.total*100):0;
+    if(yesterday.execRate!=null && curExec<yesterday.execRate) alerts.push(t("alertExecDrop"));
+  }
+  if(alerts.length===0){ banner.classList.add("hidden"); return; }
+  banner.classList.remove("hidden");
+  banner.classList.toggle("warning", late===0);
+  titleEl.textContent=t("alertTitle");
+  msgEl.innerHTML=alerts.map(a=>"<li>"+a+"</li>").join("");
+}
+
 /* ----------------------------- rendering ----------------------------- */
 function val(id){ const el=document.getElementById(id); return el?el.value:""; }
 function el(tag,cls,html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
@@ -668,6 +890,9 @@ function render(){
   renderFilterOptions();
   const prcs = buildPRCs();
   renderKPIs(prcs);
+  renderAlerts(prcs);
+  renderCharts(prcs);
+  renderDomainCards(prcs);
   renderTable(prcs);
   show("dash");
   // source info
@@ -744,19 +969,29 @@ function renderKPIs(prcs){
   const g = blankMetrics();
   prcs.forEach(p=>{ ["total","passed","failed","blocked","na","none","auto","manual"].forEach(k=>g[k]+=p.m[k]); });
   deriveRates(g);
+  // save history snapshot
+  saveSnapshot(activePlan, g);
+  const yesterday = getYesterdaySnap(activePlan);
   const late = prcs.filter(p=>p.status==="late").length;
   const grid = document.getElementById("kpi-grid"); grid.innerHTML="";
-  const card=(label,value,sub,alert)=>{
+  function delta(cur,prevKey){
+    if(!yesterday||yesterday[prevKey]==null||cur==null) return "";
+    const d=cur-yesterday[prevKey];
+    if(d===0) return "";
+    const cls=d>0?"up":"down";
+    return ' <span class="kpi-delta '+cls+'" title="'+t("vsYesterday")+'">'+(d>0?"+":"")+d+'</span>';
+  }
+  const card=(label,value,sub,alert,deltaHtml)=>{
     const c=el("div","kpi-card"+(alert?" alert":""));
-    c.innerHTML='<div class="kpi-label">'+label+'</div><div class="kpi-value">'+value+'</div><div class="kpi-sub">'+sub+'</div>';
+    c.innerHTML='<div class="kpi-label">'+label+'</div><div class="kpi-value">'+value+(deltaHtml||"")+'</div><div class="kpi-sub">'+sub+'</div>';
     grid.appendChild(c);
   };
   const v = (p)=> p==null? "—" : p+'<small>%</small>';
-  card(t("kExec"), v(g.execRate), g.executed+" / "+g.total+" "+t("kExecSub"));
-  card(t("kPass"), v(g.passRate), t("kRateSub"));
-  card(t("kFail"), v(g.failRate), t("kRateSub"), g.failRate>0);
-  card(t("kBlock"), v(g.blockRate), t("kRateSub"), g.blockRate>0);
-  card(t("kLate"), String(late), t("kLateSub"), late>0);
+  card(t("kExec"), v(g.execRate), g.executed+" / "+g.total+" "+t("kExecSub"), false, delta(g.execRate,"execRate"));
+  card(t("kPass"), v(g.passRate), t("kRateSub"), false, delta(g.passRate,"passRate"));
+  card(t("kFail"), v(g.failRate), t("kRateSub"), g.failRate>0, delta(g.failRate,"failRate"));
+  card(t("kBlock"), v(g.blockRate), t("kRateSub"), g.blockRate>0, delta(g.blockRate,"blockRate"));
+  card(t("kLate"), String(late), t("kLateSub"), late>0, "");
 }
 function arrow(key){ return sort.key===key? '<span class="arrow">'+(sort.dir>0?"▲":"▼")+'</span>' : ''; }
 function renderTable(prcs){
@@ -987,7 +1222,7 @@ function init(){
   document.getElementById("excel-input").addEventListener("change",e=>handleFile(e.target.files[0]));
   document.getElementById("excel-input-landing").addEventListener("change",e=>handleFile(e.target.files[0]));
   document.getElementById("plan-select").addEventListener("change",e=>{
-    activePlan=e.target.value; localStorage.setItem("uat:lastPlan",activePlan); EDITS=loadEdits(activePlan); activeDomain="__all__"; expanded.clear(); render();
+    activePlan=e.target.value; localStorage.setItem("uat:lastPlan",activePlan); EDITS=loadEdits(activePlan); activeDomain="__all__"; expanded.clear(); alertDismissed=false; render();
   });
   document.getElementById("lang-switch").addEventListener("click",e=>{
     const b=e.target.closest(".lang-btn"); if(!b)return; LANG=b.dataset.lang; localStorage.setItem("uat:lang",LANG);
@@ -1009,6 +1244,7 @@ function init(){
   document.getElementById("cm-note-input").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); cmAddNote(); } });
   document.getElementById("comment-modal").addEventListener("mousedown",e=>{ if(e.target.id==="comment-modal") closeCommentModal(); });
   document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !document.getElementById("comment-modal").classList.contains("hidden")) closeCommentModal(); });
+  document.getElementById("alert-close").addEventListener("click",()=>{ alertDismissed=true; document.getElementById("alert-banner").classList.add("hidden"); });
 }
 document.addEventListener("DOMContentLoaded",init);
 
