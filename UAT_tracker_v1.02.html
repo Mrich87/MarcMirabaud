@@ -260,12 +260,12 @@ tr.sub-row{animation:fadeIn .2s ease both;}
 /* CHARTS */
 .charts-section{margin-bottom:22px;}
 .charts-section h3{font-size:14px;font-weight:600;color:var(--m-navy);margin-bottom:12px;}
-.charts-row{display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:16px;}
-.charts-row-full{display:grid;grid-template-columns:1fr;gap:16px;}
-.chart-card{background:var(--g-surface);border:1px solid var(--g-border);border-radius:10px;padding:18px;transition:box-shadow .2s;}
+.charts-row{display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:16px;max-height:340px;}
+.charts-row-full{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:16px;max-height:280px;}
+.chart-card{background:var(--g-surface);border:1px solid var(--g-border);border-radius:10px;padding:18px;transition:box-shadow .2s;overflow:hidden;position:relative;}
 .chart-card:hover{box-shadow:var(--elevation-card-hover);}
 .chart-card h4{font-size:12px;font-weight:600;color:var(--g-hint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;}
-.chart-card canvas{width:100%!important;}
+.chart-card canvas{width:100%!important;max-height:260px;}
 
 /* DOMAIN CARDS */
 .domain-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin-bottom:22px;}
@@ -795,8 +795,7 @@ function renderCharts(prcs){
   const ds=labels.map((lbl,i)=>({label:lbl,data:domNames.map(dn=>{const d=domMap.get(dn);return [d.passed,d.failed,d.blocked,d.na,d.none][i];}),backgroundColor:colors[i]}));
   if(chartDomain){ chartDomain.destroy(); chartDomain=null; }
   const ctxB=document.getElementById("chart-domain").getContext("2d");
-  chartDomain=new Chart(ctxB,{type:"bar",data:{labels:domNames,datasets:ds},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{display:false},ticks:{font:{size:11,family:"Inter"}}}},plugins:{legend:{position:"bottom",labels:{font:{size:11,family:"Inter"},padding:10}}}}});
-  document.getElementById("chart-domain").parentElement.style.minHeight=Math.max(180,domNames.length*36+80)+"px";
+  chartDomain=new Chart(ctxB,{type:"bar",data:{labels:domNames,datasets:ds},options:{indexAxis:"y",responsive:true,maintainAspectRatio:true,scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{display:false},ticks:{font:{size:11,family:"Inter"}}}},plugins:{legend:{position:"bottom",labels:{font:{size:11,family:"Inter"},padding:10}}}}});
   // trend line chart
   const hist=loadHistory(activePlan);
   if(chartTrend){ chartTrend.destroy(); chartTrend=null; }
