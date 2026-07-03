@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Relative base so the build works whether it's served from a domain root
+  // or a sub-path (e.g. a GitHub Pages project site like /MarcMirabaud/).
+  base: './',
   plugins: [
     react(),
     VitePWA({
@@ -17,13 +20,13 @@ export default defineConfig({
         background_color: '#155c2c',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
-        scope: '/',
+        start_url: '.',
+        scope: '.',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
           {
-            src: '/icons/maskable-icon-512.png',
+            src: 'icons/maskable-icon-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
