@@ -35,9 +35,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // The live-scoring app lives under /live/ on the same origin: this SW
+        // must never answer its navigations with the stats app's shell.
+        navigateFallbackDenylist: [/\/live\//],
         runtimeCaching: [
           {
-            urlPattern: ({ request }) =>
+            urlPattern: ({ request, url }) =>
+              !url.pathname.includes('/live/') &&
               ['style', 'script', 'document', 'font'].includes(request.destination),
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'app-shell' },

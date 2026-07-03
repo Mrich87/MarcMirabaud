@@ -36,6 +36,9 @@ export default function Home() {
           <Link className="btn secondary" to="/wedges">
             🎯 Wedges
           </Link>
+          <a className="btn secondary" href="live/">
+            🔴 Livescoring
+          </a>
         </div>
 
         {stats && stats.roundsCount > 0 && (

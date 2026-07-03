@@ -1,9 +1,9 @@
-name: Deploy Golf Stats PWA to GitHub Pages
+name: Deploy Golf apps to GitHub Pages
 
 on:
   push:
     branches: [claude/golf-stats-pwa-tsjz7l]
-    paths: [golf-pwa/**]
+    paths: [golf-pwa/**, live-pwa/**]
   workflow_dispatch: {}
 
 permissions:
@@ -24,11 +24,21 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: golf-pwa/package-lock.json
+          cache-dependency-path: |
+            golf-pwa/package-lock.json
+            live-pwa/package-lock.json
       - run: npm ci
         working-directory: golf-pwa
       - run: npm run build
         working-directory: golf-pwa
+      - run: npm ci
+        working-directory: live-pwa
+      - run: npm run build
+        working-directory: live-pwa
+      # Single Pages site: stats app at /, live scoring app under /live/
+      - run: |
+          mkdir -p golf-pwa/dist/live
+          cp -r live-pwa/dist/* golf-pwa/dist/live/
       - uses: actions/configure-pages@v5
         with:
           enablement: true
