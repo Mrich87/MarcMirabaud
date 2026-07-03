@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Legend,
   ResponsiveContainer,
@@ -60,14 +62,18 @@ export default function Wedges() {
 
   return (
     <>
-      <PageHeader title="Wedges (DECADE)" />
+      <PageHeader title="Sac : distances & dispersion" />
       <main className="app-main">
         <div className="section-title">Enregistrer un coup</div>
         <div className="card">
           <div className="row">
             <div className="field">
               <label>Club</label>
-              <input value={club} onChange={(e) => setClub(e.target.value)} placeholder="ex : 56" />
+              <input
+                value={club}
+                onChange={(e) => setClub(e.target.value)}
+                placeholder="ex : Driver, Fer 7, PW, 56..."
+              />
             </div>
             <div className="field">
               <label>Trajectoire</label>
@@ -119,35 +125,60 @@ export default function Wedges() {
                   <th>Carry moy.</th>
                   <th>Min–Max</th>
                   <th>Écart-type</th>
-                  <th>Dispersion latérale moy.</th>
+                  <th>Dispersion lat. moy.</th>
+                  <th>Écart / club suiv.</th>
                 </tr>
               </thead>
               <tbody>
-                {stats.map((s) => (
-                  <tr key={s.club}>
-                    <td>{s.club}</td>
-                    <td>{s.count}</td>
-                    <td>{s.avgCarry.toFixed(1)} m</td>
-                    <td>
-                      {s.minCarry}–{s.maxCarry} m
-                    </td>
-                    <td>{s.carryStdDev.toFixed(1)} m</td>
-                    <td>{s.avgLateralAbs.toFixed(1)} m</td>
-                  </tr>
-                ))}
+                {stats.map((s, i) => {
+                  const next = stats[i + 1];
+                  const gap = next ? s.avgCarry - next.avgCarry : null;
+                  return (
+                    <tr key={s.club}>
+                      <td>{s.club}</td>
+                      <td>{s.count}</td>
+                      <td>{s.avgCarry.toFixed(1)} m</td>
+                      <td>
+                        {s.minCarry}–{s.maxCarry} m
+                      </td>
+                      <td>{s.carryStdDev.toFixed(1)} m</td>
+                      <td>{s.avgLateralAbs.toFixed(1)} m</td>
+                      <td>{gap != null ? `${gap.toFixed(0)} m` : '–'}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+
+            <div className="section-title">Gapping du sac (carry moyen par club)</div>
+            <div className="card" style={{ height: Math.max(160, stats.length * 34) }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis type="number" fontSize={11} stroke="var(--muted)" />
+                  <YAxis type="category" dataKey="club" width={70} fontSize={12} stroke="var(--muted)" />
+                  <Tooltip
+                    formatter={(value) => [`${Number(value).toFixed(1)} m`, 'Carry moyen']}
+                    contentStyle={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--ink)' }}
+                  />
+                  <Bar dataKey="avgCarry" fill="#1e7a3a" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
 
             <div className="section-title">Dispersion (latéral × carry)</div>
             <div className="card" style={{ height: 260 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" dataKey="lateralDispersion" name="Latéral (m)" fontSize={11} />
-                  <YAxis type="number" dataKey="carryDistance" name="Carry (m)" fontSize={11} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis type="number" dataKey="lateralDispersion" name="Latéral (m)" fontSize={11} stroke="var(--muted)" />
+                  <YAxis type="number" dataKey="carryDistance" name="Carry (m)" fontSize={11} stroke="var(--muted)" />
                   <ZAxis range={[60, 60]} />
-                  <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                  <Legend />
+                  <Tooltip
+                    cursor={{ strokeDasharray: '3 3' }}
+                    contentStyle={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--ink)' }}
+                  />
+                  <Legend wrapperStyle={{ color: 'var(--ink)' }} />
                   {clubs.map((c, i) => (
                     <Scatter
                       key={c}

@@ -56,6 +56,7 @@ export interface PlaybookNote {
   avoidZones: string;
   greenBreak: string;
   strategy: string;
+  photo?: Blob;
 }
 
 export interface Course {
@@ -65,6 +66,8 @@ export interface Course {
   tees: string[]; // e.g. ["Championship", "Homme", "Femme"]
   holes: CourseHole[]; // length 18
   playbook: PlaybookNote[]; // length 18
+  courseRating?: number; // used for the (approximate) handicap index estimate
+  slopeRating?: number;
   createdAt: number;
   updatedAt: number;
 }

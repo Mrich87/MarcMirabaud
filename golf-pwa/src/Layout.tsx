@@ -5,7 +5,7 @@ const navItems = [
   { to: '/rounds', label: 'Rounds', icon: '📋' },
   { to: '/courses', label: 'Parcours', icon: '🗺️' },
   { to: '/stats', label: 'Stats', icon: '📊' },
-  { to: '/wedges', label: 'Wedges', icon: '🎯' },
+  { to: '/wedges', label: 'Sac', icon: '🎯' },
 ];
 
 export default function Layout() {

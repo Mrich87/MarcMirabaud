@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../db';
 import PageHeader from '../../components/PageHeader';
 import HoleMap from '../../components/HoleMap';
+import PhotoPreview from '../../components/PhotoPreview';
 import type { Course, CoursePoint, GeoPoint, PointOfInterestKind } from '../../types';
 import { defaultCourseHoles, defaultPlaybook, POINT_KIND_LABELS } from '../../types';
 import {
@@ -63,6 +64,7 @@ export default function CourseEdit() {
   const [poiLabel, setPoiLabel] = useState('');
   const [placingArmed, setPlacingArmed] = useState(false);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setSelectedPointId(null);
@@ -420,6 +422,28 @@ export default function CourseEdit() {
               <label>Lieu</label>
               <input value={course.location ?? ''} onChange={(e) => update({ location: e.target.value })} />
             </div>
+            <div className="row">
+              <div className="field">
+                <label>Rating (ex : 71.5)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={course.courseRating ?? ''}
+                  onChange={(e) => update({ courseRating: e.target.value ? Number(e.target.value) : undefined })}
+                />
+              </div>
+              <div className="field">
+                <label>Slope (ex : 125)</label>
+                <input
+                  type="number"
+                  value={course.slopeRating ?? ''}
+                  onChange={(e) => update({ slopeRating: e.target.value ? Number(e.target.value) : undefined })}
+                />
+              </div>
+            </div>
+            <p style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: -6 }}>
+              Optionnel — utilisé uniquement pour l'estimation d'index dans les statistiques.
+            </p>
             <div className="section-title">Départs</div>
             {course.tees.map((tee) => (
               <div className="row" key={tee} style={{ marginBottom: 8 }}>
@@ -729,6 +753,37 @@ export default function CourseEdit() {
                 value={note.strategy}
                 onChange={(e) => updatePlaybook(holeIdx, { strategy: e.target.value })}
                 placeholder="ex : viser le centre-gauche du fairway, laisser le wedge en 2e"
+              />
+            </div>
+            <div className="field">
+              <label>Photo</label>
+              {note.photo ? (
+                <div>
+                  <PhotoPreview blob={note.photo} />
+                  <button
+                    className="btn danger small"
+                    style={{ marginTop: 6 }}
+                    onClick={() => updatePlaybook(holeIdx, { photo: undefined })}
+                  >
+                    Supprimer la photo
+                  </button>
+                </div>
+              ) : (
+                <button className="btn secondary small" onClick={() => photoInputRef.current?.click()}>
+                  📷 Ajouter une photo
+                </button>
+              )}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) updatePlaybook(holeIdx, { photo: file });
+                }}
               />
             </div>
           </div>

@@ -13,7 +13,18 @@ export default function Home() {
 
   return (
     <>
-      <PageHeader title="Golf Stats" />
+      <PageHeader
+        title="Golf Stats"
+        action={
+          <Link
+            to="/settings"
+            aria-label="Réglages"
+            style={{ color: 'white', textDecoration: 'none', fontSize: '1.3rem' }}
+          >
+            ⚙️
+          </Link>
+        }
+      />
       <main className="app-main">
         <div className="btn-row">
           <Link className="btn" to="/rounds/new">

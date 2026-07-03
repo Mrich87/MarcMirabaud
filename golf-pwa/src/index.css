@@ -8,9 +8,26 @@
   --muted: #6b7570;
   --danger: #c0392b;
   --card-bg: #ffffff;
+  --surface: #ffffff;
   --bg: #f4f6f3;
   --border: #dde3dd;
-  color-scheme: light;
+  --accent: var(--green-800);
+  --accent-soft: var(--green-100);
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #eef2ee;
+    --muted: #9aa79e;
+    --danger: #e5776b;
+    --card-bg: #1b241d;
+    --surface: #212b23;
+    --bg: #10140f;
+    --border: #2c3830;
+    --accent: #59c97e;
+    --accent-soft: #163422;
+  }
 }
 
 * {
@@ -41,6 +58,7 @@ select,
 textarea {
   font-family: inherit;
   font-size: 1rem;
+  color: inherit;
 }
 
 h1, h2, h3 {
@@ -93,7 +111,7 @@ h1, h2, h3 {
   bottom: 0;
   left: 0;
   right: 0;
-  background: white;
+  background: var(--surface);
   border-top: 1px solid var(--border);
   display: flex;
   padding-bottom: env(safe-area-inset-bottom);
@@ -118,7 +136,7 @@ h1, h2, h3 {
 }
 
 .bottom-nav a.active {
-  color: var(--green-700);
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -171,8 +189,8 @@ h1, h2, h3 {
 }
 
 .btn.secondary {
-  background: white;
-  color: var(--green-800);
+  background: var(--surface);
+  color: var(--accent);
   border: 1px solid var(--green-700);
 }
 
@@ -211,7 +229,7 @@ h1, h2, h3 {
   padding: 9px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: white;
+  background: var(--surface);
   width: 100%;
 }
 
@@ -249,7 +267,7 @@ table.scorecard td {
 }
 
 table.scorecard th {
-  background: var(--green-100);
+  background: var(--accent-soft);
   font-weight: 600;
 }
 
@@ -273,7 +291,7 @@ table.scorecard th {
 }
 
 .tabs button.active {
-  color: var(--green-800);
+  color: var(--accent);
   border-bottom-color: var(--green-700);
 }
 
@@ -304,10 +322,10 @@ table.scorecard th {
 .segmented button {
   flex: 1;
   border: none;
-  background: white;
+  background: var(--surface);
   padding: 10px 6px;
   font-weight: 600;
-  color: var(--green-800);
+  color: var(--accent);
   cursor: pointer;
 }
 
@@ -336,8 +354,8 @@ table.scorecard th {
   height: 40px;
   border-radius: 50%;
   border: 1px solid var(--green-700);
-  background: white;
-  color: var(--green-800);
+  background: var(--surface);
+  color: var(--accent);
   font-size: 1.2rem;
   font-weight: 700;
   cursor: pointer;
@@ -367,7 +385,7 @@ table.scorecard th {
 .stat-box .value {
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--green-800);
+  color: var(--accent);
 }
 
 .stat-box .label {
@@ -380,7 +398,7 @@ table.scorecard th {
   font-size: 0.95rem;
   font-weight: 700;
   margin: 20px 0 8px;
-  color: var(--green-800);
+  color: var(--accent);
 }
 
 .pill {
@@ -389,8 +407,8 @@ table.scorecard th {
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 600;
-  background: var(--green-100);
-  color: var(--green-800);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .pill.warn {
@@ -399,6 +417,7 @@ table.scorecard th {
 }
 
 /* --- A5 printable course booklet --- */
+/* Always rendered as a simulated white paper page, regardless of app theme. */
 
 .print-carnet {
   display: flex;
@@ -408,7 +427,14 @@ table.scorecard th {
 }
 
 .print-page {
+  color-scheme: light;
+  --ink: #1a1f1c;
+  --muted: #6b7570;
+  --border: #dde3dd;
+  --accent: #155c2c;
+  --accent-soft: #e7f5ea;
   background: white;
+  color: var(--ink);
   width: 100%;
   max-width: 400px;
   aspect-ratio: 148 / 210;
@@ -431,7 +457,7 @@ table.scorecard th {
 .print-hole-number {
   font-size: 1.4rem;
   font-weight: 800;
-  color: var(--green-800);
+  color: var(--accent);
 }
 
 .print-hole-meta {
