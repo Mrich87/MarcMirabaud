@@ -9,6 +9,7 @@ import RoundEntry from './pages/rounds/RoundEntry';
 import RoundDetail from './pages/rounds/RoundDetail';
 import Stats from './pages/stats/Stats';
 import Wedges from './pages/wedges/Wedges';
+import Training from './pages/training/Training';
 import Settings from './pages/Settings';
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
           <Route path="rounds/:id/view" element={<RoundDetail />} />
           <Route path="stats" element={<Stats />} />
           <Route path="wedges" element={<Wedges />} />
+          <Route path="training" element={<Training />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

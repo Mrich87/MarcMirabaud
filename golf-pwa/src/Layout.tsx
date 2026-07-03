@@ -5,6 +5,7 @@ const navItems = [
   { to: '/rounds', label: 'Rounds', icon: '📋' },
   { to: '/courses', label: 'Parcours', icon: '🗺️' },
   { to: '/stats', label: 'Stats', icon: '📊' },
+  { to: '/training', label: 'Training', icon: '💪' },
   { to: '/wedges', label: 'Sac', icon: '🎯' },
 ];
 
