@@ -61,6 +61,13 @@ export default function CourseEdit() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [poiKind, setPoiKind] = useState<PointOfInterestKind>('water');
   const [poiLabel, setPoiLabel] = useState('');
+  const [placingArmed, setPlacingArmed] = useState(false);
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedPointId(null);
+    setPlacingArmed(false);
+  }, [holeIdx]);
 
   useEffect(() => {
     if (!isNew) {
@@ -236,6 +243,31 @@ export default function CourseEdit() {
       return { ...c, holes };
     });
     setSaved(false);
+  }
+
+  function updatePoint(holeIndex: number, poiId: string, patch: Partial<CoursePoint>) {
+    setCourse((c) => {
+      if (!c) return c;
+      const holes = c.holes.map((h, i) =>
+        i === holeIndex
+          ? { ...h, points: (h.points ?? []).map((p) => (p.id === poiId ? { ...p, ...patch } : p)) }
+          : h,
+      );
+      return { ...c, holes };
+    });
+    setSaved(false);
+  }
+
+  function movePoint(holeIndex: number, poiId: string, point: GeoPoint) {
+    updatePoint(holeIndex, poiId, { point });
+  }
+
+  function placePoint(point: GeoPoint) {
+    const id = newId();
+    addPoint(holeIdx, { id, kind: poiKind, label: poiLabel.trim() || undefined, point });
+    setPoiLabel('');
+    setPlacingArmed(false);
+    setSelectedPointId(id);
   }
 
   async function capturePoi() {
@@ -542,39 +574,107 @@ export default function CourseEdit() {
                   placeholder="Libellé (optionnel, ex : 135m avant green)"
                 />
               </div>
-              <button className="btn small" disabled={capturing !== null} onClick={capturePoi}>
-                {capturing === 'poi' ? '...' : '📍 Capturer ce point'}
-              </button>
+              <div className="btn-row" style={{ marginTop: 0 }}>
+                <button className="btn small" disabled={capturing !== null} onClick={capturePoi}>
+                  {capturing === 'poi' ? '...' : '📍 Capturer ce point'}
+                </button>
+                <button
+                  className={`btn small ${placingArmed ? '' : 'secondary'}`}
+                  onClick={() => setPlacingArmed((v) => !v)}
+                >
+                  {placingArmed ? 'Touche le dessin ci-dessous…' : '✏️ Placer sur le dessin'}
+                </button>
+              </div>
 
               {(hole.points ?? []).length > 0 && (
                 <div style={{ marginTop: 12 }}>
-                  {(hole.points ?? []).map((p) => (
-                    <div className="list-item" key={p.id} style={{ marginBottom: 8 }}>
-                      <div>
-                        <div className="title">{p.label || POINT_KIND_LABELS[p.kind]}</div>
-                        <div className="subtitle">
-                          {POINT_KIND_LABELS[p.kind]}
-                          {course.tees
-                            .map((tee) => {
-                              const teeLoc = hole.teeLocations?.find((t) => t.teeName === tee)?.point;
-                              if (!teeLoc) return null;
-                              return ` · ${tee} ${Math.round(distanceMeters(teeLoc, p.point))}m`;
-                            })
-                            .filter(Boolean)
-                            .join('')}
-                        </div>
+                  {(hole.points ?? []).map((p) => {
+                    const isSelected = p.id === selectedPointId;
+                    return (
+                      <div
+                        className="list-item"
+                        key={p.id}
+                        style={{ marginBottom: 8, alignItems: isSelected ? 'flex-start' : 'center' }}
+                      >
+                        {isSelected ? (
+                          <div style={{ flex: 1 }}>
+                            <div className="row" style={{ marginBottom: 6 }}>
+                              <select
+                                value={p.kind}
+                                onChange={(e) => updatePoint(holeIdx, p.id, { kind: e.target.value as PointOfInterestKind })}
+                              >
+                                {POI_KINDS.map((k) => (
+                                  <option key={k} value={k}>
+                                    {POINT_KIND_LABELS[k]}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <input
+                              value={p.label ?? ''}
+                              onChange={(e) => updatePoint(holeIdx, p.id, { label: e.target.value })}
+                              placeholder="Libellé"
+                              style={{ marginBottom: 6 }}
+                            />
+                            <div className="btn-row" style={{ marginTop: 0 }}>
+                              <button className="btn secondary small" onClick={() => setSelectedPointId(null)}>
+                                Terminé
+                              </button>
+                              <button
+                                className="btn danger small"
+                                onClick={() => {
+                                  removePoint(holeIdx, p.id);
+                                  setSelectedPointId(null);
+                                }}
+                              >
+                                Supprimer
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ cursor: 'pointer' }} onClick={() => setSelectedPointId(p.id)}>
+                              <div className="title">{p.label || POINT_KIND_LABELS[p.kind]}</div>
+                              <div className="subtitle">
+                                {POINT_KIND_LABELS[p.kind]}
+                                {course.tees
+                                  .map((tee) => {
+                                    const teeLoc = hole.teeLocations?.find((t) => t.teeName === tee)?.point;
+                                    if (!teeLoc) return null;
+                                    return ` · ${tee} ${Math.round(distanceMeters(teeLoc, p.point))}m`;
+                                  })
+                                  .filter(Boolean)
+                                  .join('')}
+                              </div>
+                            </div>
+                            <button className="btn danger small" onClick={() => removePoint(holeIdx, p.id)}>
+                              ×
+                            </button>
+                          </>
+                        )}
                       </div>
-                      <button className="btn danger small" onClick={() => removePoint(holeIdx, p.id)}>
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
 
             <div className="section-title">Dessin du trou</div>
-            <HoleMap hole={hole} primaryTeeName={course.tees[0]} />
+            <p style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: -4 }}>
+              Glisse un marqueur pour ajuster sa position, ou tape dessus pour l'éditer.
+            </p>
+            <HoleMap
+              hole={hole}
+              primaryTeeName={course.tees[0]}
+              editable
+              placing={placingArmed}
+              selectedPointId={selectedPointId}
+              onSelectPoint={setSelectedPointId}
+              onMoveTee={(teeName, point) => captureTeeLocation(holeIdx, teeName, point)}
+              onMoveGreen={(point) => captureGreenLocation(holeIdx, point)}
+              onMovePoint={(pointId, point) => movePoint(holeIdx, pointId, point)}
+              onPlacePoint={placePoint}
+            />
           </div>
         )}
 

@@ -24,6 +24,15 @@ function toLocalMeters(origin: GeoPoint, p: GeoPoint): { x: number; y: number } 
   };
 }
 
+function fromLocalMeters(origin: GeoPoint, x: number, y: number): GeoPoint {
+  const metersPerDegLat = 111320;
+  const metersPerDegLon = 111320 * Math.cos((origin.lat * Math.PI) / 180);
+  return {
+    lat: origin.lat + y / metersPerDegLat,
+    lon: origin.lon + x / metersPerDegLon,
+  };
+}
+
 // Projects a point onto the axis running from `origin` to `axisEnd`, returning
 // the distance along that axis (meters, origin = 0) and the signed lateral
 // offset (meters, positive = right of the axis looking from origin to axisEnd).
@@ -40,6 +49,22 @@ export function projectOntoAxis(
   const along = pt.x * ux + pt.y * uy;
   const lateral = pt.x * uy - pt.y * ux;
   return { along, lateral };
+}
+
+// Inverse of projectOntoAxis: turns an (along, lateral) offset back into a GPS point.
+export function unprojectFromAxis(
+  origin: GeoPoint,
+  axisEnd: GeoPoint,
+  along: number,
+  lateral: number,
+): GeoPoint {
+  const end = toLocalMeters(origin, axisEnd);
+  const axisLen = Math.hypot(end.x, end.y) || 1;
+  const ux = end.x / axisLen;
+  const uy = end.y / axisLen;
+  const x = along * ux + lateral * uy;
+  const y = along * uy - lateral * ux;
+  return fromLocalMeters(origin, x, y);
 }
 
 export function getCurrentPosition(): Promise<GeoPoint> {
