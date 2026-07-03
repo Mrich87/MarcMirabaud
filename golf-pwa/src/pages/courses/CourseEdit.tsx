@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../db';
 import PageHeader from '../../components/PageHeader';
 import HoleMap from '../../components/HoleMap';
@@ -638,6 +638,11 @@ export default function CourseEdit() {
           <button className="btn" onClick={save}>
             {saved ? 'Enregistré ✓' : 'Enregistrer'}
           </button>
+          {!isNew && (
+            <Link className="btn secondary" to={`/courses/${id}/print`}>
+              🖨️ Carnet A5
+            </Link>
+          )}
           {!isNew && (
             <button className="btn danger" onClick={remove}>
               Supprimer le parcours

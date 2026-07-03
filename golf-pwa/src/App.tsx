@@ -3,6 +3,7 @@ import Layout from './Layout';
 import Home from './pages/Home';
 import CourseList from './pages/courses/CourseList';
 import CourseEdit from './pages/courses/CourseEdit';
+import CoursePrint from './pages/courses/CoursePrint';
 import RoundList from './pages/rounds/RoundList';
 import RoundEntry from './pages/rounds/RoundEntry';
 import RoundDetail from './pages/rounds/RoundDetail';
@@ -18,6 +19,7 @@ function App() {
           <Route path="courses" element={<CourseList />} />
           <Route path="courses/new" element={<CourseEdit />} />
           <Route path="courses/:id" element={<CourseEdit />} />
+          <Route path="courses/:id/print" element={<CoursePrint />} />
           <Route path="rounds" element={<RoundList />} />
           <Route path="rounds/new" element={<RoundEntry />} />
           <Route path="rounds/:id" element={<RoundEntry />} />

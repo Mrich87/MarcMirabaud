@@ -397,3 +397,110 @@ table.scorecard th {
   background: #fdecea;
   color: var(--danger);
 }
+
+/* --- A5 printable course booklet --- */
+
+.print-carnet {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.print-page {
+  background: white;
+  width: 100%;
+  max-width: 400px;
+  aspect-ratio: 148 / 210;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.print-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.print-hole-number {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--green-800);
+}
+
+.print-hole-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.print-distances {
+  margin-bottom: 6px;
+  font-size: 0.7rem;
+}
+
+.print-map {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.print-map svg {
+  max-height: 100%;
+}
+
+.print-notes {
+  margin-top: 8px;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.print-notes p {
+  margin: 2px 0;
+}
+
+@media print {
+  .app-header,
+  .bottom-nav,
+  .no-print {
+    display: none !important;
+  }
+
+  .app-main {
+    padding: 0;
+    max-width: none;
+  }
+
+  .print-carnet {
+    gap: 0;
+  }
+
+  .print-page {
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    max-width: none;
+    width: auto;
+    aspect-ratio: auto;
+    height: 190mm;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}
+
+@page {
+  size: A5;
+  margin: 10mm;
+}
