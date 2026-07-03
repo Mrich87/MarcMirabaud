@@ -7,11 +7,47 @@ export interface TeeDistance {
   distance: number; // meters
 }
 
+export interface GeoPoint {
+  lat: number;
+  lon: number;
+}
+
+export type PointOfInterestKind =
+  | 'green_front'
+  | 'green_back'
+  | 'water'
+  | 'bunker'
+  | 'ob'
+  | 'tree'
+  | 'layup'
+  | 'other';
+
+export const POINT_KIND_LABELS: Record<PointOfInterestKind, string> = {
+  green_front: 'Entrée de green',
+  green_back: 'Sortie de green',
+  water: "Plan d'eau",
+  bunker: 'Bunker',
+  ob: 'Hors-limites',
+  tree: 'Arbre',
+  layup: 'Point de layup',
+  other: 'Autre',
+};
+
+export interface CoursePoint {
+  id: string;
+  kind: PointOfInterestKind;
+  label?: string;
+  point: GeoPoint;
+}
+
 export interface CourseHole {
   number: number; // 1-18
   par: 3 | 4 | 5;
   index: number; // stroke index 1-18
   distances: TeeDistance[];
+  teeLocations?: { teeName: string; point: GeoPoint }[]; // GPS-captured tee positions
+  greenLocation?: GeoPoint; // GPS-captured green position (middle/pin reference)
+  points?: CoursePoint[]; // GPS-captured hazards, layup markers, green front/back, etc.
 }
 
 export interface PlaybookNote {
